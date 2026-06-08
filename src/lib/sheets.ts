@@ -80,20 +80,95 @@ function doPost(e) {
  * 8. Click Deploy and copy the Web App URL.
  */
 
-export async function fetchSheetData(gasUrl: string, range: string) {
-  const url = `${gasUrl}?action=get&range=${encodeURIComponent(range)}&t=${Date.now()}`;
-  
-  // App Script redirects, so we use GET and it handles the rest
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`Failed to fetch sheet data. Check App Script URL.`);
+// Cache to store completed fetches
+interface CacheEntry {
+  timestamp: number;
+  data: any[][];
+}
+const fetchCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 15000; // 15 seconds TTL is plenty for instant tab switches but stays close to reality
 
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
+// Map to store in-flight requests (Request Coalescing)
+const inFlightRequests = new Map<string, Promise<any[][]>>();
 
-  return data.values || [];
+export function clearSheetCache() {
+  fetchCache.clear();
+  inFlightRequests.clear();
+}
+
+export async function fetchSheetData(gasUrl: string, range: string, forceFresh = false) {
+  const cacheKey = `${gasUrl}||${range}`;
+
+  // 1. Check completed cache (if not forcing fresh)
+  if (!forceFresh) {
+    const cached = fetchCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+      console.log(`[Cache Hit] Returning cached data for range: ${range}`);
+      return JSON.parse(JSON.stringify(cached.data)); // Return a deep copy to prevent mutation
+    }
+  }
+
+  // 2. Check if a request for this exact key is already in flight (Coalescing / promise deduplication)
+  if (inFlightRequests.has(cacheKey)) {
+    console.log(`[Request Coalesced] Awaiting in-flight request for range: ${range}`);
+    const inFlightPromise = inFlightRequests.get(cacheKey)!;
+    const data = await inFlightPromise;
+    return JSON.parse(JSON.stringify(data));
+  }
+
+  // 3. Define the actual fetch operation (with automatic retries)
+  const fetchPromise = (async () => {
+    let attempts = 0;
+    const maxAttempts = 3;
+    const baseDelay = 1000; // 1 second base delay for backoff
+
+    while (attempts < maxAttempts) {
+      try {
+        const url = `${gasUrl}?action=get&range=${encodeURIComponent(range)}&t=${Date.now()}`;
+        const res = await fetch(url, { cache: 'no-store' });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        const values = data.values || [];
+        
+        // Populate cache
+        fetchCache.set(cacheKey, { timestamp: Date.now(), data: values });
+        return values;
+      } catch (error: any) {
+        attempts++;
+        console.warn(`[Fetch Effort ${attempts}/${maxAttempts}] for ${range} failed: ${error.message}`);
+        if (attempts >= maxAttempts) {
+          throw error;
+        }
+        // Exponential backoff delay with jitter
+        const delay = baseDelay * Math.pow(2, attempts - 1) * (0.5 + Math.random());
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    return [];
+  })();
+
+  // 4. Save to inFlightRequests map
+  inFlightRequests.set(cacheKey, fetchPromise);
+
+  try {
+    const data = await fetchPromise;
+    return JSON.parse(JSON.stringify(data));
+  } finally {
+    // 5. Always clean up in-flight request once it's done
+    inFlightRequests.delete(cacheKey);
+  }
 }
 
 export async function appendSheetRow(gasUrl: string, range: string, values: any[][]) {
+  clearSheetCache(); // Invalidate cache on write
   const res = await fetch(gasUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -109,6 +184,7 @@ export async function appendSheetRow(gasUrl: string, range: string, values: any[
 }
 
 export async function updateSheetRow(gasUrl: string, range: string, values: any[][]) {
+  clearSheetCache(); // Invalidate cache on write
   const res = await fetch(gasUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -125,6 +201,7 @@ export async function updateSheetRow(gasUrl: string, range: string, values: any[
 
 /** Check if the necessary sheets exist, if not create them */
 export async function initializeERPSpreadsheet(gasUrl: string) {
+  clearSheetCache(); // Invalidate cache on init
   const res = await fetch(gasUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },

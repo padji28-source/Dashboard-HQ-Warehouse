@@ -186,13 +186,27 @@ export default function Dashboard({ spreadsheetId, area, onLogout }: Props) {
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-full min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         <div className="w-full">
-          {activeTab === 'stock' && <StockOverview spreadsheetId={spreadsheetId} />}
-          {activeTab === 'input' && <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." />}
-          {activeTab === 'input_rm' && <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." />}
-          {activeTab === 'input_mfg' && <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." />}
-          {activeTab === 'input_supplies' && <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." />}
-          {activeTab === 'produk' && <MasterProduk spreadsheetId={spreadsheetId} />}
-          {activeTab === 'locator' && <MasterLocator spreadsheetId={spreadsheetId} />}
+          <div className={cn(activeTab !== 'stock' && 'hidden')}>
+            <StockOverview spreadsheetId={spreadsheetId} area={area} />
+          </div>
+          <div className={cn(activeTab !== 'input' && 'hidden')}>
+            <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." />
+          </div>
+          <div className={cn(activeTab !== 'input_rm' && 'hidden')}>
+            <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." />
+          </div>
+          <div className={cn(activeTab !== 'input_mfg' && 'hidden')}>
+            <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." />
+          </div>
+          <div className={cn(activeTab !== 'input_supplies' && 'hidden')}>
+            <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." />
+          </div>
+          <div className={cn(activeTab !== 'produk' && 'hidden')}>
+            <MasterProduk spreadsheetId={spreadsheetId} />
+          </div>
+          <div className={cn(activeTab !== 'locator' && 'hidden')}>
+            <MasterLocator spreadsheetId={spreadsheetId} />
+          </div>
         </div>
       </main>
     </div>

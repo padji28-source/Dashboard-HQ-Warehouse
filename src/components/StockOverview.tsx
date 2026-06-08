@@ -10,7 +10,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export default function StockOverview({ spreadsheetId }: { spreadsheetId: string }) {
+export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: string; area: string }) {
   const [loading, setLoading] = useState(true);
   const [stockSummary, setStockSummary] = useState<StockSummary[]>([]);
   const [search, setSearch] = useState('');
@@ -60,25 +60,32 @@ export default function StockOverview({ spreadsheetId }: { spreadsheetId: string
         lRows = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => []);
       }
 
-      const pMap = new Map<string, string>(pRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]), String(r[1])]));
-      const lMap = new Map<string, { nama: string; whType: string; area: string }>(
-        lRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]), { nama: String(r[1] || r[0]), whType: String(r[3] || ''), area: String(r[4] || '') }])
-      );
+      const pMap = new Map<string, string>(pRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]).trim(), String(r[1]).trim()]));
+      const lMap = new Map<string, { nama: string; whType: string; area: string }>();
+      lRows.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
+        const rawKey = String(r[0]).trim();
+        const keyUpper = rawKey.toUpperCase();
+        const val = {
+          nama: String(r[1] || r[0]).trim(),
+          whType: String(r[3] || '').trim(),
+          area: String(r[4] || '').trim()
+        };
+        lMap.set(rawKey, val);
+        lMap.set(keyUpper, val);
+      });
       
       const mappedRows: {tipe: string, pCode: string, pName: string, lCode: string, qty: number, source: string}[] = [];
 
       const processRows = (rows: any[], source: string) => {
         console.log(`Processing rows for ${source}:`, rows?.length);
-        (rows || []).forEach((r: any[], idx) => {
-           if (!r || r.length === 0) return;
+        const validRows = (rows || []).filter((r: any[]) => r.length > 0 && (r[0] || r[1] || r[9]));
+        validRows.forEach((r: any[]) => {
            const pName = String(r[1] || '').trim();
            let pCode = String(r[9] || '').trim();
            const tipe = String(r[4] || '').trim().toUpperCase();
            
-           // Fallback if both are empty
-           if (!pName && !pCode) {
-             pCode = 'UNKNOWN_P';
-           } else if (!pCode) {
+           if (!pName && !pCode) return;
+           if (!pCode) {
              pCode = pName;
            }
 
@@ -136,7 +143,8 @@ export default function StockOverview({ spreadsheetId }: { spreadsheetId: string
       const { tipe, pCode, pName, lCode, qty } = t;
       const key = `${pCode}_${lCode}`;
       if (!stockMap.has(key)) {
-        const lData = locatorsMap.get(lCode) || { nama: lCode, whType: '', area: '' };
+        const lookupKey = lCode.trim();
+        const lData = locatorsMap.get(lookupKey) || locatorsMap.get(lookupKey.toUpperCase()) || { nama: lCode, whType: '', area: '' };
         stockMap.set(key, {
           kodeProduk: pCode === pName ? '' : pCode,
           namaProduk: productsMap.get(pCode) || pName || pCode,
@@ -171,8 +179,57 @@ export default function StockOverview({ spreadsheetId }: { spreadsheetId: string
     
     console.log("Stock map size:", stockMap.size);
 
-    setStockSummary(Array.from(stockMap.values()).filter(s => s.totalIn > 0 || s.totalOut > 0 || s.stock !== 0));
-  }, [allTransactions, productsMap, locatorsMap, selectedSource]);
+    const filteredByArea = Array.from(stockMap.values()).filter(s => {
+      const hasActivity = s.totalIn > 0 || s.totalOut > 0 || s.stock !== 0;
+      if (!hasActivity) return false;
+      
+      if (area) {
+        const sArea = (s.area || '').trim().toLowerCase();
+        const areaLower = area.trim().toLowerCase();
+
+        // 1. Check exact or substring area match (e.g. "Area Jakarta" matches "Jakarta")
+        const matchesAreaString = sArea !== '' && (sArea === areaLower || sArea.includes(areaLower) || areaLower.includes(sArea));
+        if (matchesAreaString) {
+          return true;
+        }
+        
+        // 2. Check prefix or substring matches based on locator code (e.g. "PSN-JKT C1" counts as Jakarta)
+        const locCode = s.whGroup.trim().toUpperCase();
+        
+        const areaPrefixes: Record<string, string[]> = {
+          'jakarta': ['JKT', 'JAK'],
+          'karawang': ['KRW', 'KWG', 'KAR'],
+          'semarang': ['SMG', 'SEM'],
+          'surabaya': ['SUB', 'SBY', 'SUR'],
+          'jember': ['JMB', 'JEM'],
+          'makassar': ['MKS', 'MAK'],
+          'pontianak': ['PTN', 'PON'],
+          'banjarmasin': ['BJM', 'BAN'],
+          'palembang': ['PLB', 'PAL'],
+          'medan': ['MDN', 'MED'],
+          'pekanbaru': ['PKU', 'PEK']
+        };
+        
+        const prefixes = areaPrefixes[areaLower] || [areaLower.substring(0, 3).toUpperCase()];
+        const matchesPrefix = prefixes.some(pref => locCode.startsWith(pref) || locCode.includes(pref));
+        if (matchesPrefix) return true;
+
+        // If the locator's area field is explicitly set to some other area, exclude it
+        if (s.area && !matchesAreaString) {
+          return false;
+        }
+
+        // Fallback: keep locator if it has no area metadata
+        if (!s.area) return true;
+
+        return false;
+      }
+
+      return true;
+    });
+
+    setStockSummary(filteredByArea);
+  }, [allTransactions, productsMap, locatorsMap, selectedSource, area]);
 
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
