@@ -12,6 +12,7 @@ function cn(...inputs: ClassValue[]) {
 
 export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: string; area: string }) {
   const [loading, setLoading] = useState(true);
+  const [backgroundSyncing, setBackgroundSyncing] = useState(false);
   const [stockSummary, setStockSummary] = useState<StockSummary[]>([]);
   const [search, setSearch] = useState('');
   const [selectedSource, setSelectedSource] = useState('ALL');
@@ -21,24 +22,131 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
   const [locatorsMap, setLocatorsMap] = useState<Map<string, { nama: string; whType: string; area: string }>>(new Map());
 
   const loadData = async (retryOnMissing = true) => {
-    try {
-      setLoading(true);
+    const ranges = [
+      "'INPUT'!A:J",
+      "'INPUT RM'!A:J",
+      "'INPUT MFG'!A:J",
+      "'INPUT SUPPLIES'!A:J",
+      "'MASTER_PRODUK'!A:B",
+      "'MASTER_LOCATOR'!A:E"
+    ];
+
+    // Helper to get storage key
+    const getStorageKey = (r: string) => {
+      const cleanUrl = spreadsheetId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
+      return `erp_cache_${cleanUrl}_${r.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    };
+
+    // Check if we have localStorage cache for all ranges
+    let hasLocalCache = true;
+    const cachedDataMap: Record<string, any[][]> = {};
+    for (const r of ranges) {
+      try {
+        const cachedItem = localStorage.getItem(getStorageKey(r));
+        if (cachedItem) {
+          const parsed = JSON.parse(cachedItem);
+          if (parsed && Array.isArray(parsed.data)) {
+            cachedDataMap[r] = parsed.data;
+          } else {
+            hasLocalCache = false;
+            break;
+          }
+        } else {
+          hasLocalCache = false;
+          break;
+        }
+      } catch (e) {
+        hasLocalCache = false;
+        break;
+      }
+    }
+
+    // If cache exists, process and display it immediately
+    if (hasLocalCache) {
+      console.log("[SWR] Found complete local cache, displaying immediately...");
+      const txRowsNormal = (cachedDataMap["'INPUT'!A:J"] || []).slice(1);
+      const txRowsRM = (cachedDataMap["'INPUT RM'!A:J"] || []).slice(1);
+      const txRowsMfg = (cachedDataMap["'INPUT MFG'!A:J"] || []).slice(1);
+      const txRowsSupplies = (cachedDataMap["'INPUT SUPPLIES'!A:J"] || []).slice(1);
+      const pRows = (cachedDataMap["'MASTER_PRODUK'!A:B"] || []).slice(1);
+      const lRows = (cachedDataMap["'MASTER_LOCATOR'!A:E"] || []).slice(1);
+
+      const pMap = new Map<string, string>(pRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]).trim(), String(r[1]).trim()]));
+      const lMap = new Map<string, { nama: string; whType: string; area: string }>();
+      lRows.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
+        const rawKey = String(r[0]).trim();
+        const keyUpper = rawKey.toUpperCase();
+        lMap.set(rawKey, {
+          nama: String(r[1] || r[0]).trim(),
+          whType: String(r[3] || '').trim(),
+          area: String(r[4] || '').trim()
+        });
+        lMap.set(keyUpper, {
+          nama: String(r[1] || r[0]).trim(),
+          whType: String(r[3] || '').trim(),
+          area: String(r[4] || '').trim()
+        });
+      });
       
-      let txRowsNormal: any[] = [];
-      let txRowsRM: any[] = [];
-      let txRowsMfg: any[] = [];
-      let txRowsSupplies: any[] = [];
-      let pRows: any[] = [];
-      let lRows: any[] = [];
+      const mappedRows: {tipe: string, pCode: string, pName: string, lCode: string, qty: number, source: string}[] = [];
+      const processRows = (rows: any[], source: string) => {
+        const validRows = (rows || []).filter((r: any[]) => r.length > 0 && (r[0] || r[1] || r[9]));
+        validRows.forEach((r: any[]) => {
+           const pName = String(r[1] || '').trim();
+           let pCode = String(r[9] || '').trim();
+           const tipe = String(r[4] || '').trim().toUpperCase();
+           if (!pName && !pCode) return;
+           if (!pCode) pCode = pName;
+           const qtyStr = String(r[2] || '0').replace(',', '.');
+           let qty = parseFloat(qtyStr) || 0;
+           if (isNaN(qty)) qty = 0;
+           let fromLocator = String(r[5] || '').trim();
+           let toLocator = String(r[6] || '').trim();
+           if (!fromLocator && !toLocator) fromLocator = 'UNKNOWN_L';
+
+           if (tipe === 'TRANSFER' || tipe === 'TF') {
+             mappedRows.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || 'UNKNOWN_L', qty, source });
+             mappedRows.push({ tipe: 'IN', pCode, pName, lCode: toLocator || 'UNKNOWN_L', qty, source });
+           } else {
+             mappedRows.push({ tipe: tipe || 'IN', pCode, pName, lCode: fromLocator || toLocator || 'UNKNOWN_L', qty, source });
+           }
+        });
+      };
+
+      processRows(txRowsNormal, 'INPUT');
+      processRows(txRowsRM, 'INPUT RM');
+      processRows(txRowsMfg, 'INPUT MFG');
+      processRows(txRowsSupplies, 'INPUT SUPPLIES');
+
+      setProductsMap(pMap);
+      setLocatorsMap(lMap);
+      setAllTransactions(mappedRows);
+      
+      // Stop blocking spinner!
+      setLoading(false);
+      // Indicate we are syncing in background
+      setBackgroundSyncing(true);
+    } else {
+      // No cache, we must block with loading spinner
+      setLoading(true);
+    }
+
+    try {
+      let txRowsNormalRaw: any[] = [];
+      let txRowsRMRaw: any[] = [];
+      let txRowsMfgRaw: any[] = [];
+      let txRowsSuppliesRaw: any[] = [];
+      let pRowsRaw: any[] = [];
+      let lRowsRaw: any[] = [];
 
       try {
-        [txRowsNormal, txRowsRM, txRowsMfg, txRowsSupplies, pRows, lRows] = await Promise.all([
-          fetchSheetData(spreadsheetId, "'INPUT'!A2:J"),
-          fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J"),
-          fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J"),
-          fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J"),
-          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B"),
-          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E")
+        [txRowsNormalRaw, txRowsRMRaw, txRowsMfgRaw, txRowsSuppliesRaw, pRowsRaw, lRowsRaw] = await Promise.all([
+          fetchSheetData(spreadsheetId, "'INPUT'!A:J", true),
+          fetchSheetData(spreadsheetId, "'INPUT RM'!A:J", true),
+          fetchSheetData(spreadsheetId, "'INPUT MFG'!A:J", true),
+          fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A:J", true),
+          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A:B", true),
+          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A:E", true)
         ]);
       } catch (fetchErr: any) {
         if (retryOnMissing) {
@@ -52,64 +160,76 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
           }
         }
         // Fallback to individual catches if init fails or retry is off
-        txRowsNormal = await fetchSheetData(spreadsheetId, "'INPUT'!A2:J").catch(() => []);
-        txRowsRM = await fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J").catch(() => []);
-        txRowsMfg = await fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J").catch(() => []);
-        txRowsSupplies = await fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J").catch(() => []);
-        pRows = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B").catch(() => []);
-        lRows = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => []);
+        txRowsNormalRaw = await fetchSheetData(spreadsheetId, "'INPUT'!A:J", true).catch(() => []);
+        txRowsRMRaw = await fetchSheetData(spreadsheetId, "'INPUT RM'!A:J", true).catch(() => []);
+        txRowsMfgRaw = await fetchSheetData(spreadsheetId, "'INPUT MFG'!A:J", true).catch(() => []);
+        txRowsSuppliesRaw = await fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A:J", true).catch(() => []);
+        pRowsRaw = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A:B", true).catch(() => []);
+        lRowsRaw = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A:E", true).catch(() => []);
       }
+
+      // Save raw data (including headers as a complete representation) to localStorage
+      const saveData = (r: string, data: any[][]) => {
+        try {
+          localStorage.setItem(getStorageKey(r), JSON.stringify({ timestamp: Date.now(), data }));
+        } catch (e) {
+          console.warn("Failed saving cache to localStorage:", e);
+        }
+      };
+
+      saveData("'INPUT'!A:J", txRowsNormalRaw);
+      saveData("'INPUT RM'!A:J", txRowsRMRaw);
+      saveData("'INPUT MFG'!A:J", txRowsMfgRaw);
+      saveData("'INPUT SUPPLIES'!A:J", txRowsSuppliesRaw);
+      saveData("'MASTER_PRODUK'!A:B", pRowsRaw);
+      saveData("'MASTER_LOCATOR'!A:E", lRowsRaw);
+
+      // Slice out the first line from each raw spreadsheet, which contains headers
+      const txRowsNormal = txRowsNormalRaw.slice(1);
+      const txRowsRM = txRowsRMRaw.slice(1);
+      const txRowsMfg = txRowsMfgRaw.slice(1);
+      const txRowsSupplies = txRowsSuppliesRaw.slice(1);
+      const pRows = pRowsRaw.slice(1);
+      const lRows = lRowsRaw.slice(1);
 
       const pMap = new Map<string, string>(pRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]).trim(), String(r[1]).trim()]));
       const lMap = new Map<string, { nama: string; whType: string; area: string }>();
       lRows.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
         const rawKey = String(r[0]).trim();
         const keyUpper = rawKey.toUpperCase();
-        const val = {
+        lMap.set(rawKey, {
           nama: String(r[1] || r[0]).trim(),
           whType: String(r[3] || '').trim(),
           area: String(r[4] || '').trim()
-        };
-        lMap.set(rawKey, val);
-        lMap.set(keyUpper, val);
+        });
+        lMap.set(keyUpper, {
+          nama: String(r[1] || r[0]).trim(),
+          whType: String(r[3] || '').trim(),
+          area: String(r[4] || '').trim()
+        });
       });
       
       const mappedRows: {tipe: string, pCode: string, pName: string, lCode: string, qty: number, source: string}[] = [];
-
       const processRows = (rows: any[], source: string) => {
-        console.log(`Processing rows for ${source}:`, rows?.length);
         const validRows = (rows || []).filter((r: any[]) => r.length > 0 && (r[0] || r[1] || r[9]));
         validRows.forEach((r: any[]) => {
            const pName = String(r[1] || '').trim();
            let pCode = String(r[9] || '').trim();
            const tipe = String(r[4] || '').trim().toUpperCase();
-           
            if (!pName && !pCode) return;
-           if (!pCode) {
-             pCode = pName;
-           }
-
+           if (!pCode) pCode = pName;
            const qtyStr = String(r[2] || '0').replace(',', '.');
            let qty = parseFloat(qtyStr) || 0;
            if (isNaN(qty)) qty = 0;
-
            let fromLocator = String(r[5] || '').trim();
            let toLocator = String(r[6] || '').trim();
-           
            if (!fromLocator && !toLocator) fromLocator = 'UNKNOWN_L';
 
            if (tipe === 'TRANSFER' || tipe === 'TF') {
              mappedRows.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || 'UNKNOWN_L', qty, source });
              mappedRows.push({ tipe: 'IN', pCode, pName, lCode: toLocator || 'UNKNOWN_L', qty, source });
            } else {
-             mappedRows.push({ 
-               tipe: tipe || 'IN', 
-               pCode, 
-               pName, 
-               lCode: fromLocator || toLocator || 'UNKNOWN_L', 
-               qty, 
-               source 
-             });
+             mappedRows.push({ tipe: tipe || 'IN', pCode, pName, lCode: fromLocator || toLocator || 'UNKNOWN_L', qty, source });
            }
         });
       };
@@ -121,12 +241,15 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
 
       setProductsMap(pMap);
       setLocatorsMap(lMap);
-      console.log("mappedRows total:", mappedRows.length, mappedRows);
       setAllTransactions(mappedRows);
     } catch (err: any) {
-      alert(`Gagal memuat overview stok: ${err.message}`);
+      console.error("Background sync error:", err);
+      if (!hasLocalCache) {
+        alert(`Gagal memuat overview stok: ${err.message}`);
+      }
     } finally {
       setLoading(false);
+      setBackgroundSyncing(false);
     }
   };
 
@@ -303,9 +426,23 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
           <h2 className="text-2xl font-bold text-slate-900">Stock per WH Group</h2>
           <p className="text-sm text-slate-500">Peta ketersediaan barang pada setiap warehouse.</p>
         </div>
-        <button onClick={loadData} className="px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-          Refresh Data
-        </button>
+        <div className="flex items-center gap-3">
+          {backgroundSyncing && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full animate-pulse shrink-0 shadow-sm">
+              <Loader2 style={{ height: '0.75rem' }} className="w-3 animate-spin text-amber-500" />
+              <span>Sinkronisasi data terbaru...</span>
+            </div>
+          )}
+          {!backgroundSyncing && !loading && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full shrink-0 shadow-sm">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span>Data sinkron</span>
+            </div>
+          )}
+          <button onClick={() => loadData()} className="px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm shrink-0">
+            Refresh Data
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

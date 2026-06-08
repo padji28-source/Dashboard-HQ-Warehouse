@@ -18,11 +18,36 @@ export default function MasterLocator({ spreadsheetId }: { spreadsheetId: string
   const [area, setArea] = useState('');
 
   const loadData = async (retryOnMissing = true) => {
+    const range = "'MASTER_LOCATOR'!A:E";
+    const cleanUrl = spreadsheetId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
+    const storageKey = `erp_cache_${cleanUrl}_master_locator`;
+
+    // Try starting from cache
     try {
-      setLoading(true);
-      let rows: any[] = [];
+      const cached = localStorage.getItem(storageKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && Array.isArray(parsed.data)) {
+          console.log("[SWR] Loaded locators from cache");
+          const cachedData = parsed.data.slice(1); // slice headers
+          setLocators(cachedData.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).map((r: any[]) => ({
+            whGroup: String(r[0] || ''),
+            nama: String(r[1] || ''),
+            deskripsi: String(r[2] || ''),
+            whType: String(r[3] || ''),
+            area: String(r[4] || '')
+          })));
+          setLoading(false);
+        }
+      }
+    } catch (e) {
+      console.warn("Locators cache load failed", e);
+    }
+
+    try {
+      let fullRows: any[] = [];
       try {
-        rows = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E");
+        fullRows = await fetchSheetData(spreadsheetId, range, true);
       } catch (fetchErr: any) {
         const errorMsg = String(fetchErr.message || '').toLowerCase();
         const isMissingSheet = errorMsg.includes('not found') || errorMsg.includes('range') || errorMsg.includes('unparseable') || errorMsg.includes('cannot read');
@@ -41,6 +66,15 @@ export default function MasterLocator({ spreadsheetId }: { spreadsheetId: string
           throw fetchErr;
         }
       }
+
+      // Save to cache (raw with headers intact)
+      try {
+        localStorage.setItem(storageKey, JSON.stringify({ timestamp: Date.now(), data: fullRows }));
+      } catch (e) {
+        console.warn("Failed saving locators to cache:", e);
+      }
+
+      const rows = fullRows.slice(1);
       setLocators(rows.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).map((r: any[]) => ({
         whGroup: String(r[0] || ''),
         nama: String(r[1] || ''),
@@ -49,7 +83,10 @@ export default function MasterLocator({ spreadsheetId }: { spreadsheetId: string
         area: String(r[4] || '')
       })));
     } catch (err: any) {
-      alert(`Gagal memuat locator: ${err.message}`);
+      console.error("Locators background load error:", err);
+      if (loading) {
+        alert(`Gagal memuat locator: ${err.message}`);
+      }
     } finally {
       setLoading(false);
     }

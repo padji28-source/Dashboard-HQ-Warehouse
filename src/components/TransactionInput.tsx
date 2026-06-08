@@ -97,18 +97,62 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
   const [selectedLocatorTo, setSelectedLocatorTo] = useState('ALL');
 
   const loadData = async (retryOnMissing = true) => {
+    const cleanUrl = spreadsheetId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
+    const txKey = `erp_cache_${cleanUrl}_tx_${sheetName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    const pKey = `erp_cache_${cleanUrl}_master_produk_C`; // cache key with C suffix to separate columns
+    const lKey = `erp_cache_${cleanUrl}_master_locator`;
+
+    // Try starting from cache
     try {
-      setLoading(true);
-      
+      const cachedTx = localStorage.getItem(txKey);
+      const cachedP = localStorage.getItem(pKey);
+      const cachedL = localStorage.getItem(lKey);
+
+      if (cachedTx && cachedP && cachedL) {
+        const txRows = (JSON.parse(cachedTx).data || []).slice(1);
+        const pRows = (JSON.parse(cachedP).data || []).slice(1);
+        const lRows = (JSON.parse(cachedL).data || []).slice(1);
+
+        const parsedTransactions = txRows
+          .filter((r: any[]) => r.length > 0 && (r[0] || r[1] || r[9]))
+          .map((r: any[]) => ({
+            tanggal: String(r[0] || ''),
+            namaBahan: String(r[1] || ''),
+            kuantitas: parseFloat(String(r[2] || '0').replace(',', '.')) || 0,
+            uom: String(r[3] || ''),
+            tipe: String(r[4] || '').trim().toUpperCase() as 'IN'|'OUT'|'AWAL',
+            locator: String(r[5] || ''),
+            locatorTo: String(r[6] || ''),
+            noDocument: String(r[7] || ''),
+            keterangan: String(r[8] || ''),
+            kodeProduk: String(r[9] || '')
+          }));
+
+        parsedTransactions.sort((a, b) => getParsedDateValue(a.tanggal) - getParsedDateValue(b.tanggal));
+        setTransactions(parsedTransactions);
+
+        const uniqueP = Array.from(new Map(pRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]), { kode: String(r[0]), nama: String(r[1] || ''), satuan: String(r[2] || ''), kategori: '' }])).values());
+        const uniqueL = Array.from(new Map(lRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]), { whGroup: String(r[0]), nama: String(r[1] || ''), deskripsi: String(r[2] || ''), whType: String(r[3] || ''), area: String(r[4] || '') }])).values());
+
+        setProducts(uniqueP as Product[]);
+        setLocators(uniqueL as Locator[]);
+        setLoading(false);
+        console.log(`[SWR] Loaded transactions for ${sheetName} from cache`);
+      }
+    } catch (e) {
+      console.warn("Failed loading cached transactions:", e);
+    }
+
+    try {
       let txRows: any[] = [];
       let pRows: any[] = [];
       let lRows: any[] = [];
       
       try {
         [txRows, pRows, lRows] = await Promise.all([
-          fetchSheetData(spreadsheetId, `'${sheetName}'!A2:J`),
-          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:C"), // Need Satuan (UOM)
-          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E")
+          fetchSheetData(spreadsheetId, `'${sheetName}'!A:J`, true),
+          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A:C", true),
+          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A:E", true)
         ]);
       } catch (fetchErr: any) {
         if (retryOnMissing) {
@@ -126,6 +170,19 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
           throw fetchErr;
         }
       }
+
+      // Save to cache (raw with headers intact)
+      try {
+        localStorage.setItem(txKey, JSON.stringify({ timestamp: Date.now(), data: txRows }));
+        localStorage.setItem(pKey, JSON.stringify({ timestamp: Date.now(), data: pRows }));
+      } catch (e) {
+        console.warn("Failed saving transactions/products to cache:", e);
+      }
+
+      // Slice out headers for display & mapping
+      txRows = txRows.slice(1);
+      pRows = pRows.slice(1);
+      lRows = lRows.slice(1);
 
       const parsedTransactions = txRows
         .filter((r: any[]) => r.length > 0 && (r[0] || r[1] || r[9]))
@@ -154,7 +211,10 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
       setLocators(uniqueL as Locator[]);
 
     } catch (err: any) {
-      alert(`Gagal memuat transaksi dari ${sheetName}: ${err.message}`);
+      console.error("Transactions background load error:", err);
+      if (loading) {
+        alert(`Gagal memuat transaksi dari ${sheetName}: ${err.message}`);
+      }
     } finally {
       setLoading(false);
     }
