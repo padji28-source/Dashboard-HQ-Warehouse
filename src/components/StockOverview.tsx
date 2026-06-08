@@ -212,7 +212,23 @@ export default function StockOverview({ spreadsheetId }: { spreadsheetId: string
     });
     return Array.from(byProduct.values())
       .sort((a,b) => b.stock - a.stock)
-      .slice(0, 5)
+      .slice(0, 10)
+      .map(d => ({ ...d, name: d.name.length > 15 ? d.name.substring(0,15) + '...' : d.name }));
+  }, [stockSummary]);
+
+  const topOutItems = useMemo(() => {
+    // combine by product for chart based on total OUT
+    const byProduct = new Map<string, {name: string, totalOut: number}>();
+    stockSummary.forEach(s => {
+      if (s.totalOut > 0) {
+        const existing = byProduct.get(s.kodeProduk);
+        if (existing) existing.totalOut += s.totalOut;
+        else byProduct.set(s.kodeProduk, { name: s.namaProduk, totalOut: s.totalOut });
+      }
+    });
+    return Array.from(byProduct.values())
+      .sort((a,b) => b.totalOut - a.totalOut)
+      .slice(0, 10)
       .map(d => ({ ...d, name: d.name.length > 15 ? d.name.substring(0,15) + '...' : d.name }));
   }, [stockSummary]);
 
@@ -235,52 +251,74 @@ export default function StockOverview({ spreadsheetId }: { spreadsheetId: string
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-1 flex flex-col gap-6">
-          <div className="border border-slate-200 bg-white rounded-xl p-6 flex flex-col items-center justify-center text-center shadow-sm flex-1">
-              <div className="w-12 h-12 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center mb-4">
-                 <Package className="w-5 h-5 text-blue-600" />
-              </div>
-              {(() => {
-                const total = stockSummary.reduce((acc, s) => acc + s.stock, 0);
-                return (
-                  <h3 className={cn(
-                    "text-3xl font-bold tracking-tight mb-1",
-                    total < 0 ? "text-rose-600" : "text-slate-900"
-                  )}>
-                    {total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  </h3>
-                );
-              })()}
-              <p className="text-sm font-medium text-slate-500">Total Kuantitas Global</p>
-          </div>
-
-          <div className="border border-slate-200 bg-white rounded-xl p-6 flex flex-col items-center justify-center text-center shadow-sm flex-1">
-              <div className="w-12 h-12 bg-emerald-50 border border-emerald-100 rounded-full flex items-center justify-center mb-4">
-                 <Layers className="w-5 h-5 text-emerald-600" />
-              </div>
-              <h3 className="text-3xl font-bold tracking-tight mb-1 text-slate-900">
-                {stockSummary.length.toLocaleString()}
-              </h3>
-              <p className="text-sm font-medium text-slate-500">Total SKU (Items)</p>
-          </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="border border-slate-200 bg-white rounded-xl p-6 flex items-center gap-4 shadow-sm">
+            <div className="w-12 h-12 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center shrink-0">
+               <Package className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+               {(() => {
+                 const total = stockSummary.reduce((acc, s) => acc + s.stock, 0);
+                 return (
+                   <h3 className={cn(
+                     "text-2xl font-bold tracking-tight text-slate-900",
+                     total < 0 && "text-rose-600"
+                   )}>
+                     {total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                   </h3>
+                 );
+               })()}
+               <p className="text-sm font-medium text-slate-500">Total Kuantitas Global</p>
+            </div>
         </div>
 
-        <div className="lg:col-span-3 border border-slate-200 bg-white rounded-xl p-6 h-[360px] shadow-sm flex flex-col">
-           <div className="mb-6">
+        <div className="border border-slate-200 bg-white rounded-xl p-6 flex items-center gap-4 shadow-sm">
+            <div className="w-12 h-12 bg-emerald-50 border border-emerald-100 rounded-full flex items-center justify-center shrink-0">
+               <Layers className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+               <h3 className="text-2xl font-bold tracking-tight text-slate-900">
+                 {stockSummary.length.toLocaleString()}
+               </h3>
+               <p className="text-sm font-medium text-slate-500">Total SKU (Items)</p>
+            </div>
+        </div>
+
+        <div className="border border-slate-200 bg-white rounded-xl p-6 flex items-center gap-4 shadow-sm sm:col-span-2 lg:col-span-1">
+            <div className="w-12 h-12 bg-rose-50 border border-rose-100 rounded-full flex items-center justify-center shrink-0">
+               <ArrowRightLeft className="w-5 h-5 text-rose-600" />
+            </div>
+            <div>
+               {(() => {
+                 const totalOut = stockSummary.reduce((acc, s) => acc + s.totalOut, 0);
+                 return (
+                   <h3 className="text-2xl font-bold tracking-tight text-rose-600">
+                     {totalOut.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                   </h3>
+                 );
+               })()}
+               <p className="text-sm font-medium text-slate-500">Total Transaksi Out (Qty)</p>
+            </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Chart 1: Top 10 Stok Terbanyak */}
+        <div className="border border-slate-200 bg-white rounded-xl p-6 h-[380px] shadow-sm flex flex-col">
+           <div className="mb-4">
              <h3 className="text-base font-semibold text-slate-900">Top 10 Stok Terbanyak</h3>
-             <p className="text-sm text-slate-500">Berdasarkan total kuantitas per item</p>
+             <p className="text-xs text-slate-500">Berdasarkan total kuantitas tersisa per item</p>
            </div>
            <div className="flex-1 w-full min-h-0">
              {loading ? (
                <div className="h-full flex items-center justify-center text-slate-400"><Loader2 className="w-6 h-6 animate-spin"/></div>
              ) : (
                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topItems} margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
+                  <BarChart data={topItems} margin={{ top: 10, right: 10, bottom: 25, left: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                     <XAxis 
                       dataKey="name" 
-                      fontSize={11} 
+                      fontSize={10} 
                       tickLine={false} 
                       axisLine={false} 
                       tick={{fill: '#64748b'}} 
@@ -288,23 +326,69 @@ export default function StockOverview({ spreadsheetId }: { spreadsheetId: string
                       interval={0} 
                       angle={-25} 
                       textAnchor="end" 
-                      height={60} 
+                      height={65} 
                     />
                     <YAxis 
                       type="number" 
-                      fontSize={12} 
+                      fontSize={11} 
                       tickLine={false} 
                       axisLine={false} 
                       tick={{fill: '#64748b'}} 
                       tickFormatter={(value) => value.toLocaleString()} 
-                      width={60} 
+                      width={50} 
                     />
                     <Tooltip 
                       cursor={{ fill: '#F8FAFC' }} 
                       contentStyle={{ borderRadius: '8px', border: '1px solid #E2E8F0', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} 
                       formatter={(value: number) => [value.toLocaleString(), 'Stok']}
                     />
-                    <Bar dataKey="stock" fill="#3B82F6" radius={[4, 4, 0, 0]} maxBarSize={48} name="Stok" />
+                    <Bar dataKey="stock" fill="#3B82F6" radius={[4, 4, 0, 0]} maxBarSize={32} name="Stok" />
+                  </BarChart>
+                </ResponsiveContainer>
+             )}
+           </div>
+        </div>
+
+        {/* Chart 2: Top 10 Transaksi Out Terbanyak */}
+        <div className="border border-slate-200 bg-white rounded-xl p-6 h-[380px] shadow-sm flex flex-col">
+           <div className="mb-4">
+             <h3 className="text-base font-semibold text-slate-900">Top 10 Transaksi Out Terbanyak</h3>
+             <p className="text-xs text-slate-500">Berdasarkan akumulasi kuantitas pengeluaran (OUT)</p>
+           </div>
+           <div className="flex-1 w-full min-h-0">
+             {loading ? (
+               <div className="h-full flex items-center justify-center text-slate-400"><Loader2 className="w-6 h-6 animate-spin"/></div>
+             ) : (
+               <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topOutItems} margin={{ top: 10, right: 10, bottom: 25, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis 
+                      dataKey="name" 
+                      fontSize={10} 
+                      tickLine={false} 
+                      axisLine={false} 
+                      tick={{fill: '#64748b'}} 
+                      tickMargin={12} 
+                      interval={0} 
+                      angle={-25} 
+                      textAnchor="end" 
+                      height={65} 
+                    />
+                    <YAxis 
+                      type="number" 
+                      fontSize={11} 
+                      tickLine={false} 
+                      axisLine={false} 
+                      tick={{fill: '#64748b'}} 
+                      tickFormatter={(value) => value.toLocaleString()} 
+                      width={50} 
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#F5F5F5' }} 
+                      contentStyle={{ borderRadius: '8px', border: '1px solid #E2E8F0', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} 
+                      formatter={(value: number) => [value.toLocaleString(), 'Kuantitas Out']}
+                    />
+                    <Bar dataKey="totalOut" fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={32} name="Qty Out" />
                   </BarChart>
                 </ResponsiveContainer>
              )}

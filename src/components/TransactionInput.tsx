@@ -94,18 +94,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedLocator, setSelectedLocator] = useState('ALL');
-
-  const [formOpen, setFormOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD format for date input
-  const [tipe, setTipe] = useState<'IN' | 'OUT' | 'AWAL'>('IN');
-  const [kodeProduk, setKodeProduk] = useState('');
-  const [locatorAsal, setLocatorAsal] = useState('');
-  const [locatorTujuan, setLocatorTujuan] = useState('');
-  const [kuantitas, setKuantitas] = useState(1);
-  const [noDocument, setNoDocument] = useState('');
-  const [keterangan, setKeterangan] = useState('');
+  const [selectedLocatorTo, setSelectedLocatorTo] = useState('ALL');
 
   const loadData = async (retryOnMissing = true) => {
     try {
@@ -175,52 +164,23 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
     loadData();
   }, [spreadsheetId, sheetName]);
 
-  const formatTanggal = (isoDate: string) => {
-    const parts = isoDate.split('-');
-    if (parts.length !== 3) return isoDate;
-    const y = parts[0].slice(2);
-    const m = parts[1];
-    const d = parts[2];
-    return `${m}/${d}/${y}`; // Mm/Dd/Yy
-  };
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!kodeProduk || !locatorAsal || kuantitas <= 0) return;
-    setSubmitting(true);
-    try {
-      const selectedProduct = products.find(p => p.kode === kodeProduk);
-      const namaBahan = selectedProduct?.nama || kodeProduk;
-      const uom = selectedProduct?.satuan || 'Pcs';
-      const fTanggal = formatTanggal(tanggal);
-
-      const rowsToAppend = [];
-      
-      // format: Tanggal | Nama Bahan | Qty | UOM | I/O/A | Locator | Locator To | No. Document | Keterangan | Kode
-      if (tipe === 'OUT' && locatorTujuan && locatorTujuan !== locatorAsal) {
-        rowsToAppend.push([fTanggal, namaBahan, kuantitas.toString(), uom, 'OUT', locatorAsal, locatorTujuan, noDocument, keterangan ? `${keterangan} (Transfer ke ${locatorTujuan})` : `Transfer ke ${locatorTujuan}`, kodeProduk]);
-        rowsToAppend.push([fTanggal, namaBahan, kuantitas.toString(), uom, 'IN', locatorTujuan, '', noDocument, keterangan ? `${keterangan} (Transfer dari ${locatorAsal})` : `Transfer dari ${locatorAsal}`, kodeProduk]);
-      } else {
-        rowsToAppend.push([fTanggal, namaBahan, kuantitas.toString(), uom, tipe, locatorAsal, '', noDocument, keterangan, kodeProduk]);
-      }
-
-      await appendSheetRow(spreadsheetId, `'${sheetName}'!A:J`, rowsToAppend);
-      setFormOpen(false);
-      setKodeProduk(''); setLocatorAsal(''); setLocatorTujuan(''); setKuantitas(1); setNoDocument(''); setKeterangan('');
-      await loadData();
-    } catch (err: any) {
-      alert(`Gagal menyimpan transaksi: ${err.message}`);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Extract unique locators dynamically from transaction table records as requested
+  const uniqueLocatorsFromTable = Array.from(new Set(transactions.map(t => t.locator).filter(Boolean))).sort() as string[];
+  const uniqueLocatorTosFromTable = Array.from(new Set(transactions.map(t => t.locatorTo).filter(Boolean))).sort() as string[];
+
+  const getLocatorDisplayName = (code: string) => {
+    const found = locators.find(l => l.whGroup === code);
+    return found ? `${code} - ${found.nama}` : code;
+  };
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, selectedLocator]);
+  }, [search, selectedLocator, selectedLocatorTo, startDate, endDate]);
 
   const filtered = transactions.filter(t => {
     const matchesSearch = 
@@ -232,10 +192,29 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
 
     const matchesLocator = 
       selectedLocator === 'ALL' || 
-      t.locator === selectedLocator || 
-      t.locatorTo === selectedLocator;
+      t.locator === selectedLocator;
 
-    return matchesSearch && matchesLocator;
+    const matchesLocatorTo = 
+      selectedLocatorTo === 'ALL' || 
+      t.locatorTo === selectedLocatorTo;
+
+    // Timezone & format consistent parsing using getParsedDateValue
+    const matchesDateRange = (() => {
+      if (!startDate && !endDate) return true;
+      const val = getParsedDateValue(t.tanggal);
+      if (!val) return false;
+      if (startDate) {
+        const startVal = getParsedDateValue(startDate);
+        if (val < startVal) return false;
+      }
+      if (endDate) {
+        const endVal = getParsedDateValue(endDate);
+        if (val > endVal) return false;
+      }
+      return true;
+    })();
+
+    return matchesSearch && matchesLocator && matchesLocatorTo && matchesDateRange;
   });
 
   const totalPages = Math.ceil(filtered.length / pageSize);
@@ -257,132 +236,84 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
           <button onClick={() => loadData(true)} className="px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-200">
             Refresh Data
           </button>
-          <button 
-            onClick={() => setFormOpen(!formOpen)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            <Plus className={`w-4 h-4 transition-transform ${formOpen ? 'rotate-45' : ''}`} /> {formOpen ? 'Batal' : 'Tambah Transaksi'}
-          </button>
         </div>
       </div>
 
-      {formOpen && (
-        <div className="bg-white rounded-xl shadow-sm border border-blue-100 overflow-hidden animate-in fade-in duration-300">
-          <div className="bg-blue-50/50 px-6 py-4 border-b border-blue-100 flex items-center gap-3">
-             <div className="p-2 bg-blue-100 rounded-lg text-blue-700">
-               <ArrowRightLeft className="w-5 h-5" />
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        {/* Filters Panel with Search, Date Range Filter and Dynamic Locators options */}
+        <div className="p-5 border-b border-slate-100 bg-slate-50/50 space-y-4">
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+            <div className="relative max-w-sm w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input type="text" placeholder="Cari transaksi..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none shadow-sm bg-white" />
+            </div>
+
+            {/* Date range inputs */}
+            <div className="flex flex-wrap items-center gap-3 bg-white px-3 py-1.5 border border-slate-200 rounded-lg shadow-sm">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 shrink-0">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" /> Filter Tanggal:
+              </span>
+              <div className="flex items-center gap-2">
+                <input 
+                  type="date" 
+                  value={startDate} 
+                  onChange={e => setStartDate(e.target.value)}
+                  className="px-2 py-1 text-xs border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
+                  title="Tanggal Mulai"
+                />
+                <span className="text-slate-400 text-xs font-medium">s.d</span>
+                <input 
+                  type="date" 
+                  value={endDate} 
+                  onChange={e => setEndDate(e.target.value)}
+                  className="px-2 py-1 text-xs border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
+                  title="Tanggal Selesai"
+                />
+              </div>
+              {(startDate || endDate) && (
+                <button 
+                  onClick={() => { setStartDate(''); setEndDate(''); }}
+                  className="text-xs font-medium text-rose-600 hover:text-rose-700 hover:underline px-1 shrink-0"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 pt-1">
+             <div className="flex items-center gap-2">
+               <span className="text-sm font-medium text-slate-600 shrink-0">Filter Locator:</span>
+               <select 
+                 value={selectedLocator} 
+                 onChange={e => setSelectedLocator(e.target.value)}
+                 className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white shadow-sm min-w-[150px] max-w-[240px]"
+               >
+                 <option value="ALL">Semua Locator</option>
+                 {uniqueLocatorsFromTable.map(loc => (
+                   <option key={loc} value={loc}>
+                     {getLocatorDisplayName(loc)}
+                   </option>
+                 ))}
+               </select>
              </div>
-             <div>
-               <h3 className="text-lg font-semibold text-slate-900">Form Transaksi Baru ({sheetName})</h3>
-               <p className="text-xs text-slate-500">Pilih tipe transaksi dan lengkapi rincian di bawah ini.</p>
+
+             <div className="flex items-center gap-2">
+               <span className="text-sm font-medium text-slate-600 shrink-0">Filter Locator To:</span>
+               <select 
+                 value={selectedLocatorTo} 
+                 onChange={e => setSelectedLocatorTo(e.target.value)}
+                 className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white shadow-sm min-w-[150px] max-w-[240px]"
+               >
+                 <option value="ALL">Semua Locator To</option>
+                 {uniqueLocatorTosFromTable.map(loc => (
+                   <option key={loc} value={loc}>
+                     {getLocatorDisplayName(loc)}
+                   </option>
+                 ))}
+               </select>
              </div>
           </div>
-          
-          <form onSubmit={handleSubmit} className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <Calendar className="w-4 h-4 text-slate-400" /> Tanggal
-                </label>
-                <input required type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none" />
-              </div>
-              
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <ArrowRightLeft className="w-4 h-4 text-slate-400" /> Tipe Transaksi
-                </label>
-                <select value={tipe} onChange={e => {setTipe(e.target.value as 'IN'|'OUT'|'AWAL'); setLocatorTujuan('')}} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none">
-                  <option value="IN">Masuk (IN)</option>
-                  <option value="OUT">Keluar (OUT)</option>
-                  <option value="AWAL">Saldo Awal (AWAL)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <Package className="w-4 h-4 text-slate-400" /> Produk
-                </label>
-                <select required value={kodeProduk} onChange={e => setKodeProduk(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none">
-                  <option value="">-- Pilih Produk --</option>
-                  {products.map(p => <option key={p.kode} value={p.kode}>[{p.kode}] {p.nama}</option>)}
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <MapPin className="w-4 h-4 text-slate-400" /> Locator {tipe === 'OUT' ? 'Asal' : ''}
-                </label>
-                <select required value={locatorAsal} onChange={e => setLocatorAsal(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none">
-                  <option value="">-- Pilih Locator --</option>
-                  {locators.map(l => <option key={l.whGroup} value={l.whGroup}>[{l.whGroup}] {l.nama}</option>)}
-                </select>
-              </div>
-
-              {tipe === 'OUT' && (
-                <div className="space-y-1.5 animate-in fade-in slide-in-from-left-2">
-                  <label className="flex items-center gap-2 text-sm font-medium text-blue-700">
-                    <MapPin className="w-4 h-4 text-blue-500" /> Locator Tujuan (Opsional)
-                  </label>
-                  <select value={locatorTujuan} onChange={e => setLocatorTujuan(e.target.value)} className="w-full px-3 py-2 border border-blue-200 rounded-lg bg-blue-50/30 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none">
-                    <option value="">-- Bukan Transfer --</option>
-                    {locators.map(l => <option key={l.whGroup} value={l.whGroup} disabled={l.whGroup === locatorAsal}>[{l.whGroup}] {l.nama}</option>)}
-                  </select>
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <Hash className="w-4 h-4 text-slate-400" /> Kuantitas
-                </label>
-                <input required type="number" min="0.01" step="0.01" value={kuantitas} onChange={e => setKuantitas(parseFloat(e.target.value))} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none" placeholder="0" />
-              </div>
-
-              <div className="space-y-1.5 ">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <FileDigit className="w-4 h-4 text-slate-400" /> No. Document
-                </label>
-                <input type="text" value={noDocument} onChange={e => setNoDocument(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none" placeholder="No. Dokumen..." />
-              </div>
-
-              <div className="md:col-span-2 lg:col-span-2 space-y-1.5">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <FileText className="w-4 h-4 text-slate-400" /> Keterangan Catatan
-                </label>
-                <input type="text" value={keterangan} onChange={e => setKeterangan(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none" placeholder="Tambahkan catatan jika diperlukan..." />
-              </div>
-            </div>
-            
-            <div className="pt-6 mt-6 border-t border-slate-100 flex justify-end gap-3">
-              <button disabled={submitting} type="submit" className="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckCircle2 className="w-4 h-4" />} Simpan Transaksi {tipe === 'OUT' && locatorTujuan ? '& Transfer' : ''}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
-           <div className="relative max-w-sm w-full">
-             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-             <input type="text" placeholder="Cari transaksi..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none shadow-sm bg-white" />
-           </div>
-           
-           <div className="flex items-center gap-2.5">
-             <span className="text-sm font-medium text-slate-600">Filter Locator:</span>
-             <select 
-               value={selectedLocator} 
-               onChange={e => setSelectedLocator(e.target.value)}
-               className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white shadow-sm min-w-[160px]"
-             >
-               <option value="ALL">Semua Locator</option>
-               {locators.map(l => (
-                 <option key={l.whGroup} value={l.whGroup}>
-                   {l.whGroup} - {l.nama}
-                 </option>
-               ))}
-             </select>
-           </div>
         </div>
         <div className="overflow-x-auto">
           {loading ? (
