@@ -95,12 +95,10 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
   const [search, setSearch] = useState('');
   const [selectedLocator, setSelectedLocator] = useState('ALL');
   const [selectedLocatorTo, setSelectedLocatorTo] = useState('ALL');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadData = async (retryOnMissing = true) => {
     try {
       setLoading(true);
-      setErrorMessage(null);
       
       let txRows: any[] = [];
       let pRows: any[] = [];
@@ -121,17 +119,11 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
             // Retry once
             return loadData(false);
           } catch (initErr: any) {
-            console.log("Auto-initialization fallback returned or failed:", initErr.message || initErr);
+            console.error("Auto-initialization fallback failed:", initErr);
+            throw fetchErr; // rethrow original fetch error
           }
-        }
-        
-        // Fallback to fetch individually to display whatever is available
-        txRows = await fetchSheetData(spreadsheetId, `'${sheetName}'!A2:J`).catch(() => []);
-        pRows = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:C").catch(() => []);
-        lRows = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => []);
-        
-        if (txRows.length === 0 && pRows.length === 0 && lRows.length === 0) {
-          setErrorMessage(`Beberapa sheet di Google Sheets (seperti '${sheetName}') belum siap atau kosong. Silakan inisialisasi sheet.`);
+        } else {
+          throw fetchErr;
         }
       }
 
@@ -162,8 +154,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
       setLocators(uniqueL as Locator[]);
 
     } catch (err: any) {
-      console.log(`Failed to load data for ${sheetName}:`, err.message || err);
-      setErrorMessage(`Koneksi terputus atau format rentang sheet '${sheetName}' salah.`);
+      alert(`Gagal memuat transaksi dari ${sheetName}: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -247,18 +238,6 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
           </button>
         </div>
       </div>
-
-      {errorMessage && (
-        <div className="bg-amber-50 border border-amber-200/60 rounded-xl p-4 flex items-start gap-3 text-amber-800 text-sm animate-in fade-in duration-300">
-          <svg className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <div>
-            <span className="font-semibold text-amber-900">Catatan Konfigurasi Google Sheets: </span>
-            {errorMessage}
-          </div>
-        </div>
-      )}
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
         {/* Filters Panel with Search, Date Range Filter and Dynamic Locators options */}

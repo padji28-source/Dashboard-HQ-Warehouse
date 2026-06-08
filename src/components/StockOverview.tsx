@@ -48,7 +48,7 @@ export default function StockOverview({ spreadsheetId }: { spreadsheetId: string
             await initializeERPSpreadsheet(spreadsheetId);
             return loadData(false);
           } catch (initErr) {
-            console.log("Auto-init info or duplicate sheet message ignored:", initErr);
+            console.error("Auto-init from StockOverview failed:", initErr);
           }
         }
         // Fallback to individual catches if init fails or retry is off
