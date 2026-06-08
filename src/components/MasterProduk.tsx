@@ -17,35 +17,11 @@ export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string 
   const [kategori, setKategori] = useState('');
 
   const loadData = async (retryOnMissing = true) => {
-    const range = "'MASTER_PRODUK'!A:D";
-    const cleanUrl = spreadsheetId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
-    const storageKey = `erp_cache_${cleanUrl}_master_produk`;
-
-    // Try starting from cache
     try {
-      const cached = localStorage.getItem(storageKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed && Array.isArray(parsed.data)) {
-          console.log("[SWR] Loaded products from cache");
-          const cachedData = parsed.data.slice(1); // slice headers
-          setProducts(cachedData.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).map((r: any[]) => ({
-            kode: String(r[0] || ''),
-            nama: String(r[1] || ''),
-            satuan: String(r[2] || ''),
-            kategori: String(r[3] || '')
-          })));
-          setLoading(false);
-        }
-      }
-    } catch (e) {
-      console.warn("Products cache load failed", e);
-    }
-
-    try {
-      let fullRows: any[] = [];
+      setLoading(true);
+      let rows: any[] = [];
       try {
-        fullRows = await fetchSheetData(spreadsheetId, range, true);
+        rows = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:D");
       } catch (fetchErr: any) {
         const errorMsg = String(fetchErr.message || '').toLowerCase();
         const isMissingSheet = errorMsg.includes('not found') || errorMsg.includes('range') || errorMsg.includes('unparseable') || errorMsg.includes('cannot read');
@@ -64,15 +40,6 @@ export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string 
           throw fetchErr;
         }
       }
-
-      // Save to cache (raw with headers intact)
-      try {
-        localStorage.setItem(storageKey, JSON.stringify({ timestamp: Date.now(), data: fullRows }));
-      } catch (e) {
-        console.warn("Failed saving products to cache:", e);
-      }
-
-      const rows = fullRows.slice(1);
       setProducts(rows.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).map((r: any[]) => ({
         kode: String(r[0] || ''),
         nama: String(r[1] || ''),
@@ -80,10 +47,7 @@ export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string 
         kategori: String(r[3] || '')
       })));
     } catch (err: any) {
-      console.error("Products background load error:", err);
-      if (loading) {
-        alert(`Gagal memuat produk: ${err.message}`);
-      }
+      alert(`Gagal memuat produk: ${err.message}`);
     } finally {
       setLoading(false);
     }
