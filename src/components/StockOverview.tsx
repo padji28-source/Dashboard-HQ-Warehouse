@@ -20,17 +20,45 @@ export default function StockOverview({ spreadsheetId }: { spreadsheetId: string
   const [productsMap, setProductsMap] = useState<Map<string, string>>(new Map());
   const [locatorsMap, setLocatorsMap] = useState<Map<string, { nama: string; whType: string; area: string }>>(new Map());
 
-  const loadData = async () => {
+  const loadData = async (retryOnMissing = true) => {
     try {
       setLoading(true);
-      const [txRowsNormal, txRowsRM, txRowsMfg, txRowsSupplies, pRows, lRows] = await Promise.all([
-        fetchSheetData(spreadsheetId, "'INPUT'!A2:J").catch(e => { console.warn("Failed fetch INPUT", e); return []; }),
-        fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J").catch(e => { console.warn("Failed fetch INPUT RM", e); return []; }),
-        fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J").catch(e => { console.warn("Failed fetch INPUT MFG", e); return []; }),
-        fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J").catch(e => { console.warn("Failed fetch INPUT SUPPLIES", e); return []; }),
-        fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B").catch(e => { console.warn("Failed fetch produk", e); return []; }),
-        fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(e => { console.warn("Failed fetch locator", e); return []; })
-      ]);
+      
+      let txRowsNormal: any[] = [];
+      let txRowsRM: any[] = [];
+      let txRowsMfg: any[] = [];
+      let txRowsSupplies: any[] = [];
+      let pRows: any[] = [];
+      let lRows: any[] = [];
+
+      try {
+        [txRowsNormal, txRowsRM, txRowsMfg, txRowsSupplies, pRows, lRows] = await Promise.all([
+          fetchSheetData(spreadsheetId, "'INPUT'!A2:J"),
+          fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J"),
+          fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J"),
+          fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J"),
+          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B"),
+          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E")
+        ]);
+      } catch (fetchErr: any) {
+        if (retryOnMissing) {
+          console.log("StockOverview missing sheet, compiling or trying auto-init...");
+          try {
+            const { initializeERPSpreadsheet } = await import('../lib/sheets');
+            await initializeERPSpreadsheet(spreadsheetId);
+            return loadData(false);
+          } catch (initErr) {
+            console.error("Auto-init from StockOverview failed:", initErr);
+          }
+        }
+        // Fallback to individual catches if init fails or retry is off
+        txRowsNormal = await fetchSheetData(spreadsheetId, "'INPUT'!A2:J").catch(() => []);
+        txRowsRM = await fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J").catch(() => []);
+        txRowsMfg = await fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J").catch(() => []);
+        txRowsSupplies = await fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J").catch(() => []);
+        pRows = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B").catch(() => []);
+        lRows = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => []);
+      }
 
       const pMap = new Map<string, string>(pRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]), String(r[1])]));
       const lMap = new Map<string, { nama: string; whType: string; area: string }>(
@@ -191,6 +219,10 @@ export default function StockOverview({ spreadsheetId }: { spreadsheetId: string
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  const totalInFiltered = filtered.reduce((acc, s) => acc + s.totalIn, 0);
+  const totalOutFiltered = filtered.reduce((acc, s) => acc + s.totalOut, 0);
+  const stockRillFiltered = filtered.reduce((acc, s) => acc + s.stock, 0);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -350,6 +382,23 @@ export default function StockOverview({ spreadsheetId }: { spreadsheetId: string
                     </td>
                   </tr>
                 ))}
+                {filtered.length > 0 && (
+                  <tr className="bg-slate-50 font-semibold border-t-2 border-slate-200 text-slate-900 sticky bottom-0 z-10 shadow-[0_-1px_0_rgba(0,0,0,0.05)]">
+                    <td className="px-5 py-4 text-slate-800" colSpan={2}>Grand Total (Filtered)</td>
+                    <td className="px-5 py-4 text-right text-emerald-700 font-bold">
+                      {totalInFiltered > 0 ? `+${totalInFiltered.toLocaleString()}` : '-'}
+                    </td>
+                    <td className="px-5 py-4 text-right text-rose-700 font-bold">
+                      {totalOutFiltered > 0 ? `-${totalOutFiltered.toLocaleString()}` : '-'}
+                    </td>
+                    <td className={cn(
+                      "px-5 py-4 text-right font-bold text-lg",
+                      stockRillFiltered < 0 ? "text-rose-600" : "text-blue-600"
+                    )}>
+                      {stockRillFiltered.toLocaleString()}
+                    </td>
+                  </tr>
+                )}
                 {filtered.length === 0 && (
                   <tr><td colSpan={5} className="p-12 text-center text-slate-500">Tidak ada data stok ditemukan.</td></tr>
                 )}

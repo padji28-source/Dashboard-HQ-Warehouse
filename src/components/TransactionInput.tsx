@@ -10,12 +10,90 @@ interface Props {
   description: string;
 }
 
+const INDO_MONTHS = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+
+export const getParsedDateValue = (dtStr: string): number => {
+  if (!dtStr) return 0;
+  
+  // Try YYYY-MM-DD
+  const yyyymmdd = dtStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (yyyymmdd) {
+    return new Date(parseInt(yyyymmdd[1], 10), parseInt(yyyymmdd[2], 10) - 1, parseInt(yyyymmdd[3], 10)).getTime();
+  }
+  
+  // Try MM/DD/YY or MM/DD/YYYY
+  const slashed = dtStr.split('/');
+  if (slashed.length === 3) {
+    const m = parseInt(slashed[0], 10) - 1;
+    const d = parseInt(slashed[1], 10);
+    let y = parseInt(slashed[2], 10);
+    if (slashed[2].length === 2) {
+      y += 2000;
+    }
+    return new Date(y, m, d).getTime();
+  }
+  
+  const t = Date.parse(dtStr);
+  return isNaN(t) ? 0 : t;
+};
+
+export const displayTanggalIndonesian = (dtStr: string): string => {
+  if (!dtStr) return '-';
+  
+  let dateObj: Date | null = null;
+  
+  // Try matching YYYY-MM-DD (e.g., "2026-06-08")
+  const yyyymmdd = dtStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (yyyymmdd) {
+    const y = parseInt(yyyymmdd[1], 10);
+    const m = parseInt(yyyymmdd[2], 10) - 1;
+    const d = parseInt(yyyymmdd[3], 10);
+    dateObj = new Date(y, m, d);
+  } else {
+    // Try matching MM/DD/YY or MM/DD/YYYY (e.g., "06/08/26" or "06/08/2026")
+    const slashed = dtStr.split('/');
+    if (slashed.length === 3) {
+      const m = parseInt(slashed[0], 10) - 1;
+      const d = parseInt(slashed[1], 10);
+      let y = parseInt(slashed[2], 10);
+      if (slashed[2].length === 2) {
+        y += 2000; // assume 20xx
+      }
+      if (!isNaN(m) && !isNaN(d) && !isNaN(y)) {
+        dateObj = new Date(y, m, d);
+      }
+    }
+  }
+  
+  if (!dateObj || isNaN(dateObj.getTime())) {
+    // Fallback to standard javascript Parsing
+    const timestamp = Date.parse(dtStr);
+    if (!isNaN(timestamp)) {
+      dateObj = new Date(timestamp);
+    }
+  }
+  
+  if (dateObj && !isNaN(dateObj.getTime())) {
+    const d = String(dateObj.getDate()).padStart(2, '0');
+    const mIndex = dateObj.getMonth();
+    const mLabel = INDO_MONTHS[mIndex] || String(mIndex + 1);
+    const y = dateObj.getFullYear();
+    return `${d}-${mLabel}-${y}`;
+  }
+  
+  return dtStr; // Return as is if fully unrecognized
+};
+
 export default function TransactionInput({ spreadsheetId, sheetName, title, description }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locators, setLocators] = useState<Locator[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedLocator, setSelectedLocator] = useState('ALL');
 
   const [formOpen, setFormOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -29,16 +107,38 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
   const [noDocument, setNoDocument] = useState('');
   const [keterangan, setKeterangan] = useState('');
 
-  const loadData = async () => {
+  const loadData = async (retryOnMissing = true) => {
     try {
       setLoading(true);
-      const [txRows, pRows, lRows] = await Promise.all([
-        fetchSheetData(spreadsheetId, `'${sheetName}'!A2:J`),
-        fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:C"), // Need Satuan (UOM)
-        fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E")
-      ]);
+      
+      let txRows: any[] = [];
+      let pRows: any[] = [];
+      let lRows: any[] = [];
+      
+      try {
+        [txRows, pRows, lRows] = await Promise.all([
+          fetchSheetData(spreadsheetId, `'${sheetName}'!A2:J`),
+          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:C"), // Need Satuan (UOM)
+          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E")
+        ]);
+      } catch (fetchErr: any) {
+        if (retryOnMissing) {
+          console.log("Error fetching transactions or master data. Attempting auto-initialization...");
+          try {
+            const { initializeERPSpreadsheet } = await import('../lib/sheets');
+            await initializeERPSpreadsheet(spreadsheetId);
+            // Retry once
+            return loadData(false);
+          } catch (initErr: any) {
+            console.error("Auto-initialization fallback failed:", initErr);
+            throw fetchErr; // rethrow original fetch error
+          }
+        } else {
+          throw fetchErr;
+        }
+      }
 
-      setTransactions(txRows
+      const parsedTransactions = txRows
         .filter((r: any[]) => r.length > 0 && (r[0] || r[1] || r[9]))
         .map((r: any[]) => ({
           tanggal: String(r[0] || ''),
@@ -51,9 +151,12 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
           noDocument: String(r[7] || ''),
           keterangan: String(r[8] || ''),
           kodeProduk: String(r[9] || '')
-        }))
-        .reverse()
-      );
+        }));
+
+      // Sort chronological ascending (oldest on top, newest at the bottom)
+      parsedTransactions.sort((a, b) => getParsedDateValue(a.tanggal) - getParsedDateValue(b.tanggal));
+
+      setTransactions(parsedTransactions);
 
       const uniqueP = Array.from(new Map(pRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]), { kode: String(r[0]), nama: String(r[1] || ''), satuan: String(r[2] || ''), kategori: '' }])).values());
       const uniqueL = Array.from(new Map(lRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]), { whGroup: String(r[0]), nama: String(r[1] || ''), deskripsi: String(r[2] || ''), whType: String(r[3] || ''), area: String(r[4] || '') }])).values());
@@ -117,18 +220,31 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search]);
+  }, [search, selectedLocator]);
 
-  const filtered = transactions.filter(t => 
-    t.kodeProduk.toLowerCase().includes(search.toLowerCase()) || 
-    t.namaBahan.toLowerCase().includes(search.toLowerCase()) || 
-    t.locator.toLowerCase().includes(search.toLowerCase()) ||
-    t.noDocument.toLowerCase().includes(search.toLowerCase()) ||
-    t.keterangan.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = transactions.filter(t => {
+    const matchesSearch = 
+      t.kodeProduk.toLowerCase().includes(search.toLowerCase()) || 
+      t.namaBahan.toLowerCase().includes(search.toLowerCase()) || 
+      t.locator.toLowerCase().includes(search.toLowerCase()) ||
+      t.noDocument.toLowerCase().includes(search.toLowerCase()) ||
+      t.keterangan.toLowerCase().includes(search.toLowerCase());
+
+    const matchesLocator = 
+      selectedLocator === 'ALL' || 
+      t.locator === selectedLocator || 
+      t.locatorTo === selectedLocator;
+
+    return matchesSearch && matchesLocator;
+  });
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const totalIn = filtered.reduce((sum, t) => t.tipe === 'IN' ? sum + t.kuantitas : sum, 0);
+  const totalOut = filtered.reduce((sum, t) => t.tipe === 'OUT' ? sum + t.kuantitas : sum, 0);
+  const totalAwal = filtered.reduce((sum, t) => t.tipe === 'AWAL' ? sum + t.kuantitas : sum, 0);
+  const grandTotalQty = filtered.reduce((sum, t) => sum + t.kuantitas, 0);
 
   return (
     <div className="space-y-6">
@@ -138,7 +254,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
           <p className="text-sm text-slate-500 mt-1">{description}</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={loadData} className="px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-200">
+          <button onClick={() => loadData(true)} className="px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-200">
             Refresh Data
           </button>
           <button 
@@ -246,10 +362,26 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
       )}
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-slate-100 flex items-center bg-slate-50/50">
+        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
            <div className="relative max-w-sm w-full">
              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-             <input type="text" placeholder="Cari transaksi (produk, locator, dokumen)..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none shadow-sm" />
+             <input type="text" placeholder="Cari transaksi..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none shadow-sm bg-white" />
+           </div>
+           
+           <div className="flex items-center gap-2.5">
+             <span className="text-sm font-medium text-slate-600">Filter Locator:</span>
+             <select 
+               value={selectedLocator} 
+               onChange={e => setSelectedLocator(e.target.value)}
+               className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white shadow-sm min-w-[160px]"
+             >
+               <option value="ALL">Semua Locator</option>
+               {locators.map(l => (
+                 <option key={l.whGroup} value={l.whGroup}>
+                   {l.whGroup} - {l.nama}
+                 </option>
+               ))}
+             </select>
            </div>
         </div>
         <div className="overflow-x-auto">
@@ -281,7 +413,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                       <td className="px-5 py-3 text-slate-500 tabular-nums">
                         <div className="flex items-center gap-2">
                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                           {t.tanggal}
+                           {displayTanggalIndonesian(t.tanggal)}
                         </div>
                       </td>
                       <td className="px-5 py-3">
@@ -336,6 +468,21 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                     </tr>
                   );
                 })}
+                {filtered.length > 0 && (
+                  <tr className="bg-slate-50 font-semibold border-t-2 border-slate-200 text-slate-900 sticky bottom-0 z-10 shadow-[0_-1px_0_rgba(0,0,0,0.05)]">
+                    <td className="px-5 py-4 text-slate-800" colSpan={2}>Grand Total (Filtered)</td>
+                    <td className="px-5 py-4 text-right font-bold text-lg tabular-nums text-blue-600">
+                      {grandTotalQty.toLocaleString()}
+                    </td>
+                    <td className="px-5 py-4 text-slate-500 text-sm" colSpan={7}>
+                      <span className="inline-flex flex-wrap items-center gap-4 text-xs font-semibold uppercase tracking-wider">
+                        <span className="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-md border border-emerald-100">Total IN: {totalIn.toLocaleString()}</span>
+                        <span className="bg-rose-50 text-rose-700 px-2.5 py-1 rounded-md border border-rose-100">Total OUT: {totalOut.toLocaleString()}</span>
+                        {totalAwal > 0 && <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md border border-blue-100">Total AWAL: {totalAwal.toLocaleString()}</span>}
+                      </span>
+                    </td>
+                  </tr>
+                )}
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={10} className="p-12 text-center text-slate-500">

@@ -17,10 +17,30 @@ export default function MasterLocator({ spreadsheetId }: { spreadsheetId: string
   const [whType, setWhType] = useState('');
   const [area, setArea] = useState('');
 
-  const loadData = async () => {
+  const loadData = async (retryOnMissing = true) => {
     try {
       setLoading(true);
-      const rows = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E");
+      let rows: any[] = [];
+      try {
+        rows = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E");
+      } catch (fetchErr: any) {
+        const errorMsg = String(fetchErr.message || '').toLowerCase();
+        const isMissingSheet = errorMsg.includes('not found') || errorMsg.includes('range') || errorMsg.includes('unparseable') || errorMsg.includes('cannot read');
+        
+        if (retryOnMissing && isMissingSheet) {
+          console.log("MASTER_LOCATOR sheet not found, trying auto-init...");
+          try {
+            const { initializeERPSpreadsheet } = await import('../lib/sheets');
+            await initializeERPSpreadsheet(spreadsheetId);
+            return loadData(false);
+          } catch (initErr) {
+            console.error("Auto-init from MasterLocator failed:", initErr);
+            throw fetchErr;
+          }
+        } else {
+          throw fetchErr;
+        }
+      }
       setLocators(rows.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).map((r: any[]) => ({
         whGroup: String(r[0] || ''),
         nama: String(r[1] || ''),

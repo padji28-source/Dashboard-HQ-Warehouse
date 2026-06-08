@@ -16,10 +16,30 @@ export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string 
   const [satuan, setSatuan] = useState('');
   const [kategori, setKategori] = useState('');
 
-  const loadData = async () => {
+  const loadData = async (retryOnMissing = true) => {
     try {
       setLoading(true);
-      const rows = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:D");
+      let rows: any[] = [];
+      try {
+        rows = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:D");
+      } catch (fetchErr: any) {
+        const errorMsg = String(fetchErr.message || '').toLowerCase();
+        const isMissingSheet = errorMsg.includes('not found') || errorMsg.includes('range') || errorMsg.includes('unparseable') || errorMsg.includes('cannot read');
+        
+        if (retryOnMissing && isMissingSheet) {
+          console.log("MASTER_PRODUK sheet not found, trying auto-init...");
+          try {
+            const { initializeERPSpreadsheet } = await import('../lib/sheets');
+            await initializeERPSpreadsheet(spreadsheetId);
+            return loadData(false);
+          } catch (initErr) {
+            console.error("Auto-init from MasterProduk failed:", initErr);
+            throw fetchErr;
+          }
+        } else {
+          throw fetchErr;
+        }
+      }
       setProducts(rows.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).map((r: any[]) => ({
         kode: String(r[0] || ''),
         nama: String(r[1] || ''),
