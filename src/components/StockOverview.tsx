@@ -62,16 +62,20 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
 
       const pMap = new Map<string, string>(pRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]).trim(), String(r[1]).trim()]));
       const lMap = new Map<string, { nama: string; whType: string; area: string }>();
-      lRows.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
-        const rawKey = String(r[0]).trim();
-        const keyUpper = rawKey.toUpperCase();
+      lRows.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
         const val = {
           nama: String(r[1] || r[0]).trim(),
           whType: String(r[3] || '').trim(),
           area: String(r[4] || '').trim()
         };
-        lMap.set(rawKey, val);
-        lMap.set(keyUpper, val);
+        if (r[0]) {
+          lMap.set(String(r[0]).trim(), val);
+          lMap.set(String(r[0]).trim().toUpperCase(), val);
+        }
+        if (r[1]) {
+          lMap.set(String(r[1]).trim(), val);
+          lMap.set(String(r[1]).trim().toUpperCase(), val);
+        }
       });
       
       const mappedRows: {tipe: string, pCode: string, pName: string, lCode: string, qty: number, source: string}[] = [];

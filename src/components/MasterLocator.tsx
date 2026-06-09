@@ -163,8 +163,8 @@ export default function MasterLocator({ spreadsheetId }: { spreadsheetId: string
               <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600">
                 <tr>
                   <th className="px-5 py-4 font-medium">WH Group</th>
-                  <th className="px-5 py-4 font-medium">Nama Locator</th>
                   <th className="px-5 py-4 font-medium">WH Type</th>
+                  <th className="px-5 py-4 font-medium">Locator</th>
                   <th className="px-5 py-4 font-medium">Area</th>
                   <th className="px-5 py-4 font-medium">Deskripsi</th>
                 </tr>
@@ -173,8 +173,8 @@ export default function MasterLocator({ spreadsheetId }: { spreadsheetId: string
                 {paginated.map((l, idx) => (
                   <tr key={`${l.whGroup}-${idx}`} className="hover:bg-blue-50/40 transition-colors text-slate-700">
                     <td className="px-5 py-4 font-mono text-xs">{l.whGroup}</td>
-                    <td className="px-5 py-4 font-medium text-slate-900">{l.nama}</td>
                     <td className="px-5 py-4">{l.whType || '-'}</td>
+                    <td className="px-5 py-4 font-medium text-slate-900">{l.nama}</td>
                     <td className="px-5 py-4">{l.area || '-'}</td>
                     <td className="px-5 py-4 text-slate-500">{l.deskripsi || '-'}</td>
                   </tr>
