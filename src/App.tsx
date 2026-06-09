@@ -63,10 +63,19 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [selectedArea, setSelectedArea] = useState(() => localStorage.getItem('selectedArea') || AREAS[0]);
   const [appAuthenticated, setAppAuthenticated] = useState(false);
+  const [loggedInUserRole, setLoggedInUserRole] = useState(() => localStorage.getItem('userRole') || '');
   const [currentGasUrl, setCurrentGasUrl] = useState('');
   const [spreadsheetReady, setSpreadsheetReady] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+
+  const handleAreaChange = (newArea: string) => {
+    setSelectedArea(newArea);
+    localStorage.setItem('selectedArea', newArea);
+    const url = AREA_URLS[newArea] || '';
+    setCurrentGasUrl(newArea === 'HQ' ? 'HQ' : url);
+    setSpreadsheetReady(newArea === 'HQ' ? true : !!url);
+  };
 
   const handleAppLogin = (e: FormEvent) => {
     e.preventDefault();
@@ -83,14 +92,16 @@ export default function App() {
     if (matchedAccount) {
       let finalArea = selectedArea;
 
-      // Restrict and force specific area for non-superadmins
-      if (matchedAccount.allowedArea !== 'ALL') {
+      // Restrict and force specific area for non-superadmins and non-HQ admins
+      if (matchedAccount.allowedArea !== 'ALL' && matchedAccount.allowedArea !== 'HQ') {
         finalArea = matchedAccount.allowedArea;
         setSelectedArea(finalArea);
       }
 
       setAppAuthenticated(true);
+      setLoggedInUserRole(matchedAccount.allowedArea);
       localStorage.setItem('selectedArea', finalArea);
+      localStorage.setItem('userRole', matchedAccount.allowedArea);
       const url = AREA_URLS[finalArea] || '';
       setCurrentGasUrl(finalArea === 'HQ' ? 'HQ' : url);
       setSpreadsheetReady(finalArea === 'HQ' ? true : !!url);
@@ -105,6 +116,8 @@ export default function App() {
     setAppPassword('');
     setSpreadsheetReady(false);
     setLoginError(null);
+    setLoggedInUserRole('');
+    localStorage.removeItem('userRole');
   };
 
   // App Auth Flow (System level)
@@ -259,6 +272,14 @@ export default function App() {
     );
   }
 
-  return <Dashboard spreadsheetId={currentGasUrl} area={selectedArea} onLogout={handleLogout} />;
+  return (
+    <Dashboard 
+      spreadsheetId={currentGasUrl} 
+      area={selectedArea} 
+      onLogout={handleLogout} 
+      userRole={loggedInUserRole} 
+      onAreaChange={handleAreaChange} 
+    />
+  );
 }
 

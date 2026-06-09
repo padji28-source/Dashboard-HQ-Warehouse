@@ -8,6 +8,7 @@ import PencocokanData from './PencocokanData';
 import MtsData from './MtsData';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { AREAS } from '../App';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -17,16 +18,21 @@ interface Props {
   spreadsheetId: string;
   area: string;
   onLogout: () => void;
+  userRole?: string;
+  onAreaChange?: (newArea: string) => void;
 }
 
-export default function Dashboard({ spreadsheetId, area, onLogout }: Props) {
+export default function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange }: Props) {
   const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
 
+  const isAuthorizedForPencocokan = userRole === 'ALL' || userRole === 'HQ';
+  const safeActiveTab = activeTab === 'pencocokan' && !isAuthorizedForPencocokan ? 'stock' : activeTab;
+
   const mainTabs = [
     { id: 'stock', label: 'Stock Overview', icon: LayoutDashboard },
-    { id: 'pencocokan', label: 'Pencocokan Data', icon: Scale },
+    ...(isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
   ] as const;
 
   const pergerakanTabs = [
@@ -60,13 +66,36 @@ export default function Dashboard({ spreadsheetId, area, onLogout }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
+          {(userRole === 'ALL' || userRole === 'HQ') && onAreaChange ? (
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 sm:px-3 py-1.5 shadow-sm">
+              <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+              <span className="hidden md:inline text-xs font-bold text-slate-500 uppercase tracking-wide">Pilih Area:</span>
+              <select
+                value={area}
+                onChange={(e) => onAreaChange(e.target.value)}
+                className="bg-transparent text-slate-800 font-bold text-xs sm:text-sm focus:outline-none cursor-pointer pr-1"
+              >
+                {AREAS.map(a => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-semibold text-slate-900 leading-none">Administrator</p>
+              <p className="text-xs text-slate-500 mt-1 leading-none">Area {area}</p>
+            </div>
+          )}
+
           <div className="text-right hidden sm:block">
-            <p className="text-sm font-semibold text-slate-900 leading-none">Administrator</p>
-            <p className="text-xs text-slate-500 mt-1 leading-none">Area {area}</p>
+            <span className="inline-block px-2 py-0.5 text-[10px] font-bold bg-blue-50 border border-blue-100 text-blue-700 rounded-full uppercase tracking-wider">
+              {userRole === 'ALL' ? 'Super Admin' : userRole === 'HQ' ? 'Admin HQ' : 'Admin Area'}
+            </span>
           </div>
-          <div className="w-9 h-9 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-600 font-bold">
-            A
+
+          <div className="w-9 h-9 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-700 text-xs sm:text-sm font-bold uppercase shrink-0 shadow-inner">
+            {userRole === 'ALL' ? 'SA' : userRole === 'HQ' ? 'HQ' : area.substring(0, 2)}
           </div>
         </div>
       </header>
@@ -108,12 +137,12 @@ export default function Dashboard({ spreadsheetId, area, onLogout }: Props) {
                 onClick={() => { setActiveTab(tab.id as any); setSidebarOpen(false); }}
                 className={cn(
                   "w-full flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg transition-all duration-200",
-                  activeTab === tab.id 
+                  safeActiveTab === tab.id 
                     ? "bg-blue-600 text-white shadow-md shadow-blue-900/20" 
                     : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
                 )}
               >
-                <tab.icon className={cn("w-5 h-5", activeTab === tab.id ? "text-white" : "text-slate-400")} />
+                <tab.icon className={cn("w-5 h-5", safeActiveTab === tab.id ? "text-white" : "text-slate-400")} />
                 {tab.label}
               </button>
             ))}
@@ -124,12 +153,12 @@ export default function Dashboard({ spreadsheetId, area, onLogout }: Props) {
                   onClick={() => { setActiveTab('mts'); setSidebarOpen(false); }}
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg transition-all duration-200",
-                    activeTab === 'mts' 
+                    safeActiveTab === 'mts' 
                       ? "bg-blue-600 text-white shadow-md shadow-blue-900/20" 
                       : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
                   )}
                 >
-                  <FileSpreadsheet className={cn("w-5 h-5", activeTab === 'mts' ? "text-white" : "text-slate-400")} />
+                  <FileSpreadsheet className={cn("w-5 h-5", safeActiveTab === 'mts' ? "text-white" : "text-slate-400")} />
                   <span>Data MTS</span>
                 </button>
               </div>
@@ -154,12 +183,12 @@ export default function Dashboard({ spreadsheetId, area, onLogout }: Props) {
                         onClick={() => { setActiveTab(tab.id as any); setSidebarOpen(false); }}
                         className={cn(
                           "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                          activeTab === tab.id 
+                          safeActiveTab === tab.id 
                             ? "bg-blue-600/20 text-blue-400 font-semibold" 
                             : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
                         )}
                       >
-                        <tab.icon className={cn("w-4 h-4", activeTab === tab.id ? "text-blue-400" : "text-slate-500")} />
+                        <tab.icon className={cn("w-4 h-4", safeActiveTab === tab.id ? "text-blue-400" : "text-slate-500")} />
                         {tab.label}
                       </button>
                     ))}
@@ -176,12 +205,12 @@ export default function Dashboard({ spreadsheetId, area, onLogout }: Props) {
                   onClick={() => { setActiveTab(tab.id as any); setSidebarOpen(false); }}
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                    activeTab === tab.id 
+                    safeActiveTab === tab.id 
                       ? "bg-blue-600/20 text-blue-400 font-semibold" 
                       : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
                   )}
                 >
-                  <tab.icon className={cn("w-4 h-4", activeTab === tab.id ? "text-blue-400" : "text-slate-500")} />
+                  <tab.icon className={cn("w-4 h-4", safeActiveTab === tab.id ? "text-blue-400" : "text-slate-500")} />
                   {tab.label}
                 </button>
               ))}
@@ -206,41 +235,41 @@ export default function Dashboard({ spreadsheetId, area, onLogout }: Props) {
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-full min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         <div className="w-full">
-          <div className={cn(activeTab !== 'stock' && 'hidden')}>
+          <div className={cn(safeActiveTab !== 'stock' && 'hidden')}>
             <StockOverview spreadsheetId={spreadsheetId} area={area} />
           </div>
-          <div className={cn(activeTab !== 'pencocokan' && 'hidden')}>
+          <div className={cn(safeActiveTab !== 'pencocokan' && 'hidden')}>
             <PencocokanData spreadsheetId={spreadsheetId} area={area} />
           </div>
-          <div className={cn(activeTab !== 'mts' && 'hidden')}>
+          <div className={cn(safeActiveTab !== 'mts' && 'hidden')}>
             <MtsData />
           </div>
-          <div className={cn(activeTab !== 'input' && 'hidden')}>
+          <div className={cn(safeActiveTab !== 'input' && 'hidden')}>
             {area === 'HQ' ? <HQReadOnlyPlaceholder title="Accessories" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." />
             )}
           </div>
-          <div className={cn(activeTab !== 'input_rm' && 'hidden')}>
+          <div className={cn(safeActiveTab !== 'input_rm' && 'hidden')}>
             {area === 'HQ' ? <HQReadOnlyPlaceholder title="Raw Material" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." />
             )}
           </div>
-          <div className={cn(activeTab !== 'input_mfg' && 'hidden')}>
+          <div className={cn(safeActiveTab !== 'input_mfg' && 'hidden')}>
             {area === 'HQ' ? <HQReadOnlyPlaceholder title="Manufacturing" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." />
             )}
           </div>
-          <div className={cn(activeTab !== 'input_supplies' && 'hidden')}>
+          <div className={cn(safeActiveTab !== 'input_supplies' && 'hidden')}>
             {area === 'HQ' ? <HQReadOnlyPlaceholder title="Supplies & GA" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." />
             )}
           </div>
-          <div className={cn(activeTab !== 'produk' && 'hidden')}>
+          <div className={cn(safeActiveTab !== 'produk' && 'hidden')}>
             {area === 'HQ' ? <HQReadOnlyPlaceholder title="Master Produk" /> : (
               <MasterProduk spreadsheetId={spreadsheetId} />
             )}
           </div>
-          <div className={cn(activeTab !== 'locator' && 'hidden')}>
+          <div className={cn(safeActiveTab !== 'locator' && 'hidden')}>
             {area === 'HQ' ? <HQReadOnlyPlaceholder title="Master Locator" /> : (
               <MasterLocator spreadsheetId={spreadsheetId} />
             )}
