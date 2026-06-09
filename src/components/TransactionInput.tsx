@@ -278,6 +278,11 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
             return loadData(false);
           } catch (initErr: any) {
             console.error("Auto-initialization fallback failed:", initErr);
+            const initErrMsg = String(initErr.message || '').toLowerCase();
+            if (initErrMsg.includes('already exists') || initErrMsg.includes('ada') || initErrMsg.includes('exists')) {
+              console.log("Sheet already exists, continuing to load data.");
+              return loadData(false);
+            }
             throw fetchErr; // rethrow original fetch error
           }
         } else {

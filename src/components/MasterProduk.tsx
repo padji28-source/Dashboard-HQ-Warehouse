@@ -32,8 +32,13 @@ export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string 
             const { initializeERPSpreadsheet } = await import('../lib/sheets');
             await initializeERPSpreadsheet(spreadsheetId);
             return loadData(false);
-          } catch (initErr) {
+          } catch (initErr: any) {
             console.error("Auto-init from MasterProduk failed:", initErr);
+            const initErrMsg = String(initErr.message || '').toLowerCase();
+            if (initErrMsg.includes('already exists') || initErrMsg.includes('ada') || initErrMsg.includes('exists')) {
+              console.log("Sheet already exists, continuing to load data.");
+              return loadData(false);
+            }
             throw fetchErr;
           }
         } else {
