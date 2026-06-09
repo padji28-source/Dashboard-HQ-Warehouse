@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight } from 'lucide-react';
+import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet } from 'lucide-react';
 import MasterProduk from './MasterProduk';
 import MasterLocator from './MasterLocator';
 import TransactionInput from './TransactionInput';
 import StockOverview from './StockOverview';
+import PencocokanData from './PencocokanData';
+import MtsData from './MtsData';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -18,12 +20,13 @@ interface Props {
 }
 
 export default function Dashboard({ spreadsheetId, area, onLogout }: Props) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
 
   const mainTabs = [
     { id: 'stock', label: 'Stock Overview', icon: LayoutDashboard },
+    { id: 'pencocokan', label: 'Pencocokan Data', icon: Scale },
   ] as const;
 
   const pergerakanTabs = [
@@ -115,38 +118,55 @@ export default function Dashboard({ spreadsheetId, area, onLogout }: Props) {
               </button>
             ))}
 
-            <div className="mt-4 pt-4 border-t border-slate-800">
-              <button 
-                onClick={() => setPergerakanOpen(!pergerakanOpen)} 
-                className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-100 transition-all duration-200"
-              >
-                <div className="flex items-center gap-3">
-                  <ArrowRightLeft className="w-5 h-5" />
-                  <span>Data Pergerakan</span>
-                </div>
-                {pergerakanOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-              </button>
-              
-              {pergerakanOpen && (
-                <div className="mt-1 ml-4 border-l border-slate-700/50 pl-2 space-y-1">
-                  {pergerakanTabs.map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => { setActiveTab(tab.id as any); setSidebarOpen(false); }}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                        activeTab === tab.id 
-                          ? "bg-blue-600/20 text-blue-400 font-semibold" 
-                          : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-                      )}
-                    >
-                      <tab.icon className={cn("w-4 h-4", activeTab === tab.id ? "text-blue-400" : "text-slate-500")} />
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {area === 'HQ' ? (
+              <div className="mt-4 pt-4 border-t border-slate-800">
+                <button
+                  onClick={() => { setActiveTab('mts'); setSidebarOpen(false); }}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg transition-all duration-200",
+                    activeTab === 'mts' 
+                      ? "bg-blue-600 text-white shadow-md shadow-blue-900/20" 
+                      : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                  )}
+                >
+                  <FileSpreadsheet className={cn("w-5 h-5", activeTab === 'mts' ? "text-white" : "text-slate-400")} />
+                  <span>Data MTS</span>
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 pt-4 border-t border-slate-800">
+                <button 
+                  onClick={() => setPergerakanOpen(!pergerakanOpen)} 
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-100 transition-all duration-200"
+                >
+                  <div className="flex items-center gap-3">
+                    <ArrowRightLeft className="w-5 h-5" />
+                    <span>Data Pergerakan</span>
+                  </div>
+                  {pergerakanOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+                
+                {pergerakanOpen && (
+                  <div className="mt-1 ml-4 border-l border-slate-700/50 pl-2 space-y-1">
+                    {pergerakanTabs.map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => { setActiveTab(tab.id as any); setSidebarOpen(false); }}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                          activeTab === tab.id 
+                            ? "bg-blue-600/20 text-blue-400 font-semibold" 
+                            : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                        )}
+                      >
+                        <tab.icon className={cn("w-4 h-4", activeTab === tab.id ? "text-blue-400" : "text-slate-500")} />
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-4 pt-4 border-t border-slate-800">
               <div className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Master Data</div>
@@ -189,26 +209,59 @@ export default function Dashboard({ spreadsheetId, area, onLogout }: Props) {
           <div className={cn(activeTab !== 'stock' && 'hidden')}>
             <StockOverview spreadsheetId={spreadsheetId} area={area} />
           </div>
+          <div className={cn(activeTab !== 'pencocokan' && 'hidden')}>
+            <PencocokanData spreadsheetId={spreadsheetId} area={area} />
+          </div>
+          <div className={cn(activeTab !== 'mts' && 'hidden')}>
+            <MtsData />
+          </div>
           <div className={cn(activeTab !== 'input' && 'hidden')}>
-            <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." />
+            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Accessories" /> : (
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." />
+            )}
           </div>
           <div className={cn(activeTab !== 'input_rm' && 'hidden')}>
-            <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." />
+            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Raw Material" /> : (
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." />
+            )}
           </div>
           <div className={cn(activeTab !== 'input_mfg' && 'hidden')}>
-            <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." />
+            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Manufacturing" /> : (
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." />
+            )}
           </div>
           <div className={cn(activeTab !== 'input_supplies' && 'hidden')}>
-            <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." />
+            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Supplies & GA" /> : (
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." />
+            )}
           </div>
           <div className={cn(activeTab !== 'produk' && 'hidden')}>
-            <MasterProduk spreadsheetId={spreadsheetId} />
+            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Master Produk" /> : (
+              <MasterProduk spreadsheetId={spreadsheetId} />
+            )}
           </div>
           <div className={cn(activeTab !== 'locator' && 'hidden')}>
-            <MasterLocator spreadsheetId={spreadsheetId} />
+            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Master Locator" /> : (
+              <MasterLocator spreadsheetId={spreadsheetId} />
+            )}
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+function HQReadOnlyPlaceholder({ title }: { title: string }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-8 sm:p-12 shadow-sm text-center max-w-xl mx-auto my-8">
+      <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+        <Scale className="w-8 h-8" style={{ transform: 'rotate(-10deg)' }} />
+      </div>
+      <h3 className="text-xl font-bold text-slate-900 mb-3">Menu {title} Dinonaktifkan di Area HQ</h3>
+      <p className="text-sm text-slate-500 leading-relaxed max-w-md mx-auto mb-6">
+        Gudang pusat **HQ** beroperasi dalam mode **Agregasi Multi-Area (Read-Only)** untuk memantau performa inventaris di seluruh 11 gudang cabang secara real-time. 
+        Anda tidak dapat mengubah data individual dari mode ini. Silakan masuk kembali menggunakan pilihan cabang area tertentu jika Anda berniat untuk melakukan penginputan transaksi baru atau memutasi master data.
+      </p>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { fetchSheetData } from '../lib/sheets';
+import { AREA_URLS } from '../App';
 import type { Transaction, Product, Locator, StockSummary } from '../types';
 import { Loader2, Search, Package, ArrowRightLeft, Layers } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -24,60 +25,8 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
     try {
       setLoading(true);
       
-      let txRowsNormal: any[] = [];
-      let txRowsRM: any[] = [];
-      let txRowsMfg: any[] = [];
-      let txRowsSupplies: any[] = [];
-      let pRows: any[] = [];
-      let lRows: any[] = [];
-
-      try {
-        [txRowsNormal, txRowsRM, txRowsMfg, txRowsSupplies, pRows, lRows] = await Promise.all([
-          fetchSheetData(spreadsheetId, "'INPUT'!A2:J"),
-          fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J"),
-          fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J"),
-          fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J"),
-          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B"),
-          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E")
-        ]);
-      } catch (fetchErr: any) {
-        if (retryOnMissing) {
-          console.log("StockOverview missing sheet, compiling or trying auto-init...");
-          try {
-            const { initializeERPSpreadsheet } = await import('../lib/sheets');
-            await initializeERPSpreadsheet(spreadsheetId);
-            return loadData(false);
-          } catch (initErr) {
-            console.error("Auto-init from StockOverview failed:", initErr);
-          }
-        }
-        // Fallback to individual catches if init fails or retry is off
-        txRowsNormal = await fetchSheetData(spreadsheetId, "'INPUT'!A2:J").catch(() => []);
-        txRowsRM = await fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J").catch(() => []);
-        txRowsMfg = await fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J").catch(() => []);
-        txRowsSupplies = await fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J").catch(() => []);
-        pRows = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B").catch(() => []);
-        lRows = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => []);
-      }
-
-      const pMap = new Map<string, string>(pRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]).trim(), String(r[1]).trim()]));
+      const pMap = new Map<string, string>();
       const lMap = new Map<string, { nama: string; whType: string; area: string }>();
-      lRows.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
-        const val = {
-          nama: String(r[1] || r[0]).trim(),
-          whType: String(r[3] || '').trim(),
-          area: String(r[4] || '').trim()
-        };
-        if (r[0]) {
-          lMap.set(String(r[0]).trim(), val);
-          lMap.set(String(r[0]).trim().toUpperCase(), val);
-        }
-        if (r[1]) {
-          lMap.set(String(r[1]).trim(), val);
-          lMap.set(String(r[1]).trim().toUpperCase(), val);
-        }
-      });
-      
       const mappedRows: {tipe: string, pCode: string, pName: string, lCode: string, qty: number, source: string}[] = [];
 
       const processRows = (rows: any[], source: string) => {
@@ -118,14 +67,118 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
         });
       };
 
-      processRows(txRowsNormal, 'INPUT');
-      processRows(txRowsRM, 'INPUT RM');
-      processRows(txRowsMfg, 'INPUT MFG');
-      processRows(txRowsSupplies, 'INPUT SUPPLIES');
+      if (area === 'HQ' || spreadsheetId === 'HQ') {
+        const urlEntries = Object.entries(AREA_URLS);
+        await Promise.all(urlEntries.map(async ([aName, aUrl]) => {
+          try {
+            const [tn, tr, tm, ts, pr, lr] = await Promise.all([
+              fetchSheetData(aUrl, "'INPUT'!A2:J").catch(() => []),
+              fetchSheetData(aUrl, "'INPUT RM'!A2:J").catch(() => []),
+              fetchSheetData(aUrl, "'INPUT MFG'!A2:J").catch(() => []),
+              fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J").catch(() => []),
+              fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:B").catch(() => []),
+              fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E").catch(() => [])
+            ]);
+
+            // Merge products map
+            pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
+              pMap.set(String(r[0]).trim(), String(r[1] || '').trim());
+            });
+
+            // Merge locators map
+            lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
+              const val = {
+                nama: String(r[1] || r[0]).trim(),
+                whType: String(r[3] || '').trim(),
+                area: String(r[4] || aName).trim()
+              };
+              if (r[0]) {
+                const k = String(r[0]).trim();
+                lMap.set(k, val);
+                lMap.set(k.toUpperCase(), val);
+              }
+              if (r[1]) {
+                const k = String(r[1]).trim();
+                lMap.set(k, val);
+                lMap.set(k.toUpperCase(), val);
+              }
+            });
+
+            processRows(tn, 'INPUT');
+            processRows(tr, 'INPUT RM');
+            processRows(tm, 'INPUT MFG');
+            processRows(ts, 'INPUT SUPPLIES');
+          } catch (e) {
+            console.error(`Error loading data for area ${aName}:`, e);
+          }
+        }));
+
+      } else {
+        let txRowsNormal: any[] = [];
+        let txRowsRM: any[] = [];
+        let txRowsMfg: any[] = [];
+        let txRowsSupplies: any[] = [];
+        let pRows: any[] = [];
+        let lRows: any[] = [];
+
+        try {
+          [txRowsNormal, txRowsRM, txRowsMfg, txRowsSupplies, pRows, lRows] = await Promise.all([
+            fetchSheetData(spreadsheetId, "'INPUT'!A2:J"),
+            fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J"),
+            fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J"),
+            fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J"),
+            fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B"),
+            fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E")
+          ]);
+        } catch (fetchErr: any) {
+          if (retryOnMissing) {
+            console.log("StockOverview missing sheet, compiling or trying auto-init...");
+            try {
+              const { initializeERPSpreadsheet } = await import('../lib/sheets');
+              await initializeERPSpreadsheet(spreadsheetId);
+              return loadData(false);
+            } catch (initErr) {
+              console.error("Auto-init from StockOverview failed:", initErr);
+            }
+          }
+          // Fallback to individual catches if init fails or retry is off
+          txRowsNormal = await fetchSheetData(spreadsheetId, "'INPUT'!A2:J").catch(() => []);
+          txRowsRM = await fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J").catch(() => []);
+          txRowsMfg = await fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J").catch(() => []);
+          txRowsSupplies = await fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J").catch(() => []);
+          pRows = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B").catch(() => []);
+          lRows = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => []);
+        }
+
+        pRows.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
+          pMap.set(String(r[0]).trim(), String(r[1]).trim());
+        });
+
+        lRows.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
+          const val = {
+            nama: String(r[1] || r[0]).trim(),
+            whType: String(r[3] || '').trim(),
+            area: String(r[4] || '').trim()
+          };
+          if (r[0]) {
+            lMap.set(String(r[0]).trim(), val);
+            lMap.set(String(r[0]).trim().toUpperCase(), val);
+          }
+          if (r[1]) {
+            lMap.set(String(r[1]).trim(), val);
+            lMap.set(String(r[1]).trim().toUpperCase(), val);
+          }
+        });
+
+        processRows(txRowsNormal, 'INPUT');
+        processRows(txRowsRM, 'INPUT RM');
+        processRows(txRowsMfg, 'INPUT MFG');
+        processRows(txRowsSupplies, 'INPUT SUPPLIES');
+      }
 
       setProductsMap(pMap);
       setLocatorsMap(lMap);
-      console.log("mappedRows total:", mappedRows.length, mappedRows);
+      console.log("mappedRows total:", mappedRows.length);
       setAllTransactions(mappedRows);
     } catch (err: any) {
       alert(`Gagal memuat overview stok: ${err.message}`);
@@ -187,7 +240,7 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
       const hasActivity = s.totalIn > 0 || s.totalOut > 0 || s.stock !== 0;
       if (!hasActivity) return false;
       
-      if (area) {
+      if (area && area !== 'HQ') {
         const sArea = (s.area || '').trim().toLowerCase();
         const areaLower = area.trim().toLowerCase();
 

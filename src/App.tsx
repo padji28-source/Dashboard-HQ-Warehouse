@@ -2,12 +2,12 @@ import { useState, type FormEvent } from 'react';
 import Dashboard from './components/Dashboard';
 import { Loader2 } from 'lucide-react';
 
-const AREAS = [
-  "Jakarta", "Karawang", "Semarang", "Surabaya", "Jember", 
+export const AREAS = [
+  "HQ", "Jakarta", "Karawang", "Semarang", "Surabaya", "Jember", 
   "Makassar", "Pontianak", "Banjarmasin", "Palembang", "Medan", "Pekanbaru"
 ];
 
-const AREA_URLS: Record<string, string> = {
+export const AREA_URLS: Record<string, string> = {
   "Semarang": "https://script.google.com/macros/s/AKfycbyIIH9cK_28B_1snnP34O-sAYSbfD6AxKa469DpROT-bLusjZJVAalJC_287gG5IfN2/exec",
   "Medan": "https://script.google.com/macros/s/AKfycbztMdYKZVq9CzjyDV0hS4gIp28G2YYcJ06blnEX2R2TxNI7VakMMWWJWNtB02MT4h0kdg/exec",
   "Banjarmasin": "https://script.google.com/macros/s/AKfycbwBAHlRLcpd6ORSMHwHkil_YTR5sBWoFyCwpHA0ykAZeRXKEGcJL5sffVSx-wh_l8ZM/exec",
@@ -35,8 +35,8 @@ export default function App() {
       setAppAuthenticated(true);
       localStorage.setItem('selectedArea', selectedArea);
       const url = AREA_URLS[selectedArea] || '';
-      setCurrentGasUrl(url);
-      setSpreadsheetReady(!!url);
+      setCurrentGasUrl(selectedArea === 'HQ' ? 'HQ' : url);
+      setSpreadsheetReady(selectedArea === 'HQ' ? true : !!url);
     } else {
       alert('Username atau password salah!');
     }
