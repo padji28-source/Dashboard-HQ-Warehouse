@@ -388,6 +388,25 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     };
   }, [reconciliationList, selectedAreaFilter]);
 
+  // Grand Total calculation for filtered items
+  const grandTotals = useMemo(() => {
+    let totalStokRill = 0;
+    let totalStockSistem = 0;
+    let totalSelisih = 0;
+
+    filteredReconciliation.forEach(item => {
+      totalStokRill += item.stokRill || 0;
+      totalStockSistem += item.stockSistem || 0;
+      totalSelisih += item.selisih || 0;
+    });
+
+    return {
+      stokRill: totalStokRill,
+      stockSistem: totalStockSistem,
+      selisih: totalSelisih
+    };
+  }, [filteredReconciliation]);
+
   // Unique areas available inside data
   const uniqueAreas = useMemo(() => {
     return Array.from(new Set(reconciliationList.map(i => i.area).filter(Boolean))).sort();
@@ -620,6 +639,33 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                       </td>
                     </tr>
                   ))
+                )}
+
+                {/* Grand Total Row */}
+                {!loading && filteredReconciliation.length > 0 && (
+                  <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold text-slate-900">
+                    <td 
+                      colSpan={(area === 'HQ' || spreadsheetId === 'HQ') ? 4 : 3} 
+                      className="px-5 py-4 text-left font-bold text-slate-800 tracking-wider text-xs uppercase"
+                    >
+                      🚀 Grand Total ({filteredReconciliation.length} Baris Terfilter)
+                    </td>
+                    <td className="px-5 py-4 text-right text-slate-950 font-extrabold text-sm">
+                      {grandTotals.stokRill.toLocaleString()}
+                    </td>
+                    <td className="px-5 py-4 text-right text-slate-800 font-bold text-sm bg-slate-100/50">
+                      {grandTotals.stockSistem.toLocaleString()}
+                    </td>
+                    <td className={cn(
+                      "px-5 py-4 text-right text-sm font-extrabold",
+                      grandTotals.selisih === 0 ? "text-emerald-700" : (grandTotals.selisih > 0 ? "text-blue-700" : "text-rose-700")
+                    )}>
+                      {grandTotals.selisih === 0 ? '0' : (grandTotals.selisih > 0 ? `+${grandTotals.selisih.toLocaleString()}` : grandTotals.selisih.toLocaleString())}
+                    </td>
+                    <td className="px-5 py-4 text-center text-slate-400 font-normal text-xs italic">
+                      —
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>

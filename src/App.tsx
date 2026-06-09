@@ -179,27 +179,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Area selection is only editable or active if they are Super Admin or choosing first */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                Area Kerja
-              </label>
-              <select 
-                value={selectedArea}
-                onChange={e => setSelectedArea(e.target.value)}
-                required
-                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium"
-              >
-                {AREAS.map(a => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </select>
-              <p className="text-[10px] text-slate-400 mt-1">
-                *Admin Cabang akan otomatis dialihkan dan dikunci hanya pada Area tugas masing-masing saat login.
-              </p>
-            </div>
-
             <button 
               type="submit"
               className="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-lg hover:bg-slate-800 active:bg-slate-950 transition-colors shadow-sm text-sm"
