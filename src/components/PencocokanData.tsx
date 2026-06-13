@@ -1,12 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
 import { fetchSheetData } from '../lib/sheets';
 import { AREA_URLS } from '../App';
-import { Loader2, Search, Scale, CheckCircle2, AlertTriangle, RefreshCw, Undo, Save, Info, Calendar, TrendingUp, TrendingDown, Trash2, Check, Lock, History } from 'lucide-react';
+import { Loader2, Search, Scale, CheckCircle2, AlertTriangle, RefreshCw, Undo, Save, Info, Calendar, TrendingUp, TrendingDown, Trash2, Check, Lock, History, FileSpreadsheet } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import Papa from 'papaparse';
 import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import * as XLSX from 'xlsx';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -798,6 +799,81 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     setSelectedLocator('ALL');
   }, [selectedAreaFilter]);
 
+  const handleExportExcel = () => {
+    if (displayedList.length === 0) {
+      alert('Tidak ada data untuk diekspor!');
+      return;
+    }
+
+    let dataToExport = [];
+    const dateStr = currentReconType === 'daily' ? selectedDate : selectedMonth;
+    const typeLabel = currentReconType === 'daily' ? 'Harian' : 'Bulanan';
+
+    if (currentReconType === 'daily') {
+      dataToExport = displayedList.map(item => ({
+        'Locator': `${item.namaLocator} (${item.whGroup})`,
+        'Kode Produk': item.kodeProduk,
+        'Nama Produk': item.namaProduk,
+        'Stok Rill (Tgl kemarin)': item.stokRill - item.mutasiQty,
+        'Mutasi Hari Ini IN': (item as any).mutasiQtyIn ?? 0,
+        'Mutasi Hari Ini OUT': (item as any).mutasiQtyOut ?? 0,
+        'Stock Rill (Hari ini)': item.stokRill,
+        'Stock Tarikan MTS': item.stockSistem,
+        'Selisih': item.selisih,
+        'Status': item.status
+      }));
+    } else {
+      dataToExport = displayedList.map(item => ({
+        'Area': item.area || '',
+        'Locator': `${item.namaLocator} (${item.whGroup})`,
+        'Kode Produk': item.kodeProduk,
+        'Nama Produk': item.namaProduk,
+        'Stok Rill (Akhir Bulan Ini)': item.stokRill,
+        'Stok Sistem (MTS)': item.stockSistem,
+        'Selisih': item.selisih,
+        'Status': item.status
+      }));
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+
+    // Set auto-calculated or reasonable custom column widths
+    const colWidths = currentReconType === 'daily' 
+      ? [
+          { wch: 25 }, // Locator
+          { wch: 15 }, // Kode Produk
+          { wch: 40 }, // Nama Produk
+          { wch: 22 }, // Stok Rill (Tgl kemarin)
+          { wch: 20 }, // Mutasi Hari Ini IN
+          { wch: 20 }, // Mutasi Hari Ini OUT
+          { wch: 22 }, // Stock Rill (Hari ini)
+          { wch: 20 }, // Stock Tarikan MTS
+          { wch: 12 }, // Selisih
+          { wch: 15 }, // Status
+        ]
+      : [
+          { wch: 12 }, // Area
+          { wch: 25 }, // Locator
+          { wch: 15 }, // Kode Produk
+          { wch: 40 }, // Nama Produk
+          { wch: 25 }, // Stok Rill (Akhir Bulan Ini)
+          { wch: 20 }, // Stok Sistem (MTS)
+          { wch: 12 }, // Selisih
+          { wch: 15 }, // Status
+        ];
+
+    worksheet['!cols'] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, `Rekon ${typeLabel}`);
+
+    // Generate filename based on details
+    const activeArea = activeSavedSession ? activeSavedSession.area : area;
+    const fileName = `Pencocokan_Data_${typeLabel}_${(activeArea || 'HQ').toUpperCase()}_${dateStr}.xlsx`;
+
+    XLSX.writeFile(workbook, fileName);
+  };
+
   return (
     <div className="space-y-6">
       {/* Locked Archive Alert Banner */}
@@ -863,6 +939,17 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           >
             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
             Refresh Sinkronisasi
+          </button>
+
+          <button 
+            type="button"
+            onClick={handleExportExcel}
+            disabled={loading || displayedList.length === 0}
+            className="px-3.5 py-2 border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold rounded-lg flex items-center gap-2 transition-colors shadow-sm text-sm disabled:opacity-50"
+            title="Ekspor data rekonsiliasi ke Microsoft Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-4.5 h-4.5 text-blue-600" />
+            Export Excel
           </button>
         </div>
       </div>
