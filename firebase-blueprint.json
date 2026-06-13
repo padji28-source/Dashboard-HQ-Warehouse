@@ -1,0 +1,51 @@
+{
+  "entities": {
+    "SavedReconciliation": {
+      "title": "Saved Reconciliation",
+      "description": "A locked or saved reconciliation session (daily or monthly) for historical inspection",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the saved record"
+        },
+        "name": {
+          "type": "string",
+          "description": "A human-friendly label for this saved record"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["daily", "monthly"],
+          "description": "Whether this is a daily or monthly reconciliation"
+        },
+        "date": {
+          "type": "string",
+          "description": "The date (YYYY-MM-DD) or month (YYYY-MM) of this reconciliation"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Unix millisecond timestamp of when this record was saved"
+        },
+        "area": {
+          "type": "string",
+          "description": "The associated field area"
+        },
+        "grandTotals": {
+          "type": "object",
+          "description": "The aggregated totals for quick inspection"
+        },
+        "items": {
+          "type": "array",
+          "description": "List of reconciled stock items matching the required columns layout"
+        }
+      },
+      "required": ["id", "name", "type", "date", "timestamp", "items"]
+    }
+  },
+  "firestore": {
+    "saved_reconciliations/{reconciliationId}": {
+      "schema": "SavedReconciliation",
+      "description": "Collection storing historical locked stock reconciliation records"
+    }
+  }
+}

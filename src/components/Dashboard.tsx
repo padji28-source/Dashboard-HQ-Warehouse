@@ -27,7 +27,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
 
-  const isAuthorizedForPencocokan = userRole === 'ALL' || userRole === 'HQ';
+  const isAuthorizedForPencocokan = true; // Aktif untuk semua admin
   const safeActiveTab = activeTab === 'pencocokan' && !isAuthorizedForPencocokan ? 'stock' : activeTab;
 
   const mainTabs = [

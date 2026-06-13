@@ -138,12 +138,12 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
               await initializeERPSpreadsheet(spreadsheetId);
               return loadData(false);
             } catch (initErr: any) {
-              console.error("Auto-init from StockOverview failed:", initErr);
               const initErrMsg = String(initErr.message || '').toLowerCase();
               if (initErrMsg.includes('already exists') || initErrMsg.includes('ada') || initErrMsg.includes('exists')) {
                 console.log("Sheet already exists, continuing to load data.");
                 return loadData(false);
               }
+              console.error("Auto-init from StockOverview failed:", initErr);
             }
           }
           // Fallback to individual catches if init fails or retry is off
@@ -260,6 +260,7 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
         
         const areaPrefixes: Record<string, string[]> = {
           'jakarta': ['JKT', 'JAK'],
+          'jakarta a5': ['JKT-A5', 'JKT', 'JAK'],
           'karawang': ['KRW', 'KWG', 'KAR'],
           'semarang': ['SMG', 'SEM'],
           'surabaya': ['SUB', 'SBY', 'SUR'],

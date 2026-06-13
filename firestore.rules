@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Permissive access for sandbox testing
+    match /saved_reconciliations/{id} {
+      allow read, write: if true;
+    }
+    
+    // Default fallback deny
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
