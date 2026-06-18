@@ -208,15 +208,11 @@ export default function App() {
                   Akun Akses Terdaftar
                 </div>
                 <div className="space-y-1.5 font-medium text-slate-600">
-                  <div className="border-b border-dashed border-slate-200 pb-1">
-                    <p className="text-slate-800 font-bold">1. Super Admin (Akses Global):</p>
-                    <p className="ml-2">U: <code className="font-bold text-blue-700 bg-white px-1">admin</code> / P: <code className="font-bold text-blue-700 bg-white px-1">admin123</code></p>
-                  </div>
                   <div>
-                    <p className="text-slate-800 font-bold">2. Admin Area Spesifik (Sesuai tugas):</p>
+                    <p className="text-slate-800 font-bold">Admin Area Spesifik (Sesuai tugas):</p>
                     <p className="text-[10px] text-slate-400 ml-2 mb-1">Masing-masing admin dikunci ke areanya & tidak bisa mengakses area lain.</p>
                     <ul className="ml-2 space-y-1 list-disc list-inside">
-                      {AREAS.map(ar => {
+                      {AREAS.filter(ar => ar !== 'HQ').map(ar => {
                         const pass = ar.toLowerCase() === 'makassar' ? 'makassar111' : `${ar.toLowerCase()}123`;
                         return (
                           <li key={ar} className="text-[11px]">
