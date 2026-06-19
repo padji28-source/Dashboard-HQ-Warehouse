@@ -12,6 +12,18 @@ function cn(...classes: any[]) {
   return classes.filter(Boolean).join(' ');
 }
 
+// Helper to format values with optional UOM aware precision (e.g., minimum 2 decimals for Kg)
+function formatValue(num: number, uom?: string) {
+  if (num === null || num === undefined) return '0';
+  const uomLower = uom ? uom.toLowerCase().trim() : '';
+  const isKg = uomLower.includes('kg') || uomLower.includes('kilo');
+  
+  return num.toLocaleString('id-ID', {
+    minimumFractionDigits: isKg ? 2 : 0,
+    maximumFractionDigits: 3
+  });
+}
+
 // ==========================================
 // PERSISTENCE ENGINE: CLOUD & LOCAL STORAGE
 // ==========================================
@@ -545,11 +557,21 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         matchedLastQty = mtsLookupMap.get(`${locKey}_${productCodeUpper.replace(/\s+/g, '')}`) || 0;
       }
 
-      const selisih = item.stokRill - matchedLastQty;
-      const status = selisih === 0 ? 'SESUAI' : 'SELISIH';
+      const stokKemarin = Math.round(item.stokKemarin * 1000) / 1000;
+      const stokRill = Math.round(item.stokRill * 1000) / 1000;
+      const mutasiQty = Math.round(item.mutasiQty * 1000) / 1000;
+      const mutasiQtyIn = Math.round(item.mutasiQtyIn * 1000) / 1000;
+      const mutasiQtyOut = Math.round(item.mutasiQtyOut * 1000) / 1000;
+      const selisih = Math.round((stokRill - matchedLastQty) * 1000) / 1000;
+      const status = Math.abs(selisih) < 0.001 ? 'SESUAI' : 'SELISIH';
 
       return {
         ...item,
+        stokKemarin,
+        stokRill,
+        mutasiQty,
+        mutasiQtyIn,
+        mutasiQtyOut,
         stockSistem: matchedLastQty,
         selisih,
         status
@@ -626,13 +648,13 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     });
 
     return {
-      stokKemarin: totalStokKemarin,
-      stokRill: totalStokRill,
-      stockSistem: totalStockSistem,
-      selisih: totalSelisih,
-      mutasiQty: totalMutasiQty,
-      mutasiQtyIn: totalMutasiQtyIn,
-      mutasiQtyOut: totalMutasiQtyOut
+      stokKemarin: Math.round(totalStokKemarin * 1000) / 1000,
+      stokRill: Math.round(totalStokRill * 1000) / 1000,
+      stockSistem: Math.round(totalStockSistem * 1000) / 1000,
+      selisih: Math.round(totalSelisih * 1000) / 1000,
+      mutasiQty: Math.round(totalMutasiQty * 1000) / 1000,
+      mutasiQtyIn: Math.round(totalMutasiQtyIn * 1000) / 1000,
+      mutasiQtyOut: Math.round(totalMutasiQtyOut * 1000) / 1000
     };
   }, [filteredReconciliation]);
 
@@ -767,13 +789,13 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       });
 
       return {
-        stokKemarin: totalStokKemarin,
-        stokRill: totalStokRill,
-        stockSistem: totalStockSistem,
-        selisih: totalSelisih,
-        mutasiQty: totalMutasiQty,
-        mutasiQtyIn: totalMutasiQtyIn,
-        mutasiQtyOut: totalMutasiQtyOut
+        stokKemarin: Math.round(totalStokKemarin * 1000) / 1000,
+        stokRill: Math.round(totalStokRill * 1000) / 1000,
+        stockSistem: Math.round(totalStockSistem * 1000) / 1000,
+        selisih: Math.round(totalSelisih * 1000) / 1000,
+        mutasiQty: Math.round(totalMutasiQty * 1000) / 1000,
+        mutasiQtyIn: Math.round(totalMutasiQtyIn * 1000) / 1000,
+        mutasiQtyOut: Math.round(totalMutasiQtyOut * 1000) / 1000
       };
     }
     return grandTotals;
@@ -1222,7 +1244,14 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                         <div className="font-medium text-slate-900 truncate max-w-xs" title={item.namaProduk}>
                           {item.namaProduk}
                         </div>
-                        <div className="text-xs text-slate-500 font-mono mt-0.5">{item.kodeProduk}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-slate-500 font-mono">{item.kodeProduk}</span>
+                          {item.uom && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 uppercase">
+                              {item.uom}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Custom Daily layout columns */}
@@ -1230,27 +1259,27 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                         <>
                           {/* Stok Rill kemarin */}
                           <td className="px-5 py-4 text-right font-medium text-slate-700 bg-slate-50/25">
-                            {item.stokKemarin.toLocaleString()}
+                            {formatValue(item.stokKemarin, item.uom)}
                           </td>
 
                           {/* Mutasi Hari Ini IN */}
                           <td className="px-5 py-4 text-right font-semibold text-emerald-600 bg-emerald-50/5">
-                            {((item as any).mutasiQtyIn ?? 0).toLocaleString()}
+                            {formatValue((item as any).mutasiQtyIn ?? 0, item.uom)}
                           </td>
 
                           {/* Mutasi Hari Ini OUT */}
                           <td className="px-5 py-4 text-right font-semibold text-rose-600 bg-rose-50/5">
-                            {((item as any).mutasiQtyOut ?? 0).toLocaleString()}
+                            {formatValue((item as any).mutasiQtyOut ?? 0, item.uom)}
                           </td>
 
                           {/* Stock Rill (Hari ini) */}
                           <td className="px-5 py-4 text-right font-bold text-slate-900 bg-emerald-50/10">
-                            {item.stokRill.toLocaleString()}
+                            {formatValue(item.stokRill, item.uom)}
                           </td>
 
                           {/* Stock Tarikan MTS */}
                           <td className="px-5 py-4 text-right font-medium text-slate-700 bg-slate-50/50">
-                            {item.stockSistem.toLocaleString()}
+                            {formatValue(item.stockSistem, item.uom)}
                           </td>
 
                           {/* Selisih */}
@@ -1263,7 +1292,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                               item.status === 'SELISIH' ? (item.selisih > 0 ? "text-blue-600" : "text-rose-600") : ""
                             }`
                           }>
-                            {item.selisih === 0 ? '0' : (item.selisih > 0 ? `+${item.selisih.toLocaleString()}` : item.selisih.toLocaleString())}
+                            {item.selisih === 0 ? '0' : (item.selisih > 0 ? `+${formatValue(item.selisih, item.uom)}` : formatValue(item.selisih, item.uom))}
                           </td>
 
                           {/* Status Badge */}
@@ -1294,11 +1323,11 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                       {currentReconType === 'monthly' && (
                         <>
                           <td className="px-5 py-4 text-right font-bold text-slate-900 bg-slate-50/25">
-                            {item.stokRill.toLocaleString()}
+                            {formatValue(item.stokRill, item.uom)}
                           </td>
 
                           <td className="px-5 py-4 text-right font-medium text-slate-700 bg-slate-50/50">
-                            {item.stockSistem.toLocaleString()}
+                            {formatValue(item.stockSistem, item.uom)}
                           </td>
 
                           <td className={
@@ -1310,7 +1339,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                               item.status === 'SELISIH' ? (item.selisih > 0 ? "text-blue-600" : "text-rose-600") : ""
                             }`
                           }>
-                            {item.selisih === 0 ? '0' : (item.selisih > 0 ? `+${item.selisih.toLocaleString()}` : item.selisih.toLocaleString())}
+                            {item.selisih === 0 ? '0' : (item.selisih > 0 ? `+${formatValue(item.selisih, item.uom)}` : formatValue(item.selisih, item.uom))}
                           </td>
                         </>
                       )}
@@ -1356,23 +1385,23 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                     {currentReconType === 'daily' && (
                       <>
                         <td className="px-5 py-4 text-right text-slate-600 font-bold text-sm bg-slate-100/10">
-                          {displayedTotals.stokKemarin.toLocaleString()}
+                          {formatValue(displayedTotals.stokKemarin)}
                         </td>
 
                         <td className="px-5 py-4 text-right font-extrabold text-sm text-emerald-700 bg-emerald-50/10">
-                          {((displayedTotals as any).mutasiQtyIn ?? 0).toLocaleString()}
+                          {formatValue((displayedTotals as any).mutasiQtyIn ?? 0)}
                         </td>
 
                         <td className="px-5 py-4 text-right font-extrabold text-sm text-rose-700 bg-rose-50/10">
-                          {((displayedTotals as any).mutasiQtyOut ?? 0).toLocaleString()}
+                          {formatValue((displayedTotals as any).mutasiQtyOut ?? 0)}
                         </td>
 
                         <td className="px-5 py-4 text-right text-slate-900 font-extrabold text-sm bg-emerald-50/10">
-                          {displayedTotals.stokRill.toLocaleString()}
+                          {formatValue(displayedTotals.stokRill)}
                         </td>
 
                         <td className="px-5 py-4 text-right text-slate-800 font-bold text-sm bg-slate-100/50">
-                          {displayedTotals.stockSistem.toLocaleString()}
+                          {formatValue(displayedTotals.stockSistem)}
                         </td>
 
                         <td className={
@@ -1380,7 +1409,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                             displayedTotals.selisih === 0 ? "text-emerald-700" : (displayedTotals.selisih > 0 ? "text-blue-700" : "text-rose-700")
                           }`
                         }>
-                          {displayedTotals.selisih === 0 ? '0' : (displayedTotals.selisih > 0 ? `+${displayedTotals.selisih.toLocaleString()}` : displayedTotals.selisih.toLocaleString())}
+                          {displayedTotals.selisih === 0 ? '0' : (displayedTotals.selisih > 0 ? `+${formatValue(displayedTotals.selisih)}` : formatValue(displayedTotals.selisih))}
                         </td>
 
                         <td className="px-5 py-4 text-center text-slate-400 font-normal text-xs italic">
@@ -1393,11 +1422,11 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                     {currentReconType === 'monthly' && (
                       <>
                         <td className="px-5 py-4 text-right text-slate-900 font-extrabold text-sm bg-slate-100/10">
-                          {displayedTotals.stokRill.toLocaleString()}
+                          {formatValue(displayedTotals.stokRill)}
                         </td>
 
                         <td className="px-5 py-4 text-right text-slate-800 font-bold text-sm bg-slate-100/50">
-                          {displayedTotals.stockSistem.toLocaleString()}
+                          {formatValue(displayedTotals.stockSistem)}
                         </td>
 
                         <td className={
@@ -1405,7 +1434,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                             displayedTotals.selisih === 0 ? "text-emerald-700" : (displayedTotals.selisih > 0 ? "text-blue-700" : "text-rose-700")
                           }`
                         }>
-                          {displayedTotals.selisih === 0 ? '0' : (displayedTotals.selisih > 0 ? `+${displayedTotals.selisih.toLocaleString()}` : displayedTotals.selisih.toLocaleString())}
+                          {displayedTotals.selisih === 0 ? '0' : (displayedTotals.selisih > 0 ? `+${formatValue(displayedTotals.selisih)}` : formatValue(displayedTotals.selisih))}
                         </td>
                       </>
                     )}
