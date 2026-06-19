@@ -8,6 +8,7 @@ import PencocokanData from './PencocokanData';
 import MtsData from './MtsData';
 import WhatsAppConsole from '../modules/whatsapp/WhatsAppConsole';
 import AkurasiStock from './AkurasiStock';
+import Pengepokan from './Pengepokan';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AREAS } from '../App';
@@ -25,7 +26,7 @@ interface Props {
 }
 
 export default function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange }: Props) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
 
@@ -35,7 +36,10 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
   const mainTabs = [
     { id: 'stock', label: 'Stock Overview', icon: LayoutDashboard },
     ...(isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
-    ...(area === 'All Cabang' ? [{ id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 }] : []),
+    ...(area === 'All Cabang' ? [
+      { id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 },
+      { id: 'pengepokan', label: 'Pengepokan', icon: Box }
+    ] : []),
     { id: 'whatsapp', label: 'WhatsApp Bot', icon: MessageSquare },
   ] as const;
 
@@ -265,6 +269,9 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
           </div>
           <div className={cn(safeActiveTab !== 'akurasi' && 'hidden')}>
             <AkurasiStock />
+          </div>
+          <div className={cn(safeActiveTab !== 'pengepokan' && 'hidden')}>
+            <Pengepokan />
           </div>
           <div className={cn(safeActiveTab !== 'mts' && 'hidden')}>
             <MtsData />
