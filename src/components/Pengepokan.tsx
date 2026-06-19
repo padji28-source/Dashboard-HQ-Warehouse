@@ -46,7 +46,7 @@ interface CabangSummary {
   totalLastQty: number;
   totalMoveQty: number;
   totalSelisih: number;
-  persentaseSelisih: number;
+  skuSelisih: number;
 }
 
 export default function Pengepokan() {
@@ -57,6 +57,7 @@ export default function Pengepokan() {
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCabangFilter, setSelectedCabangFilter] = useState('ALL');
+  const [selectedSelisihFilter, setSelectedSelisihFilter] = useState('ALL');
 
   // Pagination State
   const [pageSize, setPageSize] = useState<number>(30);
@@ -65,7 +66,7 @@ export default function Pengepokan() {
   // Reset pagination on filter or search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCabangFilter, searchQuery]);
+  }, [selectedCabangFilter, searchQuery, selectedSelisihFilter]);
 
   const loadData = async () => {
     try {
@@ -232,33 +233,31 @@ export default function Pengepokan() {
 
   // Aggregated summaries per cabang for Chart and Cards
   const cabangSummaries = useMemo<CabangSummary[]>(() => {
-    const summaryMap = new Map<string, { lastQty: number; moveQty: number; selisih: number }>();
+    const summaryMap = new Map<string, { lastQty: number; moveQty: number; selisih: number; skuSelisih: number }>();
 
     rawRows.forEach(row => {
       const cab = row.cabang || 'Lainnya';
       if (!summaryMap.has(cab)) {
-        summaryMap.set(cab, { lastQty: 0, moveQty: 0, selisih: 0 });
+        summaryMap.set(cab, { lastQty: 0, moveQty: 0, selisih: 0, skuSelisih: 0 });
       }
 
       const entry = summaryMap.get(cab)!;
       entry.lastQty += row.lastQty;
       entry.moveQty += row.moveQty;
       entry.selisih += row.selisih;
+      if (row.selisih !== 0) {
+        entry.skuSelisih += 1;
+      }
     });
 
     const list: CabangSummary[] = [];
     summaryMap.forEach((val, cab) => {
-      // Percentage discrepancy: (abs(selisih) / lastQty) * 100
-      const pct = val.lastQty > 0 
-        ? Math.round((Math.abs(val.selisih) / val.lastQty) * 1000) / 10 
-        : 0;
-
       list.push({
         cabang: cab,
         totalLastQty: val.lastQty,
         totalMoveQty: val.moveQty,
         totalSelisih: val.selisih,
-        persentaseSelisih: pct
+        skuSelisih: val.skuSelisih
       });
     });
 
@@ -280,9 +279,21 @@ export default function Pengepokan() {
         row.locator.toLowerCase().includes(searchQuery.toLowerCase()) ||
         row.searchKey.toLowerCase().includes(searchQuery.toLowerCase()) ||
         row.noDocument.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchCabang && matchSearch;
+
+      let matchSelisih = true;
+      if (selectedSelisihFilter === 'HAVE_DISCREPANCY') {
+        matchSelisih = row.selisih !== 0;
+      } else if (selectedSelisihFilter === 'NO_DISCREPANCY') {
+        matchSelisih = row.selisih === 0;
+      } else if (selectedSelisihFilter === 'OVER_STOCK') {
+        matchSelisih = row.selisih > 0;
+      } else if (selectedSelisihFilter === 'UNDER_STOCK') {
+        matchSelisih = row.selisih < 0;
+      }
+
+      return matchCabang && matchSearch && matchSelisih;
     });
-  }, [rawRows, selectedCabangFilter, searchQuery]);
+  }, [rawRows, selectedCabangFilter, searchQuery, selectedSelisihFilter]);
 
   // Paginated Table Data
   const paginatedTableData = useMemo(() => {
@@ -296,11 +307,10 @@ export default function Pengepokan() {
   const totalLastQtyAll = useMemo(() => rawRows.reduce((a, b) => a + b.lastQty, 0), [rawRows]);
   const totalMoveQtyAll = useMemo(() => rawRows.reduce((a, b) => a + b.moveQty, 0), [rawRows]);
   const totalSelisihAll = useMemo(() => rawRows.reduce((a, b) => a + b.selisih, 0), [rawRows]);
-  const avgSelisihPctAll = useMemo(() => {
-    return totalLastQtyAll > 0 
-      ? Math.round((Math.abs(totalSelisihAll) / totalLastQtyAll) * 1000) / 10 
-      : 0;
-  }, [totalLastQtyAll, totalSelisihAll]);
+  const totalSkuSelisihAll = useMemo(() => {
+    // Count of rows/SKUs having discrepancy in the active dataset
+    return rawRows.filter(row => row.selisih !== 0).length;
+  }, [rawRows]);
 
   const exportTableToExcel = () => {
     try {
@@ -408,12 +418,12 @@ export default function Pengepokan() {
 
         <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">% Net Selisih / Last Qty</span>
-            <div className="text-2xl font-black text-emerald-600 mt-1">{loading ? '...' : `${avgSelisihPctAll}%`}</div>
-            <span className="text-[10px] text-emerald-400 mt-0.5 block">Rata-rata error margin</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">SKU Selisih</span>
+            <div className="text-2xl font-black text-emerald-600 mt-1">{loading ? '...' : totalSkuSelisihAll.toLocaleString()}</div>
+            <span className="text-[10px] text-emerald-400 mt-0.5 block">Jumlah SKU yang memiliki selisih</span>
           </div>
           <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
-            <Percent className="w-5 h-5" />
+            <AlertTriangle className="w-5 h-5 flex-shrink-0" />
           </div>
         </div>
       </div>
@@ -442,7 +452,7 @@ export default function Pengepokan() {
                 <BarChart3 className="w-5 h-5 text-indigo-500" />
                 Grafik Komparatif Pengepokan per Cabang
               </h3>
-              <p className="text-slate-400 text-xs mt-0.5">Membandingkan Last Qty, Move Qty, Selisih, dan Rasio Deviasi Selisih (%) di setiap Cabang aktif.</p>
+              <p className="text-slate-400 text-xs mt-0.5">Membandingkan Last Qty, Move Qty, Selisih, dan SKU Selisih di setiap Cabang aktif.</p>
             </div>
 
             <div className="w-full h-80 sm:h-96">
@@ -464,9 +474,9 @@ export default function Pengepokan() {
                     yAxisId="right" 
                     orientation="right" 
                     domain={[0, 'auto']}
-                    tick={{ fill: '#059669', fontSize: 10 }}
+                    tick={{ fill: '#10b981', fontSize: 10 }}
                     axisLine={{ stroke: '#cbd5e1' }}
-                    label={{ value: 'Deviasi Selisih (%)', angle: 90, position: 'insideRight', style: { fill: '#059669', fontSize: 11, fontWeight: 600 } }}
+                    label={{ value: 'SKU Selisih (Count)', angle: 90, position: 'insideRight', style: { fill: '#10b981', fontSize: 11, fontWeight: 600 } }}
                   />
                   <Tooltip 
                     contentStyle={{ borderRadius: '12px', borderColor: '#e2e8f0', boxShadow: '0 4px 12px -2px rgba(0,0,0,0.05)' }}
@@ -474,7 +484,7 @@ export default function Pengepokan() {
                       if (name === 'totalLastQty') return [`${value.toLocaleString()} Qty`, 'Total Last Qty'];
                       if (name === 'totalMoveQty') return [`${value.toLocaleString()} Qty`, 'Total Move Qty'];
                       if (name === 'totalSelisih') return [`${value.toLocaleString()} Qty`, 'Total Selisih'];
-                      if (name === 'persentaseSelisih') return [`${value}%`, 'Rasio Selisih'];
+                      if (name === 'skuSelisih') return [`${value} SKU`, 'SKU Selisih'];
                       return [value, name];
                     }}
                   />
@@ -482,7 +492,7 @@ export default function Pengepokan() {
                   <Bar yAxisId="left" dataKey="totalLastQty" name="Last Qty" fill="#4f46e5" radius={[3, 3, 0, 0]} barSize={20} />
                   <Bar yAxisId="left" dataKey="totalMoveQty" name="Move Qty" fill="#06b6d4" radius={[3, 3, 0, 0]} barSize={20} />
                   <Bar yAxisId="left" dataKey="totalSelisih" name="Selisih" fill="#f43f5e" radius={[3, 3, 0, 0]} barSize={20} />
-                  <Line yAxisId="right" type="monotone" dataKey="persentaseSelisih" name="persentase selisih" stroke="#10b981" strokeWidth={3} dot={{ r: 4, stroke: '#10b981', fill: '#fff' }} />
+                  <Line yAxisId="right" type="monotone" dataKey="skuSelisih" name="SKU selisih" stroke="#10b981" strokeWidth={3} dot={{ r: 4, stroke: '#10b981', fill: '#fff' }} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -521,6 +531,18 @@ export default function Pengepokan() {
                   {uniqueCabangNames.map(cab => (
                     <option key={cab} value={cab}>{cab}</option>
                   ))}
+                </select>
+
+                <select
+                  value={selectedSelisihFilter}
+                  onChange={e => setSelectedSelisihFilter(e.target.value)}
+                  className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg font-bold text-slate-700 bg-white cursor-pointer"
+                >
+                  <option value="ALL">Semua Selisih (Filter)</option>
+                  <option value="HAVE_DISCREPANCY">Ada Selisih (⚠️)</option>
+                  <option value="NO_DISCREPANCY">Sesuai (✅)</option>
+                  <option value="OVER_STOCK">Selisih Lebih (&gt; 0)</option>
+                  <option value="UNDER_STOCK">Selisih Kurang (&lt; 0)</option>
                 </select>
 
                 <button
