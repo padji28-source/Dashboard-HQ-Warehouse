@@ -356,7 +356,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         });
       };
 
-      if (area === 'HQ' || spreadsheetId === 'HQ') {
+      if (area === 'HQ' || spreadsheetId === 'HQ' || area === 'All Cabang' || area.toLowerCase() === 'all') {
         const urlEntries = Object.entries(AREA_URLS);
         await Promise.all(urlEntries.map(async ([aName, aUrl]) => {
           try {

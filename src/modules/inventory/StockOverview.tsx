@@ -67,7 +67,7 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
         });
       };
 
-      if (area === 'HQ' || spreadsheetId === 'HQ') {
+      if (area === 'HQ' || spreadsheetId === 'HQ' || area === 'All Cabang' || area.toLowerCase() === 'all') {
         const urlEntries = Object.entries(AREA_URLS);
         await Promise.all(urlEntries.map(async ([aName, aUrl]) => {
           try {
@@ -242,7 +242,7 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
       const hasActivity = s.totalIn > 0 || s.totalOut > 0 || s.stock !== 0;
       if (!hasActivity) return false;
       
-      if (area && area !== 'HQ') {
+      if (area && area !== 'HQ' && area !== 'All Cabang' && area.toLowerCase() !== 'all') {
         const sArea = (s.area || '').trim().toLowerCase();
         const areaLower = area.trim().toLowerCase();
 
