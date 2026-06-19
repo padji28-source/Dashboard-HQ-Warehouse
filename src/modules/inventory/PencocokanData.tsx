@@ -113,16 +113,33 @@ function parseToIsoDate(dtStr: string): string {
     return `${y}-${m}-${d}`;
   }
   
-  // Try MM/DD/YYYY or M/D/YY
+  // Try DD/MM/YYYY or MM/DD/YYYY
   const slashed = cleaned.split('/');
   if (slashed.length === 3) {
-    let m = slashed[0].padStart(2, '0');
-    let d = slashed[1].padStart(2, '0');
+    const part1 = parseInt(slashed[0], 10);
+    const part2 = parseInt(slashed[1], 10);
     let y = slashed[2].trim();
-    if (y.length === 2) {
-      y = '20' + y;
-    }
-    return `${y.padStart(4, '20')}-${m}-${d}`;
+    
+    if (y.length === 2) y = '20' + y;
+    y = y.padStart(4, '20');
+
+    // Assume DD/MM/YYYY by default for Indonesia
+    let m = part2;
+    let d = part1;
+
+    // If second part is > 12, it must be MM/DD/YYYY
+    if (part2 > 12) {
+      m = part1;
+      d = part2;
+    } else if (part1 > 12) {
+      // It's definitely DD/MM/YYYY
+      m = part2;
+      d = part1;
+    } // else we stick to DD/MM/YYYY assumption
+
+    const sm = String(m).padStart(2, '0');
+    const sd = String(d).padStart(2, '0');
+    return `${y}-${sm}-${sd}`;
   }
 
   // Try standard Date parsing
@@ -453,10 +470,13 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       let includeInYesterday = false;
       let includeInMutation = false;
 
+      const normalizedType = tipe.replace(/\s+/g, '');
+      const isAwal = normalizedType === 'AWAL' || normalizedType === 'SALDOAWAL' || normalizedType === 'INITIAL' || normalizedType === 'SALDO';
+
       if (reconType === 'daily') {
         includeInCumulative = !tanggal || tanggal <= selectedDate;
-        includeInYesterday = !tanggal || tanggal < selectedDate;
-        includeInMutation = tanggal === selectedDate;
+        includeInYesterday = !tanggal || tanggal < selectedDate || (isAwal && tanggal <= selectedDate);
+        includeInMutation = tanggal === selectedDate && !isAwal;
       } else {
         const transMonth = tanggal ? tanggal.substring(0, 7) : '';
         includeInCumulative = !tanggal || transMonth <= selectedMonth;
@@ -472,8 +492,8 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           return `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, '0')}`;
         })();
         
-        includeInYesterday = !tanggal || (transMonth && transMonth <= prevMonth);
-        includeInMutation = transMonth === selectedMonth;
+        includeInYesterday = !tanggal || (transMonth && transMonth <= prevMonth) || (isAwal && transMonth <= selectedMonth);
+        includeInMutation = transMonth === selectedMonth && !isAwal;
       }
 
       if (!listMap.has(itemKey)) {
@@ -501,7 +521,6 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       }
 
       const item = listMap.get(itemKey)!;
-      const normalizedType = tipe.replace(/\s+/g, '');
 
       if (includeInYesterday) {
         if (normalizedType === 'IN' || normalizedType === 'AWAL' || normalizedType === 'MASUK' || normalizedType === 'RECEIPT' || normalizedType === 'SALDOAWAL') {
