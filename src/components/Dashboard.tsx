@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink } from 'lucide-react';
+import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3 } from 'lucide-react';
 import MasterProduk from './MasterProduk';
 import MasterLocator from './MasterLocator';
 import TransactionInput from './TransactionInput';
@@ -7,6 +7,7 @@ import StockOverview from './StockOverview';
 import PencocokanData from './PencocokanData';
 import MtsData from './MtsData';
 import WhatsAppConsole from '../modules/whatsapp/WhatsAppConsole';
+import AkurasiStock from './AkurasiStock';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AREAS } from '../App';
@@ -24,7 +25,7 @@ interface Props {
 }
 
 export default function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange }: Props) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
 
@@ -34,6 +35,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
   const mainTabs = [
     { id: 'stock', label: 'Stock Overview', icon: LayoutDashboard },
     ...(isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
+    ...(area === 'All Cabang' ? [{ id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 }] : []),
     { id: 'whatsapp', label: 'WhatsApp Bot', icon: MessageSquare },
   ] as const;
 
@@ -64,12 +66,12 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0 shadow-sm">
                <Box className="w-5 h-5 text-white" />
             </div>
-            <h1 className="font-bold text-lg text-slate-900 tracking-tight hidden sm:block">Dashboard HQ WH</h1>
+            <h1 className="font-bold text-lg text-slate-900 tracking-tight hidden sm:block">Dashboard All Cabang WH</h1>
           </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
-          {(userRole === 'ALL' || userRole === 'HQ') && onAreaChange ? (
+          {(userRole === 'ALL' || userRole === 'HQ' || userRole === 'All Cabang') && onAreaChange ? (
             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 sm:px-3 py-1.5 shadow-sm">
               <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
               <span className="hidden md:inline text-xs font-bold text-slate-500 uppercase tracking-wide">Pilih Area:</span>
@@ -92,12 +94,12 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
 
           <div className="text-right hidden sm:block">
             <span className="inline-block px-2 py-0.5 text-[10px] font-bold bg-blue-50 border border-blue-100 text-blue-700 rounded-full uppercase tracking-wider">
-              {userRole === 'ALL' ? 'Super Admin' : userRole === 'HQ' ? 'Admin HQ' : 'Admin Area'}
+              {userRole === 'ALL' ? 'Super Admin' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'Admin All Cabang' : 'Admin Area'}
             </span>
           </div>
 
           <div className="w-9 h-9 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-700 text-xs sm:text-sm font-bold uppercase shrink-0 shadow-inner">
-            {userRole === 'ALL' ? 'SA' : userRole === 'HQ' ? 'HQ' : area.substring(0, 2)}
+            {userRole === 'ALL' ? 'SA' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'AC' : area.substring(0, 2)}
           </div>
         </div>
       </header>
@@ -120,7 +122,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
             <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center shrink-0 shadow-sm">
                <Box className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-lg text-white tracking-tight">Dashboard HQ WH</span>
+             <span className="font-bold text-lg text-white tracking-tight">Dashboard All Cabang WH</span>
           </div>
           <button 
             onClick={() => setSidebarOpen(false)}
@@ -149,7 +151,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
               </button>
             ))}
 
-            {area === 'HQ' ? (
+            {(area === 'HQ' || area === 'All Cabang') ? (
               <div className="mt-4 pt-4 border-t border-slate-800">
                 <button
                   onClick={() => { setActiveTab('mts'); setSidebarOpen(false); }}
@@ -261,36 +263,39 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
           <div className={cn(safeActiveTab !== 'pencocokan' && 'hidden')}>
             <PencocokanData spreadsheetId={spreadsheetId} area={area} />
           </div>
+          <div className={cn(safeActiveTab !== 'akurasi' && 'hidden')}>
+            <AkurasiStock />
+          </div>
           <div className={cn(safeActiveTab !== 'mts' && 'hidden')}>
             <MtsData />
           </div>
           <div className={cn(safeActiveTab !== 'input' && 'hidden')}>
-            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Accessories" /> : (
+            {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Accessories" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'input_rm' && 'hidden')}>
-            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Raw Material" /> : (
+            {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Raw Material" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'input_mfg' && 'hidden')}>
-            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Manufacturing" /> : (
+            {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Manufacturing" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'input_supplies' && 'hidden')}>
-            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Supplies & GA" /> : (
+            {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Supplies & GA" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'produk' && 'hidden')}>
-            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Master Produk" /> : (
+            {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Master Produk" /> : (
               <MasterProduk spreadsheetId={spreadsheetId} />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'locator' && 'hidden')}>
-            {area === 'HQ' ? <HQReadOnlyPlaceholder title="Master Locator" /> : (
+            {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Master Locator" /> : (
               <MasterLocator spreadsheetId={spreadsheetId} />
             )}
           </div>
@@ -309,9 +314,9 @@ function HQReadOnlyPlaceholder({ title }: { title: string }) {
       <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
         <Scale className="w-8 h-8" style={{ transform: 'rotate(-10deg)' }} />
       </div>
-      <h3 className="text-xl font-bold text-slate-900 mb-3">Menu {title} Dinonaktifkan di Area HQ</h3>
+      <h3 className="text-xl font-bold text-slate-900 mb-3">Menu {title} Dinonaktifkan di Area All Cabang</h3>
       <p className="text-sm text-slate-500 leading-relaxed max-w-md mx-auto mb-6">
-        Gudang pusat **HQ** beroperasi dalam mode **Agregasi Multi-Area (Read-Only)** untuk memantau performa inventaris di seluruh 11 gudang cabang secara real-time. 
+        Gudang pusat **All Cabang / HQ** beroperasi dalam mode **Agregasi Multi-Area (Read-Only)** untuk memantau performa inventaris di seluruh 11 gudang cabang secara real-time. 
         Anda tidak dapat mengubah data individual dari mode ini. Silakan masuk kembali menggunakan pilihan cabang area tertentu jika Anda berniat untuk melakukan penginputan transaksi baru atau memutasi master data.
       </p>
     </div>

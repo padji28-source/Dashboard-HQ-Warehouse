@@ -3,7 +3,7 @@ import Dashboard from './components/Dashboard';
 import { Loader2, ShieldCheck, Lock, User, MapPin, Eye, EyeOff, Info, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 export const AREAS = [
-  "HQ", "Jakarta", "Jakarta A5", "Karawang", "Semarang", "Surabaya", "Jember", 
+  "All Cabang", "Jakarta", "Jakarta A5", "Karawang", "Semarang", "Surabaya", "Jember", 
   "Makassar", "Pontianak", "Banjarmasin", "Palembang", "Medan", "Pekanbaru"
 ];
 
@@ -32,8 +32,8 @@ export interface AdminAccount {
 
 export const ADMIN_ACCOUNTS: AdminAccount[] = [
   { username: 'admin', password: 'admin123', allowedArea: 'ALL', label: 'Super Admin (Semua Area)' },
-  { username: 'hq', password: 'hq123', allowedArea: 'HQ', label: 'Admin HQ (Pusat)' },
-  { username: 'admin_hq', password: 'hq123', allowedArea: 'HQ', label: 'Admin HQ' },
+  { username: 'hq', password: 'hq123', allowedArea: 'All Cabang', label: 'Admin All Cabang (Pusat)' },
+  { username: 'admin_hq', password: 'hq123', allowedArea: 'All Cabang', label: 'Admin All Cabang' },
   { username: 'jakarta', password: 'jakarta123', allowedArea: 'Jakarta', label: 'Admin Jakarta' },
   { username: 'admin_jakarta', password: 'jakarta123', allowedArea: 'Jakarta', label: 'Admin Jakarta' },
   { username: 'jakarta_a5', password: 'jakarta123', allowedArea: 'Jakarta A5', label: 'Admin Jakarta A5' },
@@ -76,8 +76,8 @@ export default function App() {
     setSelectedArea(newArea);
     localStorage.setItem('selectedArea', newArea);
     const url = AREA_URLS[newArea] || '';
-    setCurrentGasUrl(newArea === 'HQ' ? 'HQ' : url);
-    setSpreadsheetReady(newArea === 'HQ' ? true : !!url);
+    setCurrentGasUrl(newArea === 'All Cabang' ? 'HQ' : url);
+    setSpreadsheetReady(newArea === 'All Cabang' ? true : !!url);
   };
 
   const handleAppLogin = (e: FormEvent) => {
@@ -96,7 +96,7 @@ export default function App() {
       let finalArea = selectedArea;
 
       // Restrict and force specific area for non-superadmins and non-HQ admins
-      if (matchedAccount.allowedArea !== 'ALL' && matchedAccount.allowedArea !== 'HQ') {
+      if (matchedAccount.allowedArea !== 'ALL' && matchedAccount.allowedArea !== 'All Cabang') {
         finalArea = matchedAccount.allowedArea;
         setSelectedArea(finalArea);
       }
@@ -106,8 +106,8 @@ export default function App() {
       localStorage.setItem('selectedArea', finalArea);
       localStorage.setItem('userRole', matchedAccount.allowedArea);
       const url = AREA_URLS[finalArea] || '';
-      setCurrentGasUrl(finalArea === 'HQ' ? 'HQ' : url);
-      setSpreadsheetReady(finalArea === 'HQ' ? true : !!url);
+      setCurrentGasUrl(finalArea === 'All Cabang' ? 'HQ' : url);
+      setSpreadsheetReady(finalArea === 'All Cabang' ? true : !!url);
     } else {
       setLoginError('Username atau password salah! Silakan periksa kembali kredensial Anda.');
     }
@@ -132,7 +132,7 @@ export default function App() {
             <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mx-auto mb-3 shadow-inner">
               <ShieldCheck className="w-7 h-7" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 mb-1">Dashboard HQ WH</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 mb-1">Dashboard All Cabang WH</h1>
             <p className="text-slate-500 text-sm">Warehouse Management System Multi-Area</p>
           </div>
           
@@ -212,7 +212,7 @@ export default function App() {
                     <p className="text-slate-800 font-bold">Admin Area Spesifik (Sesuai tugas):</p>
                     <p className="text-[10px] text-slate-400 ml-2 mb-1">Masing-masing admin dikunci ke areanya & tidak bisa mengakses area lain.</p>
                     <ul className="ml-2 space-y-1 list-disc list-inside">
-                      {AREAS.filter(ar => ar !== 'HQ').map(ar => {
+                      {AREAS.filter(ar => ar !== 'All Cabang').map(ar => {
                         const pass = ar.toLowerCase() === 'makassar' ? 'makassar111' : `${ar.toLowerCase()}123`;
                         return (
                           <li key={ar} className="text-[11px]">
