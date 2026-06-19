@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { fetchSheetData } from '../../lib/sheets';
 import { AREA_URLS } from '../../App';
 import type { Transaction, Product, Locator, StockSummary } from '../../shared/types';
-import { Loader2, Search, Package, ArrowRightLeft, Layers } from 'lucide-react';
+import { Loader2, Search, Package, ArrowRightLeft, Layers, ArrowUpRight, PlusCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -361,7 +361,7 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="border border-slate-200 bg-white rounded-xl p-6 flex items-center gap-4 shadow-sm">
             <div className="w-12 h-12 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center shrink-0">
                <Package className="w-5 h-5 text-blue-600" />
@@ -383,8 +383,8 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
         </div>
 
         <div className="border border-slate-200 bg-white rounded-xl p-6 flex items-center gap-4 shadow-sm">
-            <div className="w-12 h-12 bg-emerald-50 border border-emerald-100 rounded-full flex items-center justify-center shrink-0">
-               <Layers className="w-5 h-5 text-emerald-600" />
+            <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center shrink-0">
+               <Layers className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
                <h3 className="text-2xl font-bold tracking-tight text-slate-900">
@@ -394,7 +394,24 @@ export default function StockOverview({ spreadsheetId, area }: { spreadsheetId: 
             </div>
         </div>
 
-        <div className="border border-slate-200 bg-white rounded-xl p-6 flex items-center gap-4 shadow-sm sm:col-span-2 lg:col-span-1">
+        <div className="border border-slate-200 bg-white rounded-xl p-6 flex items-center gap-4 shadow-sm">
+            <div className="w-12 h-12 bg-emerald-50 border border-emerald-100 rounded-full flex items-center justify-center shrink-0">
+               <ArrowUpRight className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+               {(() => {
+                 const totalIn = stockSummary.reduce((acc, s) => acc + s.totalIn, 0);
+                 return (
+                   <h3 className="text-2xl font-bold tracking-tight text-emerald-600">
+                     {totalIn.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                   </h3>
+                 );
+               })()}
+               <p className="text-sm font-medium text-slate-500">Total Transaksi In (Qty)</p>
+            </div>
+        </div>
+
+        <div className="border border-slate-200 bg-white rounded-xl p-6 flex items-center gap-4 shadow-sm">
             <div className="w-12 h-12 bg-rose-50 border border-rose-100 rounded-full flex items-center justify-center shrink-0">
                <ArrowRightLeft className="w-5 h-5 text-rose-600" />
             </div>
