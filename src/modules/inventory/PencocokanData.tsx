@@ -24,6 +24,40 @@ function formatValue(num: number, uom?: string) {
   });
 }
 
+function formatToDDMMYYYY(dateStr: string): string {
+  if (!dateStr) return '';
+  const cleaned = dateStr.trim();
+  
+  // Try YYYY-MM-DD or YYYY-M-D
+  const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (yyyymmdd) {
+    const y = yyyymmdd[1];
+    const m = yyyymmdd[2].padStart(2, '0');
+    const d = yyyymmdd[3].padStart(2, '0');
+    return `${d}-${m}-${y}`;
+  }
+
+  // Try YYYY-MM or YYYY-M
+  const yyyymm = cleaned.match(/^(\d{4})-(\d{1,2})$/);
+  if (yyyymm) {
+    const y = yyyymm[1];
+    const m = yyyymm[2].padStart(2, '0');
+    return `${m}-${y}`;
+  }
+
+  // Try standard Date parsing
+  const parsed = Date.parse(cleaned);
+  if (!isNaN(parsed)) {
+    const dObj = new Date(parsed);
+    const d = String(dObj.getDate()).padStart(2, '0');
+    const m = String(dObj.getMonth() + 1).padStart(2, '0');
+    const y = dObj.getFullYear();
+    return `${d}-${m}-${y}`;
+  }
+
+  return dateStr;
+}
+
 // ==========================================
 // PERSISTENCE ENGINE: CLOUD & LOCAL STORAGE
 // ==========================================
@@ -865,7 +899,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     }
 
     let dataToExport = [];
-    const dateStr = currentReconType === 'daily' ? selectedDate : selectedMonth;
+    const dateStr = currentReconType === 'daily' ? formatToDDMMYYYY(selectedDate) : formatToDDMMYYYY(selectedMonth);
     const typeLabel = currentReconType === 'daily' ? 'Harian' : 'Bulanan';
 
     if (currentReconType === 'daily') {
@@ -947,7 +981,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
               <div className="text-xs text-amber-800 mt-0.5">
                 Wilayah Area: <strong className="uppercase">{activeSavedSession.area}</strong> | 
                 Tipe: <strong>{activeSavedSession.type === 'daily' ? 'Harian' : 'Bulanan'}</strong> | 
-                Periode: <strong>{activeSavedSession.date}</strong> | 
+                Periode: <strong>{formatToDDMMYYYY(activeSavedSession.date)}</strong> | 
                 Disimpan pada: <strong>{new Date(activeSavedSession.timestamp).toLocaleString('id-ID')}</strong>
               </div>
             </div>
@@ -1047,15 +1081,15 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         <div>
           {activeSavedSession ? (
             <span>
-              Arsip Terkunci: Menampilkan snapshot historis dengan tipe pencocokan <strong>{activeSavedSession.type === 'daily' ? 'Harian' : 'Bulanan'}</strong> untuk tanggal/periode <strong>{activeSavedSession.date}</strong> di wilayah area <strong>{activeSavedSession.area}</strong>.
+              Arsip Terkunci: Menampilkan snapshot historis dengan tipe pencocokan <strong>{activeSavedSession.type === 'daily' ? 'Harian' : 'Bulanan'}</strong> untuk tanggal/periode <strong>{formatToDDMMYYYY(activeSavedSession.date)}</strong> di wilayah area <strong>{activeSavedSession.area}</strong>.
             </span>
           ) : reconType === 'daily' ? (
             <span>
-              Sedang menampilkan <strong>Pencocokan Harian</strong> untuk tanggal <strong>{selectedDate}</strong>. Stok Rill diakumulasi dari seluruh transaksi <strong>sebelum atau pada tanggal tersebut</strong>, dengan kolom Mutasi mencatat aktivitas mutasi harian khusus di tanggal berjalan.
+              Sedang menampilkan <strong>Pencocokan Harian</strong> untuk tanggal <strong>{formatToDDMMYYYY(selectedDate)}</strong>. Stok Rill diakumulasi dari seluruh transaksi <strong>sebelum atau pada tanggal tersebut</strong>, dengan kolom Mutasi mencatat aktivitas mutasi harian khusus di tanggal berjalan.
             </span>
           ) : (
             <span>
-              Sedang menampilkan <strong>Pencocokan Bulanan</strong> untuk periode <strong>{selectedMonth}</strong>. Stok Rill diakumulasi dari seluruh transaksi <strong>sebelum atau pada akhir bulan tersebut</strong>, dengan kolom Mutasi mencatat total aktivitas mutasi bulanan.
+              Sedang menampilkan <strong>Pencocokan Bulanan</strong> untuk periode <strong>{formatToDDMMYYYY(selectedMonth)}</strong>. Stok Rill diakumulasi dari seluruh transaksi <strong>sebelum atau pada akhir bulan tersebut</strong>, dengan kolom Mutasi mencatat total aktivitas mutasi bulanan.
             </span>
           )}
         </div>
@@ -1117,7 +1151,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           {activeSavedSession ? (
             <div className="w-full px-3.5 py-2 text-sm border border-amber-200 bg-amber-50 rounded-lg font-semibold text-amber-900 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>{activeSavedSession.date}</span>
+              <span>{formatToDDMMYYYY(activeSavedSession.date)}</span>
             </div>
           ) : reconType === 'daily' ? (
             <div className="relative">
@@ -1562,7 +1596,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
 
                   <div className="grid grid-cols-2 gap-y-1.5 gap-x-2 text-xs text-slate-500 mt-2.5 font-medium">
                     <div>Area: <strong className="text-slate-800 uppercase">{sess.area}</strong></div>
-                    <div>Periode: <strong className="text-slate-800 font-mono">{sess.date}</strong></div>
+                    <div>Periode: <strong className="text-slate-800 font-mono">{formatToDDMMYYYY(sess.date)}</strong></div>
                     <div>Kombinasi: <strong>{sess.grandTotals?.itemCount ?? sess.items?.length ?? 0} SKU</strong></div>
                     <div>Simpanan: <strong>{sess.fireId ? 'Server Cloud' : 'Browser Lokal'}</strong></div>
                   </div>

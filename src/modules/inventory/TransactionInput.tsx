@@ -78,10 +78,9 @@ export const displayTanggalIndonesian = (dtStr: string): string => {
   
   if (dateObj && !isNaN(dateObj.getTime())) {
     const d = String(dateObj.getDate()).padStart(2, '0');
-    const mIndex = dateObj.getMonth();
-    const mLabel = INDO_MONTHS[mIndex] || String(mIndex + 1);
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
     const y = dateObj.getFullYear();
-    return `${d}-${mLabel}-${y}`;
+    return `${d}-${m}-${y}`;
   }
   
   return dtStr; // Return as is if fully unrecognized
@@ -970,6 +969,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                         <span className="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-md border border-emerald-100">Total IN: {totalIn.toLocaleString()}</span>
                         <span className="bg-rose-50 text-rose-700 px-2.5 py-1 rounded-md border border-rose-100">Total OUT: {totalOut.toLocaleString()}</span>
                         {totalAwal > 0 && <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md border border-blue-100">Total AWAL: {totalAwal.toLocaleString()}</span>}
+                        <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md border border-indigo-150 font-bold">Stok Rill: {(totalAwal + totalIn - totalOut).toLocaleString()}</span>
                       </span>
                     </td>
                   </tr>

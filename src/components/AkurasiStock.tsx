@@ -74,6 +74,40 @@ function parseToIsoDate(dtStr: string): string {
   return '';
 }
 
+function formatToDDMMYYYY(dateStr: string): string {
+  if (!dateStr) return '';
+  const cleaned = dateStr.trim();
+  
+  // Try YYYY-MM-DD or YYYY-M-D
+  const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (yyyymmdd) {
+    const y = yyyymmdd[1];
+    const m = yyyymmdd[2].padStart(2, '0');
+    const d = yyyymmdd[3].padStart(2, '0');
+    return `${d}-${m}-${y}`;
+  }
+
+  // Try YYYY-MM or YYYY-M
+  const yyyymm = cleaned.match(/^(\d{4})-(\d{1,2})$/);
+  if (yyyymm) {
+    const y = yyyymm[1];
+    const m = yyyymm[2].padStart(2, '0');
+    return `${m}-${y}`;
+  }
+
+  // Try standard Date parsing
+  const parsed = Date.parse(cleaned);
+  if (!isNaN(parsed)) {
+    const dObj = new Date(parsed);
+    const d = String(dObj.getDate()).padStart(2, '0');
+    const m = String(dObj.getMonth() + 1).padStart(2, '0');
+    const y = dObj.getFullYear();
+    return `${d}-${m}-${y}`;
+  }
+
+  return dateStr;
+}
+
 export default function AkurasiStock() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -390,7 +424,7 @@ export default function AkurasiStock() {
       ];
       ws['!cols'] = fitCols;
 
-      XLSX.writeFile(wb, `Selisih_Akurasi_Stock_ALL_CABANG_${reconType === 'daily' ? selectedDate : selectedMonth}.xlsx`);
+      XLSX.writeFile(wb, `Selisih_Akurasi_Stock_ALL_CABANG_${reconType === 'daily' ? formatToDDMMYYYY(selectedDate) : formatToDDMMYYYY(selectedMonth)}.xlsx`);
     } catch (error: any) {
       alert('Ekspor ke Excel gagal: ' + error.message);
     }
