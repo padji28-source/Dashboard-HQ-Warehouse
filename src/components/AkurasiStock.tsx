@@ -137,7 +137,7 @@ export default function AkurasiStock() {
       setErrorMsg(null);
 
       // 1. Fetch MTS Sheet Data (System Stock)
-      const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv';
+      const csvUrl = '/api/mts';
       const mtsMap = new Map<string, number>();
 
       try {
@@ -212,7 +212,7 @@ export default function AkurasiStock() {
             ]);
 
             const pMap = new Map<string, { nama: string; satuan: string }>();
-            pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
+            pr.filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
               pMap.set(String(r[0]).trim(), {
                 nama: String(r[1] || '').trim(),
                 satuan: String(r[2] || '').trim()
@@ -220,7 +220,7 @@ export default function AkurasiStock() {
             });
 
             const lMap = new Map<string, { nama: string; whType: string; area: string }>();
-            lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
+            lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
               const val = {
                 nama: String(r[1] || r[0]).trim(),
                 whType: String(r[3] || '').trim(),
@@ -240,7 +240,13 @@ export default function AkurasiStock() {
 
             const rawTransactions: any[] = [];
             const processBranchRows = (rows: any[], sourceSheet: string) => {
-              const valid = (rows || []).filter((r: any[]) => r.length > 0 && (r[0] || r[1] || r[9]));
+              const valid = (rows || []).filter((r: any[]) => {
+                if (r.length === 0) return false;
+                const tanggal = String(r[0] || '').trim();
+                const nama = String(r[1] || '').trim();
+                const kode = String(r[9] || '').trim();
+                return tanggal !== '' && nama !== '' && kode !== '#N/A' && nama !== '#N/A' && tanggal !== '#N/A';
+              });
               valid.forEach((r: any[]) => {
                 const tanggalRaw = String(r[0] || '').trim();
                 const tanggal = parseToIsoDate(tanggalRaw);

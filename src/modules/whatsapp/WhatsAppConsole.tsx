@@ -59,7 +59,13 @@ export default function WhatsAppConsole({ stockSummary: initialStockSummary, are
         const mappedRows: any[] = [];
 
         const processRows = (rows: any[], source: string) => {
-          const validRows = (rows || []).filter((r: any[]) => r.length > 0 && (r[0] || r[1] || r[9]));
+          const validRows = (rows || []).filter((r: any[]) => {
+            if (r.length === 0) return false;
+            const tanggal = String(r[0] || '').trim();
+            const nama = String(r[1] || '').trim();
+            const kode = String(r[9] || '').trim();
+            return tanggal !== '' && nama !== '' && kode !== '#N/A' && nama !== '#N/A' && tanggal !== '#N/A';
+          });
           validRows.forEach((r: any[]) => {
              const pName = String(r[1] || '').trim();
              let pCode = String(r[9] || '').trim();
@@ -99,11 +105,11 @@ export default function WhatsAppConsole({ stockSummary: initialStockSummary, are
                 fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E").catch(() => [])
               ]);
 
-              pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
+              pr.filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
                 pMap.set(String(r[0]).trim(), String(r[1] || '').trim());
               });
 
-              lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
+              lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
                 const val = { nama: String(r[1] || r[0]).trim(), whType: String(r[3] || '').trim(), area: String(r[4] || aName).trim() };
                 if (r[0]) { lMap.set(String(r[0]).trim(), val); lMap.set(String(r[0]).trim().toUpperCase(), val); }
                 if (r[1]) { lMap.set(String(r[1]).trim(), val); lMap.set(String(r[1]).trim().toUpperCase(), val); }
@@ -127,11 +133,11 @@ export default function WhatsAppConsole({ stockSummary: initialStockSummary, are
             fetchSheetData(currentUrl, "'MASTER_LOCATOR'!A2:E").catch(() => [])
           ]);
 
-          pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
+          pr.filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
             pMap.set(String(r[0]).trim(), String(r[1] || '').trim());
           });
 
-          lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
+          lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
             const val = { nama: String(r[1] || r[0]).trim(), whType: String(r[3] || '').trim(), area: String(r[4] || '').trim() };
             if (r[0]) { lMap.set(String(r[0]).trim(), val); lMap.set(String(r[0]).trim().toUpperCase(), val); }
             if (r[1]) { lMap.set(String(r[1]).trim(), val); lMap.set(String(r[1]).trim().toUpperCase(), val); }

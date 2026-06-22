@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { fetchSheetData } from '../../lib/sheets';
 import { AREA_URLS } from '../../App';
-import { Loader2, Search, Scale, CheckCircle2, AlertTriangle, RefreshCw, Undo, Lock, History, FileSpreadsheet, Info, Calendar, Trash2, Check } from 'lucide-react';
+import { Loader2, Search, Scale, CheckCircle2, AlertTriangle, RefreshCw, Undo, Lock, History, FileSpreadsheet, Info, Calendar, Trash2, Check, X } from 'lucide-react';
 import Papa from 'papaparse';
 import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -147,33 +147,16 @@ function parseToIsoDate(dtStr: string): string {
     return `${y}-${m}-${d}`;
   }
   
-  // Try DD/MM/YYYY or MM/DD/YYYY
+  // Try MM/DD/YYYY or M/D/YY (consistent with other modules and input formatting)
   const slashed = cleaned.split('/');
   if (slashed.length === 3) {
-    const part1 = parseInt(slashed[0], 10);
-    const part2 = parseInt(slashed[1], 10);
+    let m = slashed[0].padStart(2, '0');
+    let d = slashed[1].padStart(2, '0');
     let y = slashed[2].trim();
-    
-    if (y.length === 2) y = '20' + y;
-    y = y.padStart(4, '20');
-
-    // Assume DD/MM/YYYY by default for Indonesia
-    let m = part2;
-    let d = part1;
-
-    // If second part is > 12, it must be MM/DD/YYYY
-    if (part2 > 12) {
-      m = part1;
-      d = part2;
-    } else if (part1 > 12) {
-      // It's definitely DD/MM/YYYY
-      m = part2;
-      d = part1;
-    } // else we stick to DD/MM/YYYY assumption
-
-    const sm = String(m).padStart(2, '0');
-    const sd = String(d).padStart(2, '0');
-    return `${y}-${sm}-${sd}`;
+    if (y.length === 2) {
+      y = '20' + y;
+    }
+    return `${y.padStart(4, '20')}-${m}-${d}`;
   }
 
   // Try standard Date parsing
@@ -205,6 +188,7 @@ interface ReconciliationItem {
   selisih: number;
   status: 'SESUAI' | 'SELISIH' | 'BELUM';
   area: string;
+  source: string;
 }
 
 export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: string }) {
@@ -230,9 +214,26 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<{ kodeProduk: string; namaProduk: string } | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   const [selectedAreaFilter, setSelectedAreaFilter] = useState('ALL');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL'); // ALL, SESUAI, SELISIH
   const [selectedLocator, setSelectedLocator] = useState('ALL');
+  const [selectedSourceFilter, setSelectedSourceFilter] = useState('ALL'); // ALL, INPUT, INPUT RM, INPUT MFG, INPUT SUPPLIES
 
   // Pagination state
   const [pageSize, setPageSize] = useState(50);
@@ -280,13 +281,13 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
   // Auto-reset page index when filters, type, or selection date changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedAreaFilter, selectedLocator, selectedStatusFilter, pageSize, reconType, selectedDate, selectedMonth]);
+  }, [searchQuery, selectedAreaFilter, selectedLocator, selectedStatusFilter, selectedSourceFilter, pageSize, reconType, selectedDate, selectedMonth]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       
-      const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv';
+      const csvUrl = '/api/mts';
       const mtsMap = new Map<string, number>();
       
       try {
@@ -348,7 +349,13 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       const mappedRows: { tipe: string; pCode: string; pName: string; lCode: string; qty: number; uom: string; source: string; area: string; tanggal: string }[] = [];
 
       const processRows = (rows: any[], source: string, currentArea: string) => {
-        const validRows = (rows || []).filter((r: any[]) => r.length > 0 && (r[0] || r[1] || r[9]));
+        const validRows = (rows || []).filter((r: any[]) => {
+          if (r.length === 0) return false;
+          const tanggal = String(r[0] || '').trim();
+          const nama = String(r[1] || '').trim();
+          const kode = String(r[9] || '').trim();
+          return tanggal !== '' && nama !== '' && kode !== '#N/A' && nama !== '#N/A' && tanggal !== '#N/A';
+        });
         validRows.forEach((r: any[]) => {
           const tanggalRaw = String(r[0] || '').trim();
           const tanggal = parseToIsoDate(tanggalRaw);
@@ -403,14 +410,14 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
               fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E").catch(() => [])
             ]);
 
-            pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
+            pr.filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
               pMap.set(String(r[0]).trim(), {
                 nama: String(r[1] || '').trim(),
                 satuan: String(r[2] || '').trim()
               });
             });
 
-            lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
+            lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
               const val = {
                 nama: String(r[1] || r[0]).trim(),
                 whType: String(r[3] || '').trim(),
@@ -446,14 +453,14 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => [])
         ]);
 
-        pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
+        pr.filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
           pMap.set(String(r[0]).trim(), {
             nama: String(r[1] || '').trim(),
             satuan: String(r[2] || '').trim()
           });
         });
 
-        lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
+        lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
           const val = {
             nama: String(r[1] || r[0]).trim(),
             whType: String(r[3] || '').trim(),
@@ -497,7 +504,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     const listMap = new Map<string, ReconciliationItem>();
 
     allTransactions.forEach(t => {
-      const { tipe, pCode, pName, lCode, qty, uom, area: rowArea, tanggal } = t;
+      const { tipe, pCode, pName, lCode, qty, uom, area: rowArea, tanggal, source } = t;
       const itemKey = `${rowArea}_${lCode}_${pCode}`;
 
       let includeInCumulative = false;
@@ -550,7 +557,8 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           mutasiQtyOut: 0,
           selisih: 0,
           status: 'BELUM',
-          area: rowArea || lData.area || area
+          area: rowArea || lData.area || area,
+          source: source || 'INPUT'
         });
       }
 
@@ -635,18 +643,48 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
   // Filter unique locators for selection
   const uniqueLocators = useMemo(() => {
     const list = activeSavedSession ? activeSavedSession.items : reconciliationList;
-    const filterByArea = selectedAreaFilter === 'ALL' ? list : list.filter((item: any) => item.area === selectedAreaFilter);
+    let filterByArea = selectedAreaFilter === 'ALL' ? list : list.filter((item: any) => item.area === selectedAreaFilter);
+    if (selectedSourceFilter !== 'ALL') {
+      filterByArea = filterByArea.filter((item: any) => item.source === selectedSourceFilter);
+    }
     return Array.from(new Map(filterByArea.map((i: any) => [i.whGroup, { code: i.whGroup, name: i.namaLocator }])).values()).sort((a: any, b: any) => a.code.localeCompare(b.code));
-  }, [reconciliationList, activeSavedSession, selectedAreaFilter]);
+  }, [reconciliationList, activeSavedSession, selectedAreaFilter, selectedSourceFilter]);
+
+  const uniqueProducts = useMemo(() => {
+    let list = activeSavedSession ? activeSavedSession.items : reconciliationList;
+    if (selectedSourceFilter !== 'ALL') {
+      list = list.filter((item: any) => item.source === selectedSourceFilter);
+    }
+    const map = new Map<string, { kodeProduk: string; namaProduk: string }>();
+    list.forEach((item: any) => {
+      if (item.namaProduk || item.kodeProduk) {
+        const key = `${item.kodeProduk || ''}__${item.namaProduk || ''}`;
+        if (!map.has(key)) {
+          map.set(key, { kodeProduk: item.kodeProduk, namaProduk: item.namaProduk });
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a,b) => a.namaProduk.localeCompare(b.namaProduk));
+  }, [reconciliationList, activeSavedSession, selectedSourceFilter]);
+
+  const productSuggestions = useMemo(() => {
+    if (!searchQuery || searchQuery.trim().length === 0) return [];
+    const term = searchQuery.toLowerCase();
+    return uniqueProducts.filter(p => 
+      p.namaProduk.toLowerCase().includes(term) || 
+      p.kodeProduk.toLowerCase().includes(term)
+    ).slice(0, 15);
+  }, [searchQuery, uniqueProducts]);
 
   // Filter reconciliation list is dependent on user choice filters
   const filteredReconciliation = useMemo(() => {
     return reconciliationList.filter(item => {
-      const q = searchQuery.toLowerCase();
-      const matchSearch = item.namaProduk.toLowerCase().includes(q) || 
-        item.kodeProduk.toLowerCase().includes(q) ||
-        item.whGroup.toLowerCase().includes(q) ||
-        item.namaLocator.toLowerCase().includes(q);
+      const matchSearch = selectedProduct
+        ? item.kodeProduk === selectedProduct.kodeProduk
+        : (item.namaProduk.toLowerCase().includes(searchQuery.toLowerCase()) || 
+           item.kodeProduk.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           item.whGroup.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           item.namaLocator.toLowerCase().includes(searchQuery.toLowerCase()));
 
       if (!matchSearch) return false;
 
@@ -657,14 +695,19 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       if (selectedStatusFilter === 'SELISIH' && item.status !== 'SELISIH') return false;
       if (selectedStatusFilter === 'BELUM' && item.status !== 'BELUM') return false;
 
+      if (selectedSourceFilter !== 'ALL' && item.source !== selectedSourceFilter) return false;
+
       return true;
     });
-  }, [reconciliationList, searchQuery, selectedAreaFilter, selectedLocator, selectedStatusFilter]);
+  }, [reconciliationList, searchQuery, selectedAreaFilter, selectedLocator, selectedStatusFilter, selectedProduct, selectedSourceFilter]);
 
   // Summary Metrics for LIVE
   const metrics = useMemo(() => {
     const list = reconciliationList;
-    const filteredByAreaList = selectedAreaFilter === 'ALL' ? list : list.filter(i => i.area === selectedAreaFilter);
+    let filteredByAreaList = selectedAreaFilter === 'ALL' ? list : list.filter(i => i.area === selectedAreaFilter);
+    if (selectedSourceFilter !== 'ALL') {
+      filteredByAreaList = filteredByAreaList.filter(i => i.source === selectedSourceFilter);
+    }
     
     const totalCounted = filteredByAreaList.filter(i => i.stokRill !== null).length;
     const totalMatched = filteredByAreaList.filter(i => i.status === 'SESUAI').length;
@@ -678,7 +721,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       selisih: totalSelisih,
       belumDiisi: totalBelum
     };
-  }, [reconciliationList, selectedAreaFilter]);
+  }, [reconciliationList, selectedAreaFilter, selectedSourceFilter]);
 
   // Grand Total calculation for LIVE
   const grandTotals = useMemo(() => {
@@ -811,15 +854,22 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
   const displayedList = useMemo(() => {
     if (activeSavedSession) {
       return activeSavedSession.items.filter((item: any) => {
-        const q = searchQuery.toLowerCase();
-        return item.namaProduk.toLowerCase().includes(q) || 
-          item.kodeProduk.toLowerCase().includes(q) ||
-          item.whGroup.toLowerCase().includes(q) ||
-          item.namaLocator.toLowerCase().includes(q);
+        const matchSearch = selectedProduct
+          ? item.kodeProduk === selectedProduct.kodeProduk
+          : (item.namaProduk.toLowerCase().includes(searchQuery.toLowerCase()) || 
+             item.kodeProduk.toLowerCase().includes(searchQuery.toLowerCase()) ||
+             item.whGroup.toLowerCase().includes(searchQuery.toLowerCase()) ||
+             item.namaLocator.toLowerCase().includes(searchQuery.toLowerCase()));
+
+        if (!matchSearch) return false;
+
+        if (selectedSourceFilter !== 'ALL' && item.source !== selectedSourceFilter) return false;
+
+        return true;
       });
     }
     return filteredReconciliation;
-  }, [activeSavedSession, filteredReconciliation, searchQuery]);
+  }, [activeSavedSession, filteredReconciliation, searchQuery, selectedProduct, selectedSourceFilter]);
 
   const displayedTotals = useMemo(() => {
     if (activeSavedSession) {
@@ -856,7 +906,10 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
 
   const displayedMetrics = useMemo(() => {
     if (activeSavedSession) {
-      const list = activeSavedSession.items;
+      let list = activeSavedSession.items;
+      if (selectedSourceFilter !== 'ALL') {
+        list = list.filter((i: any) => i.source === selectedSourceFilter);
+      }
       const totalCounted = list.filter((i: any) => i.stokRill !== null).length;
       const totalMatched = list.filter((i: any) => i.status === 'SESUAI').length;
       const totalSelisih = list.filter((i: any) => i.status === 'SELISIH').length;
@@ -871,7 +924,20 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       };
     }
     return metrics;
-  }, [activeSavedSession, metrics]);
+  }, [activeSavedSession, metrics, selectedSourceFilter]);
+
+  const categoryCounts = useMemo(() => {
+    const list = activeSavedSession ? activeSavedSession.items : reconciliationList;
+    const filteredByAreaList = selectedAreaFilter === 'ALL' ? list : list.filter((i: any) => i.area === selectedAreaFilter);
+    const counts = {
+      ALL: filteredByAreaList.length,
+      INPUT: filteredByAreaList.filter((i: any) => i.source === 'INPUT').length,
+      'INPUT RM': filteredByAreaList.filter((i: any) => i.source === 'INPUT RM').length,
+      'INPUT MFG': filteredByAreaList.filter((i: any) => i.source === 'INPUT MFG').length,
+      'INPUT SUPPLIES': filteredByAreaList.filter((i: any) => i.source === 'INPUT SUPPLIES').length,
+    };
+    return counts;
+  }, [reconciliationList, activeSavedSession, selectedAreaFilter]);
 
   const currentReconType = activeSavedSession ? activeSavedSession.type : reconType;
 
@@ -1132,18 +1198,91 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         </div>
       </div>
 
+      {/* Category Tabs Menu */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+        <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Kategori Menu Pencocokan</div>
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { id: 'ALL', label: 'Semua Kategori (All)', count: categoryCounts.ALL, activeClass: 'bg-slate-900 text-white border-slate-900 ring-slate-900 font-bold' },
+            { id: 'INPUT', label: 'Accessories', count: categoryCounts.INPUT, activeClass: 'bg-blue-600 text-white border-blue-600 ring-blue-600 font-bold' },
+            { id: 'INPUT RM', label: 'Raw Material', count: categoryCounts['INPUT RM'], activeClass: 'bg-emerald-600 text-white border-emerald-600 ring-emerald-600 font-bold' },
+            { id: 'INPUT MFG', label: 'Manufacturing', count: categoryCounts['INPUT MFG'], activeClass: 'bg-purple-600 text-white border-purple-600 ring-purple-600 font-bold' },
+            { id: 'INPUT SUPPLIES', label: 'Supplies & GA', count: categoryCounts['INPUT SUPPLIES'], activeClass: 'bg-amber-600 text-white border-amber-600 ring-amber-600 font-bold' },
+          ].map(cat => {
+            const isActive = selectedSourceFilter === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedSourceFilter(cat.id)}
+                className={`px-3.5 py-1.5 text-xs md:text-sm font-semibold rounded-lg border transition-all cursor-pointer flex items-center gap-2 ${
+                  isActive
+                    ? `${cat.activeClass} shadow-sm ring-1`
+                    : 'border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 shadow-sm'
+                }`}
+              >
+                <span>{cat.label}</span>
+                <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${isActive ? 'bg-white/20 text-white font-bold' : 'bg-slate-100 text-slate-600 font-medium'}`}>
+                  {cat.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Filter and Control Bar */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row items-stretch md:items-center gap-3">
         {/* Search */}
-        <div className="relative flex-1 w-full">
+        <div ref={dropdownRef} className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           <input 
             type="text" 
             placeholder="Cari locator, kode/nama produk..." 
             value={searchQuery} 
-            onChange={e => setSearchQuery(e.target.value)} 
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+            onChange={e => {
+              const val = e.target.value;
+              setSearchQuery(val);
+              setShowDropdown(true);
+              if (selectedProduct && val !== selectedProduct.namaProduk) {
+                setSelectedProduct(null);
+              }
+            }} 
+            onFocus={() => setShowDropdown(true)}
+            className="w-full pl-9 pr-8 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
           />
+          {searchQuery && (
+            <button 
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedProduct(null);
+                setShowDropdown(false);
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 border-none bg-transparent cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {showDropdown && productSuggestions.length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-25 divide-y divide-slate-100">
+              {productSuggestions.map((p, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  className="w-full text-left px-3.5 py-2 hover:bg-slate-50 flex flex-col focus:outline-none transition-colors border-none cursor-pointer text-slate-700 bg-transparent"
+                  onClick={() => {
+                    setSelectedProduct(p);
+                    setSearchQuery(p.namaProduk);
+                    setShowDropdown(false);
+                  }}
+                >
+                  <span className="font-semibold text-slate-800 text-xs block truncate max-w-full" title={p.namaProduk}>{p.namaProduk}</span>
+                  <span className="font-mono text-[10px] text-slate-400 mt-0.5 block truncate max-w-full" title={p.kodeProduk}>{p.kodeProduk}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Date Selector depending on Type */}

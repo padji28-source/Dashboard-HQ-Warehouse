@@ -46,7 +46,7 @@ export default function MasterLocator({ spreadsheetId }: { spreadsheetId: string
           throw fetchErr;
         }
       }
-      setLocators(rows.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).map((r: any[]) => ({
+      setLocators(rows.filter((r: any[]) => r.length > 0 && r[0] && r[1] && r[0] !== '#N/A' && r[1] !== '#N/A').map((r: any[]) => ({
         whGroup: String(r[0] || ''),
         nama: String(r[1] || ''),
         deskripsi: String(r[2] || ''),

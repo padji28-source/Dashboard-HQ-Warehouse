@@ -1,7 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, useMemo, useRef, type FormEvent } from 'react';
 import { fetchSheetData, appendSheetRow } from '../../lib/sheets';
 import type { Transaction, Product, Locator } from '../../shared/types';
-import { Loader2, Plus, Search, Package, MapPin, Calendar, FileText, ArrowDownRight, ArrowUpRight, CheckCircle2, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Search, Package, MapPin, Calendar, FileText, ArrowDownRight, ArrowUpRight, CheckCircle2, Trash2, X } from 'lucide-react';
 
 interface Props {
   spreadsheetId: string;
@@ -92,6 +92,22 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
   const [locators, setLocators] = useState<Locator[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<{ kodeProduk: string; namaProduk: string } | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   const [selectedLocator, setSelectedLocator] = useState('ALL');
   const [selectedLocatorTo, setSelectedLocatorTo] = useState('ALL');
 
@@ -289,7 +305,13 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
       }
 
       const parsedTransactions = txRows
-        .filter((r: any[]) => r.length > 0 && (r[0] || r[1] || r[9]))
+        .filter((r: any[]) => {
+          if (r.length === 0) return false;
+          const tanggal = String(r[0] || '').trim();
+          const nama = String(r[1] || '').trim();
+          const kode = String(r[9] || '').trim();
+          return tanggal !== '' && nama !== '' && kode !== '#N/A' && nama !== '#N/A' && tanggal !== '#N/A';
+        })
         .map((r: any[]) => ({
           tanggal: String(r[0] || ''),
           namaBahan: String(r[1] || ''),
@@ -308,12 +330,20 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
 
       setTransactions(parsedTransactions);
 
-      const uniqueP = Array.from(new Map(pRows.filter((r: any[]) => r.length > 0 && r[0]).map((r: any[]) => [String(r[0]), { kode: String(r[0]), nama: String(r[1] || ''), satuan: String(r[2] || ''), kategori: '' }])).values());
-      const uniqueL = Array.from(new Map(lRows.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).map((r: any[]) => {
-        const whGroup = String(r[0] || '');
-        const nama = String(r[1] || whGroup);
-        return [nama, { whGroup, nama, deskripsi: String(r[2] || ''), whType: String(r[3] || ''), area: String(r[4] || '') }];
-      })).values());
+      const uniqueP = Array.from(new Map(
+        pRows
+          .filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A')
+          .map((r: any[]) => [String(r[0]), { kode: String(r[0]), nama: String(r[1] || ''), satuan: String(r[2] || ''), kategori: '' }])
+      ).values());
+      const uniqueL = Array.from(new Map(
+        lRows
+          .filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A')
+          .map((r: any[]) => {
+            const whGroup = String(r[0] || '');
+            const nama = String(r[1] || whGroup);
+            return [nama, { whGroup, nama, deskripsi: String(r[2] || ''), whType: String(r[3] || ''), area: String(r[4] || '') }];
+          })
+      ).values());
 
       setProducts(uniqueP as Product[]);
       setLocators(uniqueL as Locator[]);
@@ -345,15 +375,43 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, selectedLocator, selectedLocatorTo, startDate, endDate]);
+  }, [search, selectedProduct, selectedLocator, selectedLocatorTo, startDate, endDate]);
+
+  const uniqueProducts = useMemo(() => {
+    const map = new Map<string, { kodeProduk: string; namaProduk: string }>();
+    transactions.forEach((t) => {
+      if (t.namaBahan || t.kodeProduk) {
+        const key = `${t.kodeProduk || ''}__${t.namaBahan || ''}`;
+        if (!map.has(key)) {
+          map.set(key, { kodeProduk: t.kodeProduk, namaProduk: t.namaBahan });
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.namaProduk.localeCompare(b.namaProduk)
+    );
+  }, [transactions]);
+
+  const productSuggestions = useMemo(() => {
+    if (!search || search.trim().length === 0) return [];
+    const term = search.toLowerCase();
+    return uniqueProducts
+      .filter(
+        (p) =>
+          p.namaProduk.toLowerCase().includes(term) ||
+          p.kodeProduk.toLowerCase().includes(term)
+      )
+      .slice(0, 15);
+  }, [search, uniqueProducts]);
 
   const filtered = transactions.filter(t => {
-    const matchesSearch = 
-      t.kodeProduk.toLowerCase().includes(search.toLowerCase()) || 
-      t.namaBahan.toLowerCase().includes(search.toLowerCase()) || 
-      t.locator.toLowerCase().includes(search.toLowerCase()) ||
-      t.noDocument.toLowerCase().includes(search.toLowerCase()) ||
-      t.keterangan.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = selectedProduct
+      ? t.kodeProduk === selectedProduct.kodeProduk
+      : t.kodeProduk.toLowerCase().includes(search.toLowerCase()) || 
+        t.namaBahan.toLowerCase().includes(search.toLowerCase()) || 
+        t.locator.toLowerCase().includes(search.toLowerCase()) ||
+        t.noDocument.toLowerCase().includes(search.toLowerCase()) ||
+        t.keterangan.toLowerCase().includes(search.toLowerCase());
 
     const matchesLocator = 
       selectedLocator === 'ALL' || 
@@ -801,9 +859,56 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
         {/* Filters Panel */}
         <div className="p-5 border-b border-slate-100 bg-slate-50/50 space-y-4">
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-            <div className="relative max-w-sm w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input type="text" placeholder="Cari transaksi..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none shadow-sm bg-white" />
+            <div ref={dropdownRef} className="relative max-w-sm w-full z-30">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input 
+                type="text" 
+                placeholder="Cari transaksi, kode/nama produk..." 
+                value={search} 
+                onChange={e => {
+                  const val = e.target.value;
+                  setSearch(val);
+                  setShowDropdown(true);
+                  if (selectedProduct && val !== selectedProduct.namaProduk) {
+                    setSelectedProduct(null);
+                  }
+                }} 
+                onFocus={() => setShowDropdown(true)}
+                className="w-full pl-9 pr-8 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none shadow-sm bg-white" 
+              />
+              {search && (
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setSelectedProduct(null);
+                    setShowDropdown(false);
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 border-none bg-transparent cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              {showDropdown && productSuggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-50 divide-y divide-slate-100">
+                  {productSuggestions.map((p, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="w-full text-left px-3.5 py-2 hover:bg-slate-50 flex flex-col focus:outline-none transition-colors border-none cursor-pointer text-slate-700 bg-transparent"
+                      onClick={() => {
+                        setSelectedProduct(p);
+                        setSearch(p.namaProduk);
+                        setShowDropdown(false);
+                      }}
+                    >
+                      <span className="font-semibold text-slate-800 text-xs block truncate max-w-full" title={p.namaProduk}>{p.namaProduk}</span>
+                      <span className="font-mono text-[10px] text-slate-400 mt-0.5 block truncate max-w-full" title={p.kodeProduk}>{p.kodeProduk}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Date range inputs */}
