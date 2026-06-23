@@ -35,6 +35,19 @@ interface DiscrepancyItem {
   qtyFisik: number;
   qtySistem: number;
   selisih: number;
+  source: string;
+}
+
+interface CompiledStockItem {
+  area: string;
+  locator: string;
+  pCode: string;
+  pName: string;
+  uom: string;
+  qtyFisik: number;
+  qtySistem: number;
+  selisih: number;
+  source: string;
 }
 
 function parseToIsoDate(dtStr: string): string {
@@ -123,8 +136,8 @@ export default function AkurasiStock() {
     return `${now.getFullYear()}-${mm}`;
   });
 
-  const [allAreaSummary, setAllAreaSummary] = useState<AccuracySummary[]>([]);
-  const [allDiscrepancies, setAllDiscrepancies] = useState<DiscrepancyItem[]>([]);
+  const [allStockItems, setAllStockItems] = useState<CompiledStockItem[]>([]);
+  const [selectedSourceFilter, setSelectedSourceFilter] = useState('ALL'); // ALL, INPUT, INPUT RM, INPUT MFG, INPUT SUPPLIES
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Search filter for differences table
@@ -194,8 +207,7 @@ export default function AkurasiStock() {
       }
 
       // 2. Load all transactions, products, and locators from each area
-      const summaryList: AccuracySummary[] = [];
-      const discrepancyList: DiscrepancyItem[] = [];
+      const compiledItems: CompiledStockItem[] = [];
 
       const urlEntries = Object.entries(AREA_URLS);
 
@@ -267,8 +279,8 @@ export default function AkurasiStock() {
                 if (!fromLocator && !toLocator) fromLocator = 'UNKNOWN_L';
 
                 if (tipe === 'TRANSFER' || tipe === 'TF') {
-                  rawTransactions.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || 'UNKNOWN_L', qty, uom, tanggal });
-                  rawTransactions.push({ tipe: 'IN', pCode, pName, lCode: toLocator || 'UNKNOWN_L', qty, uom, tanggal });
+                  rawTransactions.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || 'UNKNOWN_L', qty, uom, tanggal, source: sourceSheet });
+                  rawTransactions.push({ tipe: 'IN', pCode, pName, lCode: toLocator || 'UNKNOWN_L', qty, uom, tanggal, source: sourceSheet });
                 } else {
                   rawTransactions.push({ 
                     tipe: tipe || 'IN', 
@@ -277,7 +289,8 @@ export default function AkurasiStock() {
                     lCode: fromLocator || toLocator || 'UNKNOWN_L', 
                     qty, 
                     uom,
-                    tanggal
+                    tanggal,
+                    source: sourceSheet
                   });
                 }
               });
@@ -289,10 +302,10 @@ export default function AkurasiStock() {
             processBranchRows(ts, 'INPUT SUPPLIES');
 
             // Compile stats for this area using reconciliation maps
-            const areaStocksMap = new Map<string, { key: string; lCode: string; pCode: string; pName: string; uom: string; physicalQty: number }>();
+            const areaStocksMap = new Map<string, { key: string; lCode: string; pCode: string; pName: string; uom: string; physicalQty: number; source: string }>();
 
             rawTransactions.forEach(t => {
-              const { tipe, pCode, pName, lCode, qty, uom, tanggal } = t;
+              const { tipe, pCode, pName, lCode, qty, uom, tanggal, source } = t;
               const itemKey = `${lCode}_${pCode}`;
 
               let includeInCumulative = false;
@@ -312,7 +325,8 @@ export default function AkurasiStock() {
                     pCode: pCode === pName ? '' : pCode,
                     pName: pData.nama,
                     uom: pData.satuan || uom || 'Pcs',
-                    physicalQty: 0
+                    physicalQty: 0,
+                    source: source || 'INPUT'
                   });
                 }
 
@@ -331,10 +345,6 @@ export default function AkurasiStock() {
               }
             });
 
-            // Convert to statistics
-            let areaTotalSku = 0;
-            let areaTotalSelisih = 0;
-
             areaStocksMap.forEach(item => {
               const locKey = item.lCode.toUpperCase().trim();
               const pCodeUpper = item.pCode.toUpperCase().trim();
@@ -350,31 +360,18 @@ export default function AkurasiStock() {
               }
 
               const diff = item.physicalQty - systemQty;
-              areaTotalSku += 1;
 
-              if (diff !== 0) {
-                areaTotalSelisih += 1;
-                discrepancyList.push({
-                  area: aName,
-                  locator: item.lCode,
-                  namaBahan: item.pName,
-                  uom: item.uom,
-                  qtyFisik: item.physicalQty,
-                  qtySistem: systemQty,
-                  selisih: diff
-                });
-              }
-            });
-
-            const accuracy = areaTotalSku > 0 
-              ? Math.max(0, Math.min(100, Math.round(((areaTotalSku - areaTotalSelisih) / areaTotalSku) * 100))) 
-              : 100;
-
-            summaryList.push({
-              area: aName,
-              totalSku: areaTotalSku,
-              totalSelisih: areaTotalSelisih,
-              accuracyPercent: accuracy
+              compiledItems.push({
+                area: aName,
+                locator: item.lCode,
+                pCode: item.pCode,
+                pName: item.pName,
+                uom: item.uom,
+                qtyFisik: item.physicalQty,
+                qtySistem: systemQty,
+                selisih: diff,
+                source: item.source
+              });
             });
 
           } catch (err) {
@@ -383,12 +380,7 @@ export default function AkurasiStock() {
         })
       );
 
-      // Sort summaryList based on search order of AREAS
-      const order = Object.keys(AREA_URLS);
-      summaryList.sort((a, b) => order.indexOf(a.area) - order.indexOf(b.area));
-
-      setAllAreaSummary(summaryList);
-      setAllDiscrepancies(discrepancyList);
+      setAllStockItems(compiledItems);
 
     } catch (err: any) {
       console.error(err);
@@ -401,6 +393,80 @@ export default function AkurasiStock() {
   useEffect(() => {
     loadData();
   }, [reconType, selectedDate, selectedMonth]);
+
+  // Derived states
+  const categoryCounts = useMemo(() => {
+    const counts = {
+      ALL: allStockItems.length,
+      INPUT: allStockItems.filter(i => i.source === 'INPUT').length,
+      'INPUT RM': allStockItems.filter(i => i.source === 'INPUT RM').length,
+      'INPUT MFG': allStockItems.filter(i => i.source === 'INPUT MFG').length,
+      'INPUT SUPPLIES': allStockItems.filter(i => i.source === 'INPUT SUPPLIES').length,
+    };
+    return counts;
+  }, [allStockItems]);
+
+  const filteredStockItems = useMemo(() => {
+    if (selectedSourceFilter === 'ALL') {
+      return allStockItems;
+    }
+    return allStockItems.filter(item => item.source === selectedSourceFilter);
+  }, [allStockItems, selectedSourceFilter]);
+
+  const allAreaSummary = useMemo(() => {
+    const order = Object.keys(AREA_URLS);
+    const areaGroups = new Map<string, { totalSku: number; totalSelisih: number }>();
+    
+    order.forEach(areaName => {
+      areaGroups.set(areaName, { totalSku: 0, totalSelisih: 0 });
+    });
+
+    filteredStockItems.forEach(item => {
+      const g = areaGroups.get(item.area);
+      if (g) {
+        g.totalSku += 1;
+        if (item.selisih !== 0) {
+          g.totalSelisih += 1;
+        }
+      } else {
+        areaGroups.set(item.area, {
+          totalSku: 1,
+          totalSelisih: item.selisih !== 0 ? 1 : 0
+        });
+      }
+    });
+
+    const summaryList: AccuracySummary[] = [];
+    areaGroups.forEach((stats, areaName) => {
+      const accuracy = stats.totalSku > 0
+        ? Math.max(0, Math.min(100, Math.round(((stats.totalSku - stats.totalSelisih) / stats.totalSku) * 100)))
+        : 100;
+      summaryList.push({
+        area: areaName,
+        totalSku: stats.totalSku,
+        totalSelisih: stats.totalSelisih,
+        accuracyPercent: accuracy
+      });
+    });
+
+    summaryList.sort((a, b) => order.indexOf(a.area) - order.indexOf(b.area));
+    return summaryList;
+  }, [filteredStockItems]);
+
+  const allDiscrepancies = useMemo(() => {
+    return filteredStockItems
+      .filter(item => item.selisih !== 0)
+      .map(item => ({
+        area: item.area,
+        locator: item.locator,
+        namaBahan: item.pName,
+        uom: item.uom,
+        qtyFisik: item.qtyFisik,
+        qtySistem: item.qtySistem,
+        selisih: item.selisih,
+        source: item.source
+      }));
+  }, [filteredStockItems]);
 
   const exportDiscrepanciesToExcel = () => {
     try {
@@ -522,6 +588,38 @@ export default function AkurasiStock() {
           >
             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
           </button>
+        </div>
+      </div>
+
+      {/* Category Tabs Menu */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col gap-3">
+        <div className="text-xs font-extrabold text-slate-400 uppercase tracking-widest block">Kategori Akurasi Stock</div>
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { id: 'ALL', label: 'Semua Kategori (All)', count: categoryCounts.ALL, activeClass: 'bg-slate-900 text-white border-slate-900 ring-slate-900' },
+            { id: 'INPUT', label: 'Accessories', count: categoryCounts.INPUT, activeClass: 'bg-blue-600 text-white border-blue-600 ring-blue-600' },
+            { id: 'INPUT RM', label: 'Raw Material', count: categoryCounts['INPUT RM'], activeClass: 'bg-emerald-600 text-white border-emerald-600 ring-emerald-600' },
+            { id: 'INPUT MFG', label: 'Manufacturing', count: categoryCounts['INPUT MFG'], activeClass: 'bg-purple-600 text-white border-purple-600 ring-purple-600' },
+            { id: 'INPUT SUPPLIES', label: 'Supplies & GA', count: categoryCounts['INPUT SUPPLIES'], activeClass: 'bg-amber-600 text-white border-amber-600 ring-amber-600' },
+          ].map(cat => {
+            const isActive = selectedSourceFilter === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedSourceFilter(cat.id)}
+                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer flex items-center gap-2 ${
+                  isActive
+                    ? `${cat.activeClass} shadow-sm ring-1`
+                    : 'border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 shadow-sm'
+                }`}
+              >
+                <span>{cat.label}</span>
+                <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${isActive ? 'bg-white/20 text-white font-bold' : 'bg-slate-100 text-slate-600 font-medium'}`}>
+                  {cat.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
