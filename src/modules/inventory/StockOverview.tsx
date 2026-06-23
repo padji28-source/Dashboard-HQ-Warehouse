@@ -485,26 +485,9 @@ export default function StockOverview({
   }, [stockSummary, selectedLocators]);
 
   const skuWithNoMovementCount = useMemo(() => {
-    // 1. Get the set of all product codes in the active stockSummary
-    const activeProductCodes = new Set<string>();
-    stockSummary.forEach((s) => {
-      if (s.kodeProduk) {
-        activeProductCodes.add(s.kodeProduk.toUpperCase().trim());
-      }
-    });
-
-    // 2. Count products in productsMap that are not in that set
-    let count = 0;
-    productsMap.forEach((name, code) => {
-      if (code) {
-        const codeClean = code.toUpperCase().trim();
-        if (!activeProductCodes.has(codeClean)) {
-          count++;
-        }
-      }
-    });
-    return count;
-  }, [stockSummary, productsMap]);
+    // 1. Filter rows in currently active stockSummary where totalOut is 0 (no out transactions)
+    return stockSummary.filter((s) => s.totalOut === 0).length;
+  }, [stockSummary]);
 
   const uniqueLocators = useMemo(
     () =>
