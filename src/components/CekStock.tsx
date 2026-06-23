@@ -383,18 +383,61 @@ export default function CekStock({ spreadsheetId, area }: Props) {
       if (selectedSource !== "ALL" && t.source !== selectedSource) {
         return;
       }
+
+      // Apply locator filter if active
+      const lCodeClean = t.lCode.toUpperCase().trim();
+      if (selectedLocators.length > 0 && !selectedLocators.includes(lCodeClean)) {
+        return;
+      }
+
+      // Apply search query filter if active
+      if (search.trim() !== "") {
+        const q = search.toLowerCase().trim();
+        const pCodeClean = t.pCode.toLowerCase().trim();
+        const pName = (productsMap.get(t.pCode.toUpperCase().trim()) || t.pName).toLowerCase().trim();
+        const lName = (locatorsMap.get(lCodeClean)?.nama || t.lCode).toLowerCase().trim();
+        const lCodeLower = t.lCode.toLowerCase().trim();
+
+        const matches =
+          pCodeClean.includes(q) ||
+          pName.includes(q) ||
+          lCodeLower.includes(q) ||
+          lName.includes(q);
+
+        if (!matches) {
+          return;
+        }
+      }
+
       const tArea = t.area || area;
       if (chartMap[tArea]) {
-        if (t.tipe === "IN") {
+        const normalizedTipe = t.tipe.replace(/\s+/g, "");
+
+        if (
+          normalizedTipe === "IN" ||
+          normalizedTipe === "AWAL" ||
+          normalizedTipe === "MASUK" ||
+          normalizedTipe === "RECEIPT" ||
+          normalizedTipe === "SALDOAWAL"
+        ) {
           chartMap[tArea]["Qty In"] += t.qty;
-        } else if (t.tipe === "OUT") {
+        } else if (
+          normalizedTipe === "OUT" ||
+          normalizedTipe === "KELUAR" ||
+          normalizedTipe === "ISSUE" ||
+          normalizedTipe === "PEMAKAIAN"
+        ) {
           chartMap[tArea]["Qty Out"] += t.qty;
+        } else {
+          if (t.qty > 0) {
+            chartMap[tArea]["Qty In"] += t.qty;
+          }
         }
       }
     });
 
     return Object.values(chartMap).filter((d) => d["Qty In"] > 0 || d["Qty Out"] > 0);
-  }, [allTransactions, selectedSource, area]);
+  }, [allTransactions, selectedSource, selectedLocators, search, productsMap, locatorsMap, area]);
 
   // Table filtering and search
   const filteredTableData = useMemo(() => {
