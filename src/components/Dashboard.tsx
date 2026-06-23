@@ -9,6 +9,7 @@ import MtsData from './MtsData';
 import WhatsAppConsole from '../modules/whatsapp/WhatsAppConsole';
 import AkurasiStock from './AkurasiStock';
 import Pengepokan from './Pengepokan';
+import CekStock from './CekStock';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AREAS } from '../App';
@@ -26,7 +27,7 @@ interface Props {
 }
 
 export default function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange }: Props) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
 
@@ -35,6 +36,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
 
   const mainTabs = [
     { id: 'stock', label: 'Stock Overview', icon: LayoutDashboard },
+    { id: 'cek_stock', label: 'Cek Stock', icon: Package },
     ...(isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
     ...(area === 'All Cabang' ? [
       { id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 },
@@ -263,6 +265,9 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
         <div className="w-full">
           <div className={cn(safeActiveTab !== 'stock' && 'hidden')}>
             <StockOverview spreadsheetId={spreadsheetId} area={area} />
+          </div>
+          <div className={cn(safeActiveTab !== 'cek_stock' && 'hidden')}>
+            <CekStock spreadsheetId={spreadsheetId} area={area} />
           </div>
           <div className={cn(safeActiveTab !== 'pencocokan' && 'hidden')}>
             <PencocokanData spreadsheetId={spreadsheetId} area={area} />
