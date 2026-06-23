@@ -154,9 +154,33 @@ export default function AkurasiStock() {
       const mtsMap = new Map<string, number>();
 
       try {
-        const resMts = await fetch(csvUrl);
-        if (resMts.ok) {
-          const textMts = await resMts.text();
+        let textMts = '';
+        let fetchedSuccess = false;
+        try {
+          const resMts = await fetch(csvUrl);
+          if (resMts.ok) {
+            const contentType = resMts.headers.get('content-type') || '';
+            if (contentType.includes('text/html')) {
+              throw new Error('API returned HTML page (static host route mismatch)');
+            }
+            textMts = await resMts.text();
+            fetchedSuccess = true;
+          } else {
+            throw new Error(`HTTP ${resMts.status}`);
+          }
+        } catch (apiErr) {
+          console.warn('Backend proxy /api/mts failed style or failed route, fetching directly from Google Sheets...', apiErr);
+          const directMtsUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv';
+          const directRes = await fetch(directMtsUrl);
+          if (directRes.ok) {
+            textMts = await directRes.text();
+            fetchedSuccess = true;
+          } else {
+            console.error('Failed to fetch MTS directly from Google Sheets as well:', directRes.status);
+          }
+        }
+
+        if (fetchedSuccess && textMts) {
           const parsedMts = Papa.parse<string[]>(textMts, { skipEmptyLines: true });
           const dataMts = parsedMts.data || [];
           
@@ -677,57 +701,112 @@ export default function AkurasiStock() {
         </div>
       ) : (
         <>
-          {/* Chart Section */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
-            <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-indigo-500" />
-              Grafik Komparasi Akurasi dan Jumlah SKU per Cabang
-            </h3>
-            
-            <div className="w-full h-80 sm:h-96">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={allAreaSummary} margin={{ top: 20, right: 10, left: 10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis 
-                    dataKey="area" 
-                    tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                  />
-                  <YAxis 
-                    yAxisId="left" 
-                    tick={{ fill: '#64748b', fontSize: 11 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    label={{ value: 'Jumlah SKU', angle: -90, position: 'insideLeft', style: { fill: '#64748b', fontSize: 11, fontWeight: 500 } }}
-                  />
-                  <YAxis 
-                    yAxisId="right" 
-                    orientation="right" 
-                    domain={[0, 100]}
-                    tick={{ fill: '#059669', fontSize: 11 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    label={{ value: 'Akurasi (%)', angle: 90, position: 'insideRight', style: { fill: '#059669', fontSize: 11, fontWeight: 500 } }}
-                  />
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '12px', borderColor: '#e2e8f0', boxShadow: '0 4px 12px -2px rgba(0,0,0,0.05)' }} 
-                    formatter={(value: any, name: string) => {
-                      if (name === 'accuracyPercent') return [`${value}%`, 'Akurasi Stock'];
-                      if (name === 'totalSku') return [`${value} SKU`, 'Total SKU'];
-                      if (name === 'totalSelisih') return [`${value} SKU`, 'Total Selisih'];
-                      return [value, name];
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12, fontWeight: 500 }} />
-                  <Bar yAxisId="left" dataKey="totalSku" name="totalSku" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={26} />
-                  <Bar yAxisId="left" dataKey="totalSelisih" name="totalSelisih" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={26} />
-                  <Line yAxisId="right" type="monotone" dataKey="accuracyPercent" name="accuracyPercent" stroke="#10b981" strokeWidth={3} dot={{ r: 4, stroke: '#10b981', strokeWidth: 2, fill: '#fff' }} />
-                </ComposedChart>
-              </ResponsiveContainer>
+          {/* Multi-Area Accuracy Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Table of Branch Accuracy */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm lg:col-span-5 flex flex-col justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2">
+                  <Percent className="w-5 h-5 text-emerald-500" />
+                  Akurasi per Cabang / Area
+                </h3>
+                <p className="text-xs text-slate-400 mb-4 font-semibold">Tingkat akurasi pencocokan fisik vs data sistem</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold text-[10px] uppercase tracking-wider">
+                        <th className="px-3 py-2.5">Cabang</th>
+                        <th className="px-3 py-2.5 text-center">Total SKU</th>
+                        <th className="px-3 py-2.5 text-center">Selisih</th>
+                        <th className="px-3 py-2.5 text-right">Akurasi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-150 font-semibold text-xs text-slate-700">
+                      {allAreaSummary.map((item, idx) => {
+                        const isHigh = item.accuracyPercent >= 95;
+                        const isMid = item.accuracyPercent >= 90 && item.accuracyPercent < 95;
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/50 transition">
+                            <td className="px-3 py-2.5 font-bold text-slate-800 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                              {item.area}
+                            </td>
+                            <td className="px-3 py-2.5 text-center text-slate-600 font-mono">{item.totalSku}</td>
+                            <td className="px-3 py-2.5 text-center font-mono">
+                              <span className={item.totalSelisih > 0 ? "text-rose-500" : "text-emerald-600"}>
+                                {item.totalSelisih}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-black font-mono">
+                              <span className={cn(
+                                "px-2 py-0.5 rounded-md",
+                                isHigh ? "bg-emerald-50 text-emerald-600" :
+                                isMid ? "bg-amber-50 text-amber-600" : "bg-rose-50 text-rose-600"
+                              )}>
+                                {item.accuracyPercent}%
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-            
-            <div className="mt-3 flex flex-wrap gap-4 text-xs font-semibold text-slate-500 justify-center">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-indigo-500 rounded-full inline-block"></span> Total SKU Terdaftar</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-rose-500 rounded-full inline-block"></span> SKU Selisih (Qty Fisik ≠ Qty Sistem)</span>
-              <span className="flex items-center gap-1.5"><span className="w-3.5 h-0.5 border-t-2 border-emerald-500 inline-block"></span> Persentase Akurasi (%)</span>
+
+            {/* Chart Column */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm lg:col-span-7">
+              <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-indigo-500" />
+                Grafik Komparasi Akurasi dan Jumlah SKU per Cabang
+              </h3>
+              
+              <div className="w-full h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={allAreaSummary} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis 
+                      dataKey="area" 
+                      tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }}
+                      axisLine={{ stroke: '#cbd5e1' }}
+                    />
+                    <YAxis 
+                      yAxisId="left" 
+                      tick={{ fill: '#64748b', fontSize: 10 }}
+                      axisLine={{ stroke: '#cbd5e1' }}
+                      label={{ value: 'Jumlah SKU', angle: -90, position: 'insideLeft', style: { fill: '#64748b', fontSize: 10, fontWeight: 500 } }}
+                    />
+                    <YAxis 
+                      yAxisId="right" 
+                      orientation="right" 
+                      domain={[0, 100]}
+                      tick={{ fill: '#059669', fontSize: 10 }}
+                      axisLine={{ stroke: '#cbd5e1' }}
+                      label={{ value: 'Akurasi (%)', angle: 90, position: 'insideRight', style: { fill: '#059669', fontSize: 10, fontWeight: 500 } }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '12px', borderColor: '#e2e8f0', boxShadow: '0 4px 12px -2px rgba(0,0,0,0.05)' }} 
+                      formatter={(value: any, name: string) => {
+                        if (name === 'accuracyPercent') return [`${value}%`, 'Akurasi Stock'];
+                        if (name === 'totalSku') return [`${value} SKU`, 'Total SKU'];
+                        if (name === 'totalSelisih') return [`${value} SKU`, 'Total Selisih'];
+                        return [value, name];
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11, fontWeight: 500 }} />
+                    <Bar yAxisId="left" dataKey="totalSku" name="totalSku" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar yAxisId="left" dataKey="totalSelisih" name="totalSelisih" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Line yAxisId="right" type="monotone" dataKey="accuracyPercent" name="accuracyPercent" stroke="#10b981" strokeWidth={3} dot={{ r: 3, stroke: '#10b981', strokeWidth: 2, fill: '#fff' }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              
+              <div className="mt-3 flex flex-wrap gap-4 text-[10px] font-semibold text-slate-500 justify-center">
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-indigo-500 rounded-full inline-block"></span> Total SKU Terdaftar</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-rose-500 rounded-full inline-block"></span> SKU Selisih (Qty Fisik ≠ Qty Sistem)</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-0.5 border-t-2 border-emerald-500 inline-block"></span> Persentase Akurasi (%)</span>
+              </div>
             </div>
           </div>
 

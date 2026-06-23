@@ -26,18 +26,39 @@ export default function MtsData() {
       setLoading(true);
       setError(null);
       
-      const res = await fetch(csvUrl);
-      if (!res.ok) {
-        throw new Error(`Gagal mengunduh file: HTTP ${res.status}`);
+      let text = '';
+      let fetchedSuccess = false;
+      
+      try {
+        const res = await fetch(csvUrl);
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('text/html')) {
+            throw new Error('Server returned HTML page (static host route mismatch)');
+          }
+          text = await res.text();
+          fetchedSuccess = true;
+        } else {
+          throw new Error(`HTTP ${res.status}`);
+        }
+      } catch (clientErr) {
+        console.warn('Backend proxy /api/mts failed, fetching directly from Google Sheets published URL...', clientErr);
+        const directUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv';
+        const resDirect = await fetch(directUrl);
+        if (resDirect.ok) {
+          text = await resDirect.text();
+          fetchedSuccess = true;
+        } else {
+          throw new Error(`Gagal mengunduh file dari server & Google Sheets: HTTP ${resDirect.status}`);
+        }
       }
       
-      const text = await res.text();
+      if (!fetchedSuccess || !text) {
+        throw new Error('Data sheet kosong atau gagal diunduh.');
+      }
+
       const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
       const data = parsed.data;
-
-      if (!data || data.length === 0) {
-        throw new Error('Data sheet kosong.');
-      }
 
       let headerIndex = 0;
       for (let i = 0; i < Math.min(10, data.length); i++) {

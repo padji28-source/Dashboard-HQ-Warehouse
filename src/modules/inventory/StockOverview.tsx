@@ -453,20 +453,58 @@ export default function StockOverview({
 
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedLocator, setSelectedLocator] = useState("");
+  const [selectedLocators, setSelectedLocators] = useState<string[]>([]);
+  const [locatorDropdownOpen, setLocatorDropdownOpen] = useState(false);
+  const [locatorSearch, setLocatorSearch] = useState("");
+  const locatorDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (locatorDropdownRef.current && !locatorDropdownRef.current.contains(event.target as Node)) {
+        setLocatorDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, selectedLocator]);
+  }, [search, selectedLocators]);
 
   useEffect(() => {
-    if (
-      selectedLocator &&
-      !stockSummary.some((s) => s.whGroup === selectedLocator)
-    ) {
-      setSelectedLocator("");
+    if (selectedLocators.length > 0) {
+      const validLocators = new Set(stockSummary.map((s) => s.whGroup));
+      const pruned = selectedLocators.filter((loc) => validLocators.has(loc));
+      if (pruned.length !== selectedLocators.length) {
+        setSelectedLocators(pruned);
+      }
     }
-  }, [stockSummary, selectedLocator]);
+  }, [stockSummary, selectedLocators]);
+
+  const skuWithNoMovementCount = useMemo(() => {
+    // 1. Get the set of all product codes in the active stockSummary
+    const activeProductCodes = new Set<string>();
+    stockSummary.forEach((s) => {
+      if (s.kodeProduk) {
+        activeProductCodes.add(s.kodeProduk.toUpperCase().trim());
+      }
+    });
+
+    // 2. Count products in productsMap that are not in that set
+    let count = 0;
+    productsMap.forEach((name, code) => {
+      if (code) {
+        const codeClean = code.toUpperCase().trim();
+        if (!activeProductCodes.has(codeClean)) {
+          count++;
+        }
+      }
+    });
+    return count;
+  }, [stockSummary, productsMap]);
 
   const uniqueLocators = useMemo(
     () =>
@@ -517,7 +555,7 @@ export default function StockOverview({
         s.namaLocator.toLowerCase().includes(search.toLowerCase());
 
     const matchLocator =
-      selectedLocator === "" || s.whGroup === selectedLocator;
+      selectedLocators.length === 0 || selectedLocators.includes(s.whGroup);
 
     return matchSearch && matchLocator;
   });
@@ -589,7 +627,7 @@ export default function StockOverview({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
         <div className="border border-slate-200 bg-white rounded-xl p-6 flex items-center gap-4 shadow-sm">
           <div className="w-12 h-12 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center shrink-0">
             <Package className="w-5 h-5 text-blue-600" />
@@ -599,10 +637,10 @@ export default function StockOverview({
               const total = stockSummary.reduce((acc, s) => acc + s.stock, 0);
               return (
                 <h3
-                  className={cn(
-                    "text-2xl font-bold tracking-tight text-slate-900",
-                    total < 0 && "text-rose-600",
-                  )}
+                   className={cn(
+                     "text-2xl font-bold tracking-tight text-slate-900",
+                     total < 0 && "text-rose-600",
+                   )}
                 >
                   {total.toLocaleString(undefined, {
                     maximumFractionDigits: 2,
@@ -625,7 +663,21 @@ export default function StockOverview({
               {stockSummary.length.toLocaleString()}
             </h3>
             <p className="text-sm font-medium text-slate-500">
-              Total SKU (Items)
+              Total SKU Aktif
+            </p>
+          </div>
+        </div>
+
+        <div className="border border-slate-200 bg-white rounded-xl p-6 flex items-center gap-4 shadow-sm">
+          <div className="w-12 h-12 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center shrink-0">
+            <Package className="w-5 h-5 text-slate-500 opacity-60" />
+          </div>
+          <div>
+            <h3 className="text-2xl font-bold tracking-tight text-slate-600">
+              {skuWithNoMovementCount.toLocaleString()}
+            </h3>
+            <p className="text-sm font-medium text-slate-500">
+              SKU Tanpa Pergerakan
             </p>
           </div>
         </div>
@@ -842,18 +894,115 @@ export default function StockOverview({
               <option value="INPUT MFG">Manufacturing</option>
               <option value="INPUT SUPPLIES">Supplies & GA</option>
             </select>
-            <select
-              value={selectedLocator}
-              onChange={(e) => setSelectedLocator(e.target.value)}
-              className="w-full sm:w-auto px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value="">Semua Locator</option>
-              {uniqueLocators.map((l) => (
-                <option key={l.whGroup} value={l.whGroup}>
-                  {l.nama || l.whGroup}
-                </option>
-              ))}
-            </select>
+            {/* Custom Multi-Select Locator Dropdown */}
+            <div ref={locatorDropdownRef} className="relative w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setLocatorDropdownOpen(!locatorDropdownOpen)}
+                className="w-full sm:w-auto px-4 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between gap-2 text-left cursor-pointer hover:bg-slate-50 transition-all font-semibold text-slate-700 min-w-[160px]"
+              >
+                <span>
+                  {selectedLocators.length === 0
+                    ? "Semua Locator"
+                    : `${selectedLocators.length} Locator terpilih`}
+                </span>
+                <svg className="w-4 h-4 text-slate-400 font-bold shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {locatorDropdownOpen && (
+                <div className="absolute right-0 mt-1.5 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-20 flex flex-col p-3 gap-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="flex items-center gap-1.5 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50">
+                    <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Cari locator..."
+                      value={locatorSearch}
+                      onChange={(e) => setLocatorSearch(e.target.value)}
+                      className="w-full text-xs bg-transparent outline-none border-none text-slate-800"
+                    />
+                    {locatorSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setLocatorSearch("")}
+                        className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 border-b border-slate-100 pb-1.5 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedLocators(uniqueLocators.map((l) => l.whGroup))}
+                      className="hover:text-blue-600 transition cursor-pointer"
+                    >
+                      Pilih Semua
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedLocators([])}
+                      className="hover:text-rose-600 transition cursor-pointer"
+                    >
+                      Kosongkan ({selectedLocators.length})
+                    </button>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto flex flex-col gap-1 pr-1">
+                    {(() => {
+                      const list = uniqueLocators.filter((l) => {
+                        const sClean = locatorSearch.toLowerCase();
+                        return (
+                          l.whGroup.toLowerCase().includes(sClean) ||
+                          l.nama.toLowerCase().includes(sClean)
+                        );
+                      });
+
+                      if (list.length === 0) {
+                        return (
+                          <div className="text-center py-4 text-xs text-slate-400">
+                            Tidak ada locator ditemukan
+                          </div>
+                        );
+                      }
+
+                      return list.map((l) => {
+                        const isChecked = selectedLocators.includes(l.whGroup);
+                        return (
+                          <label
+                            key={l.whGroup}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer text-xs font-semibold select-none text-slate-700"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (isChecked) {
+                                  setSelectedLocators(
+                                    selectedLocators.filter((item) => item !== l.whGroup)
+                                  );
+                                } else {
+                                  setSelectedLocators([...selectedLocators, l.whGroup]);
+                                }
+                              }}
+                              className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 cursor-pointer"
+                            />
+                            <div className="flex flex-col text-left">
+                              <span className="font-bold text-slate-900 font-mono text-[11px]">{l.whGroup}</span>
+                              {l.nama && l.nama !== l.whGroup && (
+                                <span className="text-[10px] text-slate-400 leading-tight font-medium">{l.nama}</span>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
             <div ref={dropdownRef} className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input

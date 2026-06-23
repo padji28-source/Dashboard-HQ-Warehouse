@@ -291,9 +291,33 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       const mtsMap = new Map<string, number>();
       
       try {
-        const resMts = await fetch(csvUrl);
-        if (resMts.ok) {
-          const textMts = await resMts.text();
+        let textMts = '';
+        let fetchedSuccess = false;
+        try {
+          const resMts = await fetch(csvUrl);
+          if (resMts.ok) {
+            const contentType = resMts.headers.get('content-type') || '';
+            if (contentType.includes('text/html')) {
+              throw new Error('API returned HTML page (static host route mismatch)');
+            }
+            textMts = await resMts.text();
+            fetchedSuccess = true;
+          } else {
+            throw new Error(`HTTP ${resMts.status}`);
+          }
+        } catch (apiErr) {
+          console.warn('Backend proxy /api/mts failed, fetching directly from Google Sheets...', apiErr);
+          const directMtsUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv';
+          const directRes = await fetch(directMtsUrl);
+          if (directRes.ok) {
+            textMts = await directRes.text();
+            fetchedSuccess = true;
+          } else {
+            console.error('Failed to fetch MTS directly from Google Sheets as well:', directRes.status);
+          }
+        }
+
+        if (fetchedSuccess && textMts) {
           const parsedMts = Papa.parse<string[]>(textMts, { skipEmptyLines: true });
           const dataMts = parsedMts.data || [];
           
