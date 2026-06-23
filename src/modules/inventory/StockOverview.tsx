@@ -529,23 +529,25 @@ export default function StockOverview({
       .slice(0, 15);
   }, [search, uniqueProducts]);
 
-  const filtered = stockSummary.filter((s) => {
-    const matchSearch = selectedProduct
-      ? s.kodeProduk === selectedProduct.kodeProduk
-      : s.kodeProduk.toLowerCase().includes(search.toLowerCase()) ||
-        s.namaProduk.toLowerCase().includes(search.toLowerCase()) ||
-        s.whGroup.toLowerCase().includes(search.toLowerCase()) ||
-        s.namaLocator.toLowerCase().includes(search.toLowerCase());
+  const filtered = useMemo(() => {
+    return stockSummary.filter((s) => {
+      const matchSearch = selectedProduct
+        ? s.kodeProduk === selectedProduct.kodeProduk
+        : s.kodeProduk.toLowerCase().includes(search.toLowerCase()) ||
+          s.namaProduk.toLowerCase().includes(search.toLowerCase()) ||
+          s.whGroup.toLowerCase().includes(search.toLowerCase()) ||
+          s.namaLocator.toLowerCase().includes(search.toLowerCase());
 
-    const matchLocator =
-      selectedLocators.length === 0 || selectedLocators.includes(s.whGroup);
+      const matchLocator =
+        selectedLocators.length === 0 || selectedLocators.includes(s.whGroup);
 
-    return matchSearch && matchLocator;
-  });
+      return matchSearch && matchLocator;
+    });
+  }, [stockSummary, selectedProduct, search, selectedLocators]);
 
   const topItems = useMemo(() => {
     const byProduct = new Map<string, { name: string; stock: number }>();
-    stockSummary.forEach((s) => {
+    filtered.forEach((s) => {
       const existing = byProduct.get(s.kodeProduk);
       if (existing) existing.stock += s.stock;
       else byProduct.set(s.kodeProduk, { name: s.namaProduk, stock: s.stock });
@@ -557,11 +559,11 @@ export default function StockOverview({
         ...d,
         name: d.name.length > 15 ? d.name.substring(0, 15) + "..." : d.name,
       }));
-  }, [stockSummary]);
+  }, [filtered]);
 
   const topOutItems = useMemo(() => {
     const byProduct = new Map<string, { name: string; totalOut: number }>();
-    stockSummary.forEach((s) => {
+    filtered.forEach((s) => {
       if (s.totalOut > 0) {
         const existing = byProduct.get(s.kodeProduk);
         if (existing) existing.totalOut += s.totalOut;
@@ -579,7 +581,7 @@ export default function StockOverview({
         ...d,
         name: d.name.length > 15 ? d.name.substring(0, 15) + "..." : d.name,
       }));
-  }, [stockSummary]);
+  }, [filtered]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paginated = filtered.slice(
