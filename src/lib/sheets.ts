@@ -86,7 +86,7 @@ interface CacheEntry {
   data: any[][];
 }
 const fetchCache = new Map<string, CacheEntry>();
-const CACHE_TTL = 15000; // 15 seconds TTL is plenty for instant tab switches but stays close to reality
+const CACHE_TTL = 300000; // Increased to 5 minutes (300,000 ms) for extreme speed boost and reduced GSheet API load
 
 // Map to store in-flight requests (Request Coalescing)
 const inFlightRequests = new Map<string, Promise<any[][]>>();
@@ -94,21 +94,57 @@ const inFlightRequests = new Map<string, Promise<any[][]>>();
 export function clearSheetCache() {
   fetchCache.clear();
   inFlightRequests.clear();
+  
+  // Clear sessionStorage cached items
+  try {
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < window.sessionStorage.length; i++) {
+        const key = window.sessionStorage.key(i);
+        if (key && key.startsWith("gsheet_cache_")) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((key) => window.sessionStorage.removeItem(key));
+      console.log(`[Cache Clear] Cleaned ${keysToRemove.length} sessionStorage cache items.`);
+    }
+  } catch (e) {
+    console.error("Failed to clear sessionStorage cache", e);
+  }
 }
 
 export async function fetchSheetData(gasUrl: string, range: string, forceFresh = false) {
   const cacheKey = `${gasUrl}||${range}`;
+  const storageKey = `gsheet_cache_${cacheKey}`;
 
-  // 1. Check completed cache (if not forcing fresh)
+  // 1. Check in-memory Cache (if not forcing fresh)
   if (!forceFresh) {
     const cached = fetchCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
-      console.log(`[Cache Hit] Returning cached data for range: ${range}`);
-      return JSON.parse(JSON.stringify(cached.data)); // Return a deep copy to prevent mutation
+      console.log(`[Memory Cache Hit] Returning cached data for range: ${range}`);
+      return JSON.parse(JSON.stringify(cached.data)); // Return deep copy to prevent mutation
+    }
+
+    // 2. Check sessionStorage Cache (if not forcing fresh)
+    try {
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        const stored = window.sessionStorage.getItem(storageKey);
+        if (stored) {
+          const parsed: CacheEntry = JSON.parse(stored);
+          if (Date.now() - parsed.timestamp < CACHE_TTL) {
+            console.log(`[Session Cache Hit] Returning cached data for range: ${range}`);
+            // Warm up in-memory cache
+            fetchCache.set(cacheKey, parsed);
+            return JSON.parse(JSON.stringify(parsed.data));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("sessionStorage retrieval failed:", e);
     }
   }
 
-  // 2. Check if a request for this exact key is already in flight (Coalescing / promise deduplication)
+  // 3. Check if a request for this exact key is already in flight (Coalescing / promise deduplication)
   if (inFlightRequests.has(cacheKey)) {
     console.log(`[Request Coalesced] Awaiting in-flight request for range: ${range}`);
     const inFlightPromise = inFlightRequests.get(cacheKey)!;
@@ -116,7 +152,7 @@ export async function fetchSheetData(gasUrl: string, range: string, forceFresh =
     return JSON.parse(JSON.stringify(data));
   }
 
-  // 3. Define the actual fetch operation (with automatic retries)
+  // 4. Define the actual fetch operation (with automatic retries)
   const fetchPromise = (async () => {
     let attempts = 0;
     const maxAttempts = 3;
@@ -138,8 +174,19 @@ export async function fetchSheetData(gasUrl: string, range: string, forceFresh =
 
         const values = data.values || [];
         
-        // Populate cache
-        fetchCache.set(cacheKey, { timestamp: Date.now(), data: values });
+        // Populate in-memory cache
+        const cacheEntry: CacheEntry = { timestamp: Date.now(), data: values };
+        fetchCache.set(cacheKey, cacheEntry);
+
+        // Populate sessionStorage cache
+        try {
+          if (typeof window !== "undefined" && window.sessionStorage) {
+            window.sessionStorage.setItem(storageKey, JSON.stringify(cacheEntry));
+          }
+        } catch (e) {
+          console.warn("sessionStorage save failed:", e);
+        }
+
         return values;
       } catch (error: any) {
         attempts++;
@@ -155,14 +202,14 @@ export async function fetchSheetData(gasUrl: string, range: string, forceFresh =
     return [];
   })();
 
-  // 4. Save to inFlightRequests map
+  // 5. Save to inFlightRequests map
   inFlightRequests.set(cacheKey, fetchPromise);
 
   try {
     const data = await fetchPromise;
     return JSON.parse(JSON.stringify(data));
   } finally {
-    // 5. Always clean up in-flight request once it's done
+    // 6. Always clean up in-flight request once it's done
     inFlightRequests.delete(cacheKey);
   }
 }

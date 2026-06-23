@@ -383,7 +383,9 @@ export default function AkurasiStock() {
                 systemQty = mtsMap.get(`${locKey}_${pCodeUpper.replace(/\s+/g, '')}`) || 0;
               }
 
-              const diff = item.physicalQty - systemQty;
+              const physicalQty = Math.round(item.physicalQty * 1000) / 1000;
+              const systemQtyRounded = Math.round(systemQty * 1000) / 1000;
+              const diff = Math.round((physicalQty - systemQtyRounded) * 1000) / 1000;
 
               compiledItems.push({
                 area: aName,
@@ -391,8 +393,8 @@ export default function AkurasiStock() {
                 pCode: item.pCode,
                 pName: item.pName,
                 uom: item.uom,
-                qtyFisik: item.physicalQty,
-                qtySistem: systemQty,
+                qtyFisik: physicalQty,
+                qtySistem: systemQtyRounded,
                 selisih: diff,
                 source: item.source
               });
@@ -449,13 +451,13 @@ export default function AkurasiStock() {
       const g = areaGroups.get(item.area);
       if (g) {
         g.totalSku += 1;
-        if (item.selisih !== 0) {
+        if (Math.abs(item.selisih) >= 0.001) {
           g.totalSelisih += 1;
         }
       } else {
         areaGroups.set(item.area, {
           totalSku: 1,
-          totalSelisih: item.selisih !== 0 ? 1 : 0
+          totalSelisih: Math.abs(item.selisih) >= 0.001 ? 1 : 0
         });
       }
     });
@@ -479,7 +481,7 @@ export default function AkurasiStock() {
 
   const allDiscrepancies = useMemo(() => {
     return filteredStockItems
-      .filter(item => item.selisih !== 0)
+      .filter(item => Math.abs(item.selisih) >= 0.001)
       .map(item => ({
         area: item.area,
         locator: item.locator,
