@@ -303,8 +303,7 @@ export default function AkurasiStock() {
                 if (!fromLocator && !toLocator) fromLocator = 'UNKNOWN_L';
 
                 if (tipe === 'TRANSFER' || tipe === 'TF') {
-                  rawTransactions.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || 'UNKNOWN_L', qty, uom, tanggal, source: sourceSheet });
-                  rawTransactions.push({ tipe: 'IN', pCode, pName, lCode: toLocator || 'UNKNOWN_L', qty, uom, tanggal, source: sourceSheet });
+                  rawTransactions.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || toLocator || 'UNKNOWN_L', qty, uom, tanggal, source: sourceSheet });
                 } else {
                   rawTransactions.push({ 
                     tipe: tipe || 'IN', 
@@ -359,7 +358,7 @@ export default function AkurasiStock() {
 
                 if (normType === 'IN' || normType === 'AWAL' || normType === 'MASUK' || normType === 'RECEIPT' || normType === 'SALDOAWAL') {
                   item.physicalQty += qty;
-                } else if (normType === 'OUT' || normType === 'KELUAR' || normType === 'ISSUE' || normType === 'PEMAKAIAN') {
+                } else if (normType === 'OUT' || normType === 'KELUAR' || normType === 'ISSUE' || normType === 'PEMAKAIAN' || normType === 'TRANSFER' || normType === 'TF') {
                   item.physicalQty -= qty;
                 } else {
                   if (qty > 0) {

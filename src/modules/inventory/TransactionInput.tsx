@@ -165,7 +165,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
   };
 
   const handleAddItem = () => {
-    if (!formNamaBahan || !formKodeProduk || !formQty || !formUom || !formLocator) {
+    if (!formNamaBahan.trim() || !formKodeProduk.trim() || !formQty || !formUom.trim() || !formLocator.trim()) {
       alert('Mohon lengkapi Detail Barang (Pilih Produk, Kode, Nama, Satuan, Qty, dan Locator)!');
       return;
     }
@@ -261,7 +261,12 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
       setDropdownOpen(false);
       
       // Reload the main list
-      await loadData(true);
+      try {
+        await loadData(true);
+      } catch (reloadErr) {
+        console.warn("Reload data usai simpan transaksi gagal:", reloadErr);
+      }
+      alert("Transaksi berhasil disimpan!");
     } catch (err: any) {
       alert(`Gagal menyimpan transaksi: ${err.message}`);
     } finally {
@@ -646,7 +651,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Kode Produk *</label>
                   <input 
-                    disabled={selectedProductIndex !== '' && selectedProductIndex !== 'NEW'}
+                    disabled={selectedProductIndex !== '' && selectedProductIndex !== 'NEW' && formKodeProduk.trim() !== ''}
                     type="text" 
                     value={formKodeProduk} 
                     onChange={e => setFormKodeProduk(e.target.value)} 
@@ -659,7 +664,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nama Produk / Bahan *</label>
                   <input 
-                    disabled={selectedProductIndex !== '' && selectedProductIndex !== 'NEW'}
+                    disabled={selectedProductIndex !== '' && selectedProductIndex !== 'NEW' && formNamaBahan.trim() !== ''}
                     type="text" 
                     value={formNamaBahan} 
                     onChange={e => setFormNamaBahan(e.target.value)} 
@@ -672,7 +677,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Satuan (UOM) *</label>
                   <input 
-                    disabled={selectedProductIndex !== '' && selectedProductIndex !== 'NEW'}
+                    disabled={selectedProductIndex !== '' && selectedProductIndex !== 'NEW' && formUom.trim() !== ''}
                     type="text" 
                     value={formUom} 
                     onChange={e => setFormUom(e.target.value)} 
@@ -700,38 +705,40 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                   <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
                     {formTipe === 'TRANSFER' ? 'Locator Asal *' : 'Locator *'}
                   </label>
-                  <select 
+                  <input 
+                    list="locators-list-options"
+                    type="text"
                     value={formLocator} 
                     onChange={e => setFormLocator(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 bg-white text-sm"
-                  >
-                    <option value="">-- Pilih Locator --</option>
-                    {locators.map(loc => (
-                      <option key={`${loc.whGroup}-${loc.nama}`} value={loc.nama}>
-                        {loc.nama}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Pilih atau ketik nama locator (cth: RAK-A1)"
+                  />
                 </div>
 
                 {/* Locator To */}
                 {formTipe === 'TRANSFER' ? (
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Locator Tujuan *</label>
-                    <select 
+                    <input 
+                      list="locators-list-options"
+                      type="text"
                       value={formLocatorTo} 
                       onChange={e => setFormLocatorTo(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 bg-white text-sm"
-                    >
-                      <option value="">-- Pilih Locator Tujuan --</option>
-                      {locators.map(loc => (
-                        <option key={`${loc.whGroup}-${loc.nama}`} value={loc.nama}>
-                          {loc.nama}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Pilih atau ketik locator tujuan"
+                    />
                   </div>
                 ) : <div className="hidden xl:block" />}
+
+                {/* Shared Datalist for Locators */}
+                <datalist id="locators-list-options">
+                  {locators.map(loc => (
+                    <option key={`${loc.whGroup}-${loc.nama}`} value={loc.nama} />
+                  ))}
+                  <option value="Gudang Utama" />
+                  <option value="Gudang Produksi" />
+                  <option value="Area Transit" />
+                </datalist>
 
                 {/* Button to Append */}
                 <div className="sm:col-span-2 md:col-span-1">

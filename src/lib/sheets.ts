@@ -161,14 +161,28 @@ export async function fetchSheetData(gasUrl: string, range: string, forceFresh =
     while (attempts < maxAttempts) {
       try {
         const url = `${gasUrl}?action=get&range=${encodeURIComponent(range)}&t=${Date.now()}`;
-        const res = await fetch(url, { cache: 'no-store' });
-        
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
+        let data;
+        try {
+          const res = await fetch(url, { cache: 'no-store' });
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+          }
+          data = await res.json();
+        } catch (fetchErr: any) {
+          if (typeof window !== 'undefined') {
+            const proxyRes = await fetch('/api/sheets', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ gasUrl, action: 'get', range })
+            });
+            if (!proxyRes.ok) throw fetchErr;
+            data = await proxyRes.json();
+          } else {
+            throw fetchErr;
+          }
         }
 
-        const data = await res.json();
-        if (data.error) {
+        if (data && data.error) {
           throw new Error(data.error);
         }
 
@@ -214,49 +228,45 @@ export async function fetchSheetData(gasUrl: string, range: string, forceFresh =
   }
 }
 
+async function proxyPost(gasUrl: string, payload: any) {
+  if (!gasUrl || gasUrl === 'HQ') {
+    throw new Error("URL sistem belum dikonfigurasi untuk cabang ini.");
+  }
+  const endpoint = typeof window !== 'undefined' ? '/api/sheets' : gasUrl;
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gasUrl, ...payload })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    let errMsg = errText;
+    try {
+      const parsed = JSON.parse(errText);
+      if (parsed.error) errMsg = parsed.error;
+    } catch {}
+    throw new Error(`Gagal menyimpan ke server (HTTP ${res.status}): ${errMsg}`);
+  }
+
+  const data = await res.json();
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+
 export async function appendSheetRow(gasUrl: string, range: string, values: any[][]) {
   clearSheetCache(); // Invalidate cache on write
-  const res = await fetch(gasUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'append', range, values })
-  });
-  
-  if (!res.ok) throw new Error(`Failed to append data.`);
-  
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  
-  return data;
+  return proxyPost(gasUrl, { action: 'append', range, values });
 }
 
 export async function updateSheetRow(gasUrl: string, range: string, values: any[][]) {
   clearSheetCache(); // Invalidate cache on write
-  const res = await fetch(gasUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'update', range, values })
-  });
-  
-  if (!res.ok) throw new Error(`Failed to update data.`);
-
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-
-  return data;
+  return proxyPost(gasUrl, { action: 'update', range, values });
 }
 
 /** Check if the necessary sheets exist, if not create them */
 export async function initializeERPSpreadsheet(gasUrl: string) {
   clearSheetCache(); // Invalidate cache on init
-  const res = await fetch(gasUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'init' })
-  });
-  
-  if (!res.ok) throw new Error(`Failed to initialize data.`);
-
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
+  if (!gasUrl || gasUrl === 'HQ') return;
+  return proxyPost(gasUrl, { action: 'init' });
 }

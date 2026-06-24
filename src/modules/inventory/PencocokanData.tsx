@@ -403,8 +403,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           if (!fromLocator && !toLocator) fromLocator = 'UNKNOWN_L';
 
           if (tipe === 'TRANSFER' || tipe === 'TF') {
-            mappedRows.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || 'UNKNOWN_L', qty, uom, source, area: currentArea, tanggal });
-            mappedRows.push({ tipe: 'IN', pCode, pName, lCode: toLocator || 'UNKNOWN_L', qty, uom, source, area: currentArea, tanggal });
+            mappedRows.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || toLocator || 'UNKNOWN_L', qty, uom, source, area: currentArea, tanggal });
           } else {
             mappedRows.push({ 
               tipe: tipe || 'IN', 
@@ -591,7 +590,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       if (includeInYesterday) {
         if (normalizedType === 'IN' || normalizedType === 'AWAL' || normalizedType === 'MASUK' || normalizedType === 'RECEIPT' || normalizedType === 'SALDOAWAL') {
           item.stokKemarin += qty;
-        } else if (normalizedType === 'OUT' || normalizedType === 'KELUAR' || normalizedType === 'ISSUE' || normalizedType === 'PEMAKAIAN') {
+        } else if (normalizedType === 'OUT' || normalizedType === 'KELUAR' || normalizedType === 'ISSUE' || normalizedType === 'PEMAKAIAN' || normalizedType === 'TRANSFER' || normalizedType === 'TF') {
           item.stokKemarin -= qty;
         } else {
           if (qty > 0 && !['TRANSFER', 'TF'].includes(normalizedType)) {
@@ -603,7 +602,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       if (includeInCumulative) {
         if (normalizedType === 'IN' || normalizedType === 'AWAL' || normalizedType === 'MASUK' || normalizedType === 'RECEIPT' || normalizedType === 'SALDOAWAL') {
           item.stokRill += qty;
-        } else if (normalizedType === 'OUT' || normalizedType === 'KELUAR' || normalizedType === 'ISSUE' || normalizedType === 'PEMAKAIAN') {
+        } else if (normalizedType === 'OUT' || normalizedType === 'KELUAR' || normalizedType === 'ISSUE' || normalizedType === 'PEMAKAIAN' || normalizedType === 'TRANSFER' || normalizedType === 'TF') {
           item.stokRill -= qty;
         } else {
           if (qty > 0 && !['TRANSFER', 'TF'].includes(normalizedType)) {
@@ -616,7 +615,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         if (normalizedType === 'IN' || normalizedType === 'AWAL' || normalizedType === 'MASUK' || normalizedType === 'RECEIPT' || normalizedType === 'SALDOAWAL') {
           item.mutasiQty += qty;
           item.mutasiQtyIn += qty;
-        } else if (normalizedType === 'OUT' || normalizedType === 'KELUAR' || normalizedType === 'ISSUE' || normalizedType === 'PEMAKAIAN') {
+        } else if (normalizedType === 'OUT' || normalizedType === 'KELUAR' || normalizedType === 'ISSUE' || normalizedType === 'PEMAKAIAN' || normalizedType === 'TRANSFER' || normalizedType === 'TF') {
           item.mutasiQty -= qty;
           item.mutasiQtyOut += Math.abs(qty);
         } else {

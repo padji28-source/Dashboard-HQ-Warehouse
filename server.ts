@@ -6,6 +6,57 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.use(express.json({ limit: "50mb" }));
+
+  // API Route to proxy Google Apps Script requests (fixes browser CORS POST redirect issues)
+  app.post("/api/sheets", async (req, res) => {
+    try {
+      const { gasUrl, action, range, values } = req.body;
+      if (!gasUrl) {
+        return res.status(400).json({ error: "Missing gasUrl parameter" });
+      }
+
+      if (action === 'get') {
+        const getUrl = `${gasUrl}?action=get&range=${encodeURIComponent(range || '')}&t=${Date.now()}`;
+        const response = await fetch(getUrl);
+        if (!response.ok) {
+          throw new Error(`Google Sheets GET failed: HTTP ${response.status}`);
+        }
+        const text = await response.text();
+        try {
+          return res.json(JSON.parse(text));
+        } catch {
+          return res.status(502).json({ error: "Respon JSON tidak valid dari Google Sheets" });
+        }
+      }
+
+      // POST action (append, update, init)
+      const response = await fetch(gasUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action, range, values })
+      });
+
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.error("Non-JSON response from Apps Script POST:", text.slice(0, 200));
+        return res.status(502).json({ error: "Respon tidak valid dari server Google Sheets. Pastikan Google Apps Script di-deploy dengan pengaturan Who has access: Anyone." });
+      }
+
+      if (!response.ok || data.error) {
+        return res.status(400).json({ error: data.error || `Apps Script HTTP ${response.status}` });
+      }
+
+      res.json(data);
+    } catch (err: any) {
+      console.error("Error in /api/sheets proxy:", err);
+      res.status(500).json({ error: err.message || "Gagal menghubungi server Google Sheets" });
+    }
+  });
+
   // Cache MTS data in memory for 10 minutes (600,000 ms)
   let cachedMts: string | null = null;
   let cacheTime = 0;

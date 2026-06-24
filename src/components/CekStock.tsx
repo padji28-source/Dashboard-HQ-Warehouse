@@ -123,16 +123,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
               tipe: "OUT",
               pCode,
               pName,
-              lCode: fromLocator || "UNKNOWN_L",
-              qty,
-              source,
-              area: sourceAreaName,
-            });
-            mappedRows.push({
-              tipe: "IN",
-              pCode,
-              pName,
-              lCode: toLocator || "UNKNOWN_L",
+              lCode: fromLocator || toLocator || "UNKNOWN_L",
               qty,
               source,
               area: sourceAreaName,
@@ -298,7 +289,9 @@ export default function CekStock({ spreadsheetId, area }: Props) {
         normalizedTipe === "OUT" ||
         normalizedTipe === "KELUAR" ||
         normalizedTipe === "ISSUE" ||
-        normalizedTipe === "PEMAKAIAN"
+        normalizedTipe === "PEMAKAIAN" ||
+        normalizedTipe === "TRANSFER" ||
+        normalizedTipe === "TF"
       ) {
         summary.totalOut += t.qty;
         summary.stock -= t.qty;

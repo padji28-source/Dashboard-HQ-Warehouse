@@ -83,8 +83,7 @@ export default function WhatsAppConsole({ stockSummary: initialStockSummary, are
              if (!fromLocator && !toLocator) fromLocator = 'UNKNOWN_L';
 
              if (tipe === 'TRANSFER' || tipe === 'TF') {
-               mappedRows.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || 'UNKNOWN_L', qty, source });
-               mappedRows.push({ tipe: 'IN', pCode, pName, lCode: toLocator || 'UNKNOWN_L', qty, source });
+               mappedRows.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || toLocator || 'UNKNOWN_L', qty, source });
              } else {
                mappedRows.push({ tipe: tipe || 'IN', pCode, pName, lCode: fromLocator || toLocator || 'UNKNOWN_L', qty, source });
              }
@@ -173,7 +172,7 @@ export default function WhatsAppConsole({ stockSummary: initialStockSummary, are
           if (normalizedTipe === 'IN' || normalizedTipe === 'AWAL' || normalizedTipe === 'MASUK' || normalizedTipe === 'RECEIPT' || normalizedTipe === 'SALDOAWAL') {
             summary.totalIn += qty;
             summary.stock += qty;
-          } else if (normalizedTipe === 'OUT' || normalizedTipe === 'KELUAR' || normalizedTipe === 'ISSUE' || normalizedTipe === 'PEMAKAIAN') {
+          } else if (normalizedTipe === 'OUT' || normalizedTipe === 'KELUAR' || normalizedTipe === 'ISSUE' || normalizedTipe === 'PEMAKAIAN' || normalizedTipe === 'TRANSFER' || normalizedTipe === 'TF') {
             summary.totalOut += qty;
             summary.stock -= qty;
           } else {

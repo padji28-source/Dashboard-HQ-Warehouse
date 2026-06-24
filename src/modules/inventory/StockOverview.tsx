@@ -137,15 +137,7 @@ export default function StockOverview({
               tipe: "OUT",
               pCode,
               pName,
-              lCode: fromLocator || "UNKNOWN_L",
-              qty,
-              source,
-            });
-            mappedRows.push({
-              tipe: "IN",
-              pCode,
-              pName,
-              lCode: toLocator || "UNKNOWN_L",
+              lCode: fromLocator || toLocator || "UNKNOWN_L",
               qty,
               source,
             });
@@ -375,7 +367,9 @@ export default function StockOverview({
         normalizedTipe === "OUT" ||
         normalizedTipe === "KELUAR" ||
         normalizedTipe === "ISSUE" ||
-        normalizedTipe === "PEMAKAIAN"
+        normalizedTipe === "PEMAKAIAN" ||
+        normalizedTipe === "TRANSFER" ||
+        normalizedTipe === "TF"
       ) {
         summary.totalOut += qty;
         summary.stock -= qty;
