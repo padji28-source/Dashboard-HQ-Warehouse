@@ -453,6 +453,36 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
   const totalAwal = filtered.reduce((sum, t) => t.tipe === 'AWAL' ? sum + t.kuantitas : sum, 0);
   const grandTotalQty = filtered.reduce((sum, t) => sum + t.kuantitas, 0);
 
+  const locatorsWithStock = useMemo(() => {
+    if (!formKodeProduk) return [];
+    const stockMap: Record<string, number> = {};
+    
+    transactions.forEach(t => {
+      if (t.kodeProduk === formKodeProduk) {
+        const type = (t.tipe || '').toUpperCase();
+        const rawQtyStr = t.qty !== undefined ? String(t.qty) : String(t.kuantitas || 0);
+        const qty = parseFloat(rawQtyStr.replace(/,/g, '')) || 0;
+
+        const locAsal = t.locator;
+        const locTujuan = t.locatorTo;
+
+        if (type === 'IN' || type === 'AWAL' || type === 'MASUK' || type === 'RECEIPT' || type === 'SALDOAWAL') {
+          if (locAsal) stockMap[locAsal] = (stockMap[locAsal] || 0) + qty;
+        } else if (type === 'OUT' || type === 'KELUAR' || type === 'ISSUE' || type === 'PEMAKAIAN') {
+          if (locAsal) stockMap[locAsal] = (stockMap[locAsal] || 0) - qty;
+        } else if (type === 'TRANSFER' || type === 'TF') {
+          if (locAsal) stockMap[locAsal] = (stockMap[locAsal] || 0) - qty;
+          if (locTujuan) stockMap[locTujuan] = (stockMap[locTujuan] || 0) + qty;
+        }
+      }
+    });
+
+    return Object.entries(stockMap)
+      .filter(([loc, qty]) => qty > 0 && loc !== 'UNKNOWN_L')
+      .map(([loc]) => loc)
+      .sort();
+  }, [transactions, formKodeProduk]);
+
   const filteredProductsForDropdown = products
     .map((p, i) => ({ product: p, index: i }))
     .filter(({ product }) => {
@@ -706,7 +736,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                     {formTipe === 'TRANSFER' ? 'Locator Asal *' : 'Locator *'}
                   </label>
                   <input 
-                    list="locators-list-options"
+                    list={formTipe === 'IN' ? "locators-list-options-all" : "locators-list-options-with-stock"}
                     type="text"
                     value={formLocator} 
                     onChange={e => setFormLocator(e.target.value)}
@@ -720,7 +750,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Locator Tujuan *</label>
                     <input 
-                      list="locators-list-options"
+                      list="locators-list-options-all"
                       type="text"
                       value={formLocatorTo} 
                       onChange={e => setFormLocatorTo(e.target.value)}
@@ -731,13 +761,30 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                 ) : <div className="hidden xl:block" />}
 
                 {/* Shared Datalist for Locators */}
-                <datalist id="locators-list-options">
+                <datalist id="locators-list-options-all">
                   {locators.map(loc => (
                     <option key={`${loc.whGroup}-${loc.nama}`} value={loc.nama} />
                   ))}
                   <option value="Gudang Utama" />
                   <option value="Gudang Produksi" />
                   <option value="Area Transit" />
+                </datalist>
+
+                <datalist id="locators-list-options-with-stock">
+                  {locatorsWithStock.length > 0 ? (
+                    locatorsWithStock.map(loc => (
+                      <option key={loc} value={loc} />
+                    ))
+                  ) : (
+                    <>
+                      {locators.map(loc => (
+                        <option key={`${loc.whGroup}-${loc.nama}`} value={loc.nama} />
+                      ))}
+                      <option value="Gudang Utama" />
+                      <option value="Gudang Produksi" />
+                      <option value="Area Transit" />
+                    </>
+                  )}
                 </datalist>
 
                 {/* Button to Append */}

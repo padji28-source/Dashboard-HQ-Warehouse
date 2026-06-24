@@ -15,6 +15,7 @@ export interface Locator {
 }
 
 export interface Transaction {
+  rawIndex?: number;
   tanggal: string; // MM/DD/YYYY
   kodeProduk: string;
   namaBahan: string;
