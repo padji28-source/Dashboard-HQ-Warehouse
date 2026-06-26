@@ -67,6 +67,7 @@ export default function App() {
   const [selectedArea, setSelectedArea] = useState(() => localStorage.getItem('selectedArea') || AREAS[0]);
   const [appAuthenticated, setAppAuthenticated] = useState(false);
   const [loggedInUserRole, setLoggedInUserRole] = useState(() => localStorage.getItem('userRole') || '');
+  const [loggedInUsername, setLoggedInUsername] = useState(() => localStorage.getItem('loggedInUsername') || '');
   const [currentGasUrl, setCurrentGasUrl] = useState('');
   const [spreadsheetReady, setSpreadsheetReady] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -87,7 +88,7 @@ export default function App() {
     const inputUser = appUsername.trim().toLowerCase();
     const inputPass = appPassword;
 
-    // Find custom admin record (matched either simple username or with 'admin_' prefix)
+    // Find custom admin record
     const matchedAccount = ADMIN_ACCOUNTS.find(
       acc => acc.username.toLowerCase() === inputUser && acc.password === inputPass
     );
@@ -103,8 +104,12 @@ export default function App() {
 
       setAppAuthenticated(true);
       setLoggedInUserRole(matchedAccount.allowedArea);
+      setLoggedInUsername(matchedAccount.username);
+      
       localStorage.setItem('selectedArea', finalArea);
       localStorage.setItem('userRole', matchedAccount.allowedArea);
+      localStorage.setItem('loggedInUsername', matchedAccount.username);
+      
       const url = AREA_URLS[finalArea] || '';
       setCurrentGasUrl(finalArea === 'All Cabang' ? 'HQ' : url);
       setSpreadsheetReady(finalArea === 'All Cabang' ? true : !!url);
@@ -120,7 +125,10 @@ export default function App() {
     setSpreadsheetReady(false);
     setLoginError(null);
     setLoggedInUserRole('');
+    setLoggedInUsername('');
+    
     localStorage.removeItem('userRole');
+    localStorage.removeItem('loggedInUsername');
   };
 
   // App Auth Flow (System level)
@@ -256,8 +264,8 @@ export default function App() {
       area={selectedArea} 
       onLogout={handleLogout} 
       userRole={loggedInUserRole} 
+      username={loggedInUsername} 
       onAreaChange={handleAreaChange} 
     />
   );
 }
-
