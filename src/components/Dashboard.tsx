@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3 } from 'lucide-react';
+import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye } from 'lucide-react';
 import MasterProduk from './MasterProduk';
 import MasterLocator from './MasterLocator';
 import TransactionInput from './TransactionInput';
@@ -10,6 +10,7 @@ import WhatsAppConsole from '../modules/whatsapp/WhatsAppConsole';
 import AkurasiStock from './AkurasiStock';
 import Pengepokan from './Pengepokan';
 import CekStock from './CekStock';
+import ActiveUsersMonitor from './ActiveUsersMonitor';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AREAS } from '../App';
@@ -24,10 +25,11 @@ interface Props {
   onLogout: () => void;
   userRole?: string;
   onAreaChange?: (newArea: string) => void;
+  isReadOnly?: boolean;
 }
 
-export default function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange }: Props) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock'>('stock');
+export default function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange, isReadOnly = false }: Props) {
+  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'monitor'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
 
@@ -37,12 +39,11 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
   const mainTabs = [
     { id: 'stock', label: 'Stock Overview', icon: LayoutDashboard },
     { id: 'cek_stock', label: 'Cek Stock', icon: Package },
-    ...(isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
-    ...(area === 'All Cabang' ? [
-      { id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 },
-      { id: 'pengepokan', label: 'Pengepokan', icon: Box }
-    ] : []),
-    { id: 'whatsapp', label: 'WhatsApp Bot', icon: MessageSquare },
+    ...(!isReadOnly && isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
+    ...(!isReadOnly && area === 'All Cabang' ? [{ id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 }] : []),
+    ...(area === 'All Cabang' ? [{ id: 'pengepokan', label: 'Pengepokan', icon: Box }] : []),
+    ...(!isReadOnly ? [{ id: 'whatsapp', label: 'WhatsApp Bot', icon: MessageSquare }] : []),
+    ...(userRole === 'ALL' ? [{ id: 'monitor', label: 'Monitor Pengguna', icon: Eye }] : []),
   ] as const;
 
   const pergerakanTabs = [
@@ -53,8 +54,10 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
   ] as const;
 
   const masterTabs = [
-    { id: 'produk', label: 'Master Produk', icon: Package },
-    { id: 'locator', label: 'Master Locator', icon: MapPin },
+    ...(isReadOnly ? [] : [
+      { id: 'produk', label: 'Master Produk', icon: Package },
+      { id: 'locator', label: 'Master Locator', icon: MapPin },
+    ])
   ] as const;
 
   return (
@@ -157,7 +160,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
               </button>
             ))}
 
-            {(area === 'HQ' || area === 'All Cabang') ? (
+            {((area === 'HQ' || area === 'All Cabang') && !isReadOnly) ? (
               <div className="mt-4 pt-4 border-t border-slate-800">
                 <button
                   onClick={() => { setActiveTab('mts'); setSidebarOpen(false); }}
@@ -207,24 +210,26 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
               </div>
             )}
 
-            <div className="mt-4 pt-4 border-t border-slate-800">
-              <div className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Master Data</div>
-              {masterTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => { setActiveTab(tab.id as any); setSidebarOpen(false); }}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                    safeActiveTab === tab.id 
-                      ? "bg-blue-600/20 text-blue-400 font-semibold" 
-                      : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-                  )}
-                >
-                  <tab.icon className={cn("w-4 h-4", safeActiveTab === tab.id ? "text-blue-400" : "text-slate-500")} />
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+            {masterTabs.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-800">
+                <div className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Master Data</div>
+                {masterTabs.map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => { setActiveTab(tab.id as any); setSidebarOpen(false); }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                      safeActiveTab === tab.id 
+                        ? "bg-blue-600/20 text-blue-400 font-semibold" 
+                        : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                    )}
+                  >
+                    <tab.icon className={cn("w-4 h-4", safeActiveTab === tab.id ? "text-blue-400" : "text-slate-500")} />
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {userRole === 'ALL' && (
               <div className="mt-4 pt-4 border-t border-slate-800">
@@ -283,22 +288,22 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
           </div>
           <div className={cn(safeActiveTab !== 'input' && 'hidden')}>
             {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Accessories" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." />
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'input_rm' && 'hidden')}>
             {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Raw Material" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." />
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'input_mfg' && 'hidden')}>
             {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Manufacturing" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." />
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'input_supplies' && 'hidden')}>
             {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Supplies & GA" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." />
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'produk' && 'hidden')}>
@@ -313,6 +318,9 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
           </div>
           <div className={cn(safeActiveTab !== 'whatsapp' && 'hidden')}>
             <WhatsAppConsole area={area} />
+          </div>
+          <div className={cn(safeActiveTab !== 'monitor' && 'hidden')}>
+            <ActiveUsersMonitor />
           </div>
         </div>
       </main>

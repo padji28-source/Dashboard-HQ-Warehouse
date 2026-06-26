@@ -8,6 +8,7 @@ interface Props {
   sheetName: string;
   title: string;
   description: string;
+  isReadOnly?: boolean;
 }
 
 const INDO_MONTHS = [
@@ -86,7 +87,7 @@ export const displayTanggalIndonesian = (dtStr: string): string => {
   return dtStr; // Return as is if fully unrecognized
 };
 
-export default function TransactionInput({ spreadsheetId, sheetName, title, description }: Props) {
+export default function TransactionInput({ spreadsheetId, sheetName, title, description, isReadOnly = false }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locators, setLocators] = useState<Locator[]>([]);
@@ -517,16 +518,18 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
           <button onClick={() => loadData(true)} className="px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-200">
             Refresh Data
           </button>
-          <button 
-            onClick={handleOpenForm}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors shadow-sm"
-          >
-            <Plus className="w-4 h-4" /> Tambah Transaksi
-          </button>
+          {!isReadOnly && (
+            <button 
+              onClick={handleOpenForm}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Tambah Transaksi
+            </button>
+          )}
         </div>
       </div>
 
-      {formOpen && (
+      {formOpen && !isReadOnly && (
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-md animate-in fade-in slide-in-from-top-4 space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">

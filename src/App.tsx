@@ -1,6 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import Dashboard from './components/Dashboard';
 import { Loader2, ShieldCheck, Lock, User, MapPin, Eye, EyeOff, Info, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { db } from './lib/firebase';
+import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 
 export const AREAS = [
   "All Cabang", "Jakarta", "Jakarta A5", "Karawang", "Semarang", "Surabaya", "Jember", 
@@ -28,12 +30,15 @@ export interface AdminAccount {
   password: string;
   allowedArea: string; // 'ALL' or specific area
   label: string;
+  readonly?: boolean;
 }
 
 export const ADMIN_ACCOUNTS: AdminAccount[] = [
   { username: 'admin', password: 'admin123', allowedArea: 'ALL', label: 'Super Admin (Semua Area)' },
   { username: 'hq', password: 'hq123', allowedArea: 'All Cabang', label: 'Admin All Cabang (Pusat)' },
   { username: 'admin_hq', password: 'hq123', allowedArea: 'All Cabang', label: 'Admin All Cabang' },
+  { username: 'mp', password: 'mp123', allowedArea: 'All Cabang', label: 'Material Planning (MP)', readonly: true },
+  { username: 'ppic', password: 'ppic123', allowedArea: 'All Cabang', label: 'PPIC', readonly: true },
   { username: 'jakarta', password: 'jakarta123', allowedArea: 'Jakarta', label: 'Admin Jakarta' },
   { username: 'admin_jakarta', password: 'jakarta123', allowedArea: 'Jakarta', label: 'Admin Jakarta' },
   { username: 'jakarta_a5', password: 'jakarta123', allowedArea: 'Jakarta A5', label: 'Admin Jakarta A5' },
@@ -67,10 +72,14 @@ export default function App() {
   const [selectedArea, setSelectedArea] = useState(() => localStorage.getItem('selectedArea') || AREAS[0]);
   const [appAuthenticated, setAppAuthenticated] = useState(false);
   const [loggedInUserRole, setLoggedInUserRole] = useState(() => localStorage.getItem('userRole') || '');
+  const [activeUsername, setActiveUsername] = useState(() => localStorage.getItem('activeUsername') || '');
   const [currentGasUrl, setCurrentGasUrl] = useState('');
   const [spreadsheetReady, setSpreadsheetReady] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+
+  // Check if current user is readonly
+  const isReadOnly = ADMIN_ACCOUNTS.find(acc => acc.username === activeUsername)?.readonly || false;
 
   const handleAreaChange = (newArea: string) => {
     setSelectedArea(newArea);
@@ -103,8 +112,10 @@ export default function App() {
 
       setAppAuthenticated(true);
       setLoggedInUserRole(matchedAccount.allowedArea);
+      setActiveUsername(matchedAccount.username);
       localStorage.setItem('selectedArea', finalArea);
       localStorage.setItem('userRole', matchedAccount.allowedArea);
+      localStorage.setItem('activeUsername', matchedAccount.username);
       const url = AREA_URLS[finalArea] || '';
       setCurrentGasUrl(finalArea === 'All Cabang' ? 'HQ' : url);
       setSpreadsheetReady(finalArea === 'All Cabang' ? true : !!url);
@@ -113,14 +124,54 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    if (!appAuthenticated || !activeUsername) return;
+
+    const sessionId = localStorage.getItem('sessionId') || Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('sessionId', sessionId);
+
+    const userDocRef = doc(db, 'activeUsers', sessionId);
+    
+    const updatePresence = async () => {
+      try {
+        await setDoc(userDocRef, {
+          username: activeUsername,
+          role: loggedInUserRole,
+          area: selectedArea,
+          lastActive: serverTimestamp(),
+        }, { merge: true });
+      } catch (e) {
+        console.error("Gagal update user presence:", e);
+      }
+    };
+
+    updatePresence();
+    const intervalId = setInterval(updatePresence, 30000); // update every 30 seconds
+
+    return () => {
+      clearInterval(intervalId);
+      // Try to clean up on unmount/logout, though browser close might skip this
+      deleteDoc(userDocRef).catch(console.error);
+    };
+  }, [appAuthenticated, activeUsername, selectedArea, loggedInUserRole]);
+
   const handleLogout = () => {
+    // Delete session before clearing state
+    const sessionId = localStorage.getItem('sessionId');
+    if (sessionId) {
+      deleteDoc(doc(db, 'activeUsers', sessionId)).catch(console.error);
+      localStorage.removeItem('sessionId');
+    }
+    
     setAppAuthenticated(false);
     setAppUsername('');
     setAppPassword('');
     setSpreadsheetReady(false);
     setLoginError(null);
     setLoggedInUserRole('');
+    setActiveUsername('');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('activeUsername');
   };
 
   // App Auth Flow (System level)
@@ -257,6 +308,7 @@ export default function App() {
       onLogout={handleLogout} 
       userRole={loggedInUserRole} 
       onAreaChange={handleAreaChange} 
+      isReadOnly={isReadOnly}
     />
   );
 }

@@ -43,6 +43,7 @@ export default function StockOverview({
   const [loading, setLoading] = useState(true);
   const [stockSummary, setStockSummary] = useState<StockSummary[]>([]);
   const [search, setSearch] = useState("");
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<{
     kodeProduk: string;
     namaProduk: string;
@@ -84,7 +85,7 @@ export default function StockOverview({
     Map<string, { nama: string; whType: string; area: string }>
   >(new Map());
 
-  const loadData = async (retryOnMissing = true) => {
+  const loadData = async (retryOnMissing = true, forceFresh = false) => {
     try {
       setLoading(true);
 
@@ -165,12 +166,12 @@ export default function StockOverview({
           urlEntries.map(async ([aName, aUrl]) => {
             try {
               const [tn, tr, tm, ts, pr, lr] = await Promise.all([
-                fetchSheetData(aUrl, "'INPUT'!A2:J").catch(() => []),
-                fetchSheetData(aUrl, "'INPUT RM'!A2:J").catch(() => []),
-                fetchSheetData(aUrl, "'INPUT MFG'!A2:J").catch(() => []),
-                fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J").catch(() => []),
-                fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:B").catch(() => []),
-                fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E").catch(() => []),
+                fetchSheetData(aUrl, "'INPUT'!A2:J", forceFresh).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT RM'!A2:J", forceFresh).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT MFG'!A2:J", forceFresh).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", forceFresh).catch(() => []),
+                fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:B", forceFresh).catch(() => []),
+                fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", forceFresh).catch(() => []),
               ]);
 
               // Merge products map
@@ -221,12 +222,12 @@ export default function StockOverview({
         try {
           [txRowsNormal, txRowsRM, txRowsMfg, txRowsSupplies, pRows, lRows] =
             await Promise.all([
-              fetchSheetData(spreadsheetId, "'INPUT'!A2:J"),
-              fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J"),
-              fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J"),
-              fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J"),
-              fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B"),
-              fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E"),
+              fetchSheetData(spreadsheetId, "'INPUT'!A2:J", forceFresh),
+              fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J", forceFresh),
+              fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J", forceFresh),
+              fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J", forceFresh),
+              fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B", forceFresh),
+              fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E", forceFresh),
             ]);
         } catch (fetchErr: any) {
           if (retryOnMissing) {
@@ -255,26 +256,32 @@ export default function StockOverview({
           txRowsNormal = await fetchSheetData(
             spreadsheetId,
             "'INPUT'!A2:J",
+            forceFresh
           ).catch(() => []);
           txRowsRM = await fetchSheetData(
             spreadsheetId,
             "'INPUT RM'!A2:J",
+            forceFresh
           ).catch(() => []);
           txRowsMfg = await fetchSheetData(
             spreadsheetId,
             "'INPUT MFG'!A2:J",
+            forceFresh
           ).catch(() => []);
           txRowsSupplies = await fetchSheetData(
             spreadsheetId,
             "'INPUT SUPPLIES'!A2:J",
+            forceFresh
           ).catch(() => []);
           pRows = await fetchSheetData(
             spreadsheetId,
             "'MASTER_PRODUK'!A2:B",
+            forceFresh
           ).catch(() => []);
           lRows = await fetchSheetData(
             spreadsheetId,
             "'MASTER_LOCATOR'!A2:E",
+            forceFresh
           ).catch(() => []);
         }
 
@@ -321,7 +328,18 @@ export default function StockOverview({
 
   useEffect(() => {
     loadData();
-  }, [spreadsheetId]);
+    
+    let intervalId: NodeJS.Timeout;
+    if (autoRefresh) {
+      intervalId = setInterval(() => {
+        loadData(false, true); // retryOnMissing = false, forceFresh = true
+      }, 30000); // Poll every 30 seconds
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [spreadsheetId, autoRefresh]);
 
   useEffect(() => {
     const stockMap = new Map<string, StockSummary>(); // Key: kodeProduk_whGroup
@@ -982,6 +1000,7 @@ export default function StockOverview({
                 </div>
               )}
             </div>
+            {/* Search Input */}
             <div ref={dropdownRef} className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
@@ -1042,6 +1061,20 @@ export default function StockOverview({
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Auto Refresh Toggle */}
+            <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg bg-white shrink-0">
+              <input 
+                type="checkbox" 
+                id="auto-refresh"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+              />
+              <label htmlFor="auto-refresh" className="text-xs font-semibold text-slate-600 cursor-pointer">
+                Auto-Refresh (30s)
+              </label>
             </div>
           </div>
         </div>
