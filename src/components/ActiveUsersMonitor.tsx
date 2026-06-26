@@ -43,6 +43,11 @@ export default function ActiveUsersMonitor() {
     return { text: 'Offline', color: 'bg-slate-400' };
   };
 
+  const loggedInUsers = activeUsers.filter(user => {
+    const status = getStatus(user.lastActive);
+    return status.text !== 'Offline' && status.text !== 'Unknown';
+  });
+
   return (
     <div className="p-4 sm:p-6 bg-slate-50 min-h-full">
       <div className="mb-6">
@@ -56,13 +61,13 @@ export default function ActiveUsersMonitor() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {activeUsers.length === 0 ? (
+        {loggedInUsers.length === 0 ? (
           <div className="col-span-full p-8 text-center bg-white rounded-xl border border-slate-200">
             <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500">Tidak ada pengguna aktif saat ini.</p>
           </div>
         ) : (
-          activeUsers.map(user => {
+          loggedInUsers.map(user => {
             const status = getStatus(user.lastActive);
             
             return (
