@@ -132,26 +132,90 @@ export default function App() {
 
     const userDocRef = doc(db, 'activeUsers', sessionId);
     
-    const updatePresence = async () => {
+    const getBrowserInfo = () => {
+      const ua = navigator.userAgent;
+      if (ua.includes('Edg')) return 'Edge';
+      if (ua.includes('Chrome')) return 'Chrome';
+      if (ua.includes('Firefox')) return 'Firefox';
+      if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari';
+      return 'Unknown Browser';
+    };
+
+    const getDeviceInfo = () => {
+      const ua = navigator.userAgent;
+      if (/Mobile|Android|iP(hone|od|ad)/.test(ua)) return 'Mobile';
+      return 'Desktop';
+    };
+    
+    // Initial login mark
+    const markLogin = async () => {
       try {
         await setDoc(userDocRef, {
           username: activeUsername,
           role: loggedInUserRole,
           area: selectedArea,
+          loginTime: serverTimestamp(),
           lastActive: serverTimestamp(),
+          status: 'Online',
+          browser: getBrowserInfo(),
+          device: getDeviceInfo()
+        }, { merge: true });
+      } catch(e) {
+        console.error("Gagal mark login:", e);
+      }
+    };
+    
+    markLogin();
+
+    const updatePresence = async () => {
+      try {
+        await setDoc(userDocRef, {
+          lastActive: serverTimestamp(),
+          status: 'Online'
         }, { merge: true });
       } catch (e) {
         console.error("Gagal update user presence:", e);
       }
     };
 
-    updatePresence();
     const intervalId = setInterval(updatePresence, 30000); // update every 30 seconds
+
+    // Track Idle locally to avoid spamming Firestore
+    let isIdle = false;
+    let idleTimeout: NodeJS.Timeout;
+    let lastInteraction = Date.now();
+
+    const setIdle = () => {
+      isIdle = true;
+      setDoc(userDocRef, { status: 'Idle', lastActive: serverTimestamp() }, { merge: true }).catch(console.error);
+    };
+
+    const resetIdleTimer = () => {
+      const now = Date.now();
+      if (now - lastInteraction < 1000) return; // throttle to once per second
+      lastInteraction = now;
+
+      clearTimeout(idleTimeout);
+      
+      if (isIdle) {
+        isIdle = false;
+        setDoc(userDocRef, { status: 'Online', lastActive: serverTimestamp() }, { merge: true }).catch(console.error);
+      }
+
+      idleTimeout = setTimeout(setIdle, 5 * 60 * 1000); // mark as Idle after 5 mins of no interaction
+    };
+
+    window.addEventListener('mousemove', resetIdleTimer);
+    window.addEventListener('keypress', resetIdleTimer);
+    resetIdleTimer();
 
     return () => {
       clearInterval(intervalId);
-      // Try to clean up on unmount/logout, though browser close might skip this
-      deleteDoc(userDocRef).catch(console.error);
+      clearTimeout(idleTimeout);
+      window.removeEventListener('mousemove', resetIdleTimer);
+      window.removeEventListener('keypress', resetIdleTimer);
+      // Try to clean up on unmount/logout
+      setDoc(userDocRef, { status: 'Offline', lastActive: serverTimestamp() }, { merge: true }).catch(console.error);
     };
   }, [appAuthenticated, activeUsername, selectedArea, loggedInUserRole]);
 
@@ -159,9 +223,10 @@ export default function App() {
     // Delete session before clearing state
     const sessionId = localStorage.getItem('sessionId');
     if (sessionId) {
-      deleteDoc(doc(db, 'activeUsers', sessionId)).catch(console.error);
+      setDoc(doc(db, 'activeUsers', sessionId), { status: 'Offline', lastActive: serverTimestamp() }, { merge: true }).catch(console.error);
       localStorage.removeItem('sessionId');
     }
+
     
     setAppAuthenticated(false);
     setAppUsername('');

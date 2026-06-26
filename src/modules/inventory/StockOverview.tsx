@@ -16,6 +16,7 @@ import {
   ArrowUpRight,
   PlusCircle,
   X,
+  CheckCircle,
 } from "lucide-react";
 import {
   BarChart,
@@ -44,6 +45,11 @@ export default function StockOverview({
   const [stockSummary, setStockSummary] = useState<StockSummary[]>([]);
   const [search, setSearch] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [lastHash, setLastHash] = useState<string>('');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [showToast, setShowToast] = useState(false);
+
   const [selectedProduct, setSelectedProduct] = useState<{
     kodeProduk: string;
     namaProduk: string;
@@ -85,9 +91,10 @@ export default function StockOverview({
     Map<string, { nama: string; whType: string; area: string }>
   >(new Map());
 
-  const loadData = async (retryOnMissing = true, forceFresh = false) => {
+  const loadData = async (retryOnMissing = true, forceFresh = false, silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
+      setSyncStatus('syncing');
 
       const pMap = new Map<string, string>();
       const lMap = new Map<
@@ -104,7 +111,6 @@ export default function StockOverview({
       }[] = [];
 
       const processRows = (rows: any[], source: string) => {
-        console.log(`Processing rows for ${source}:`, rows?.length);
         const validRows = (rows || []).filter((r: any[]) => {
           if (r.length === 0) return false;
           const tanggal = String(r[0] || '').trim();
@@ -174,14 +180,12 @@ export default function StockOverview({
                 fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", forceFresh).catch(() => []),
               ]);
 
-              // Merge products map
               pr.filter((r: any[]) => r.length > 0 && r[0]).forEach(
                 (r: any[]) => {
                   pMap.set(String(r[0]).trim(), String(r[1] || "").trim());
                 },
               );
 
-              // Merge locators map
               lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach(
                 (r: any[]) => {
                   const val = {
@@ -238,7 +242,7 @@ export default function StockOverview({
               const { initializeERPSpreadsheet } =
                 await import("../../lib/sheets");
               await initializeERPSpreadsheet(spreadsheetId);
-              return loadData(false);
+              return loadData(false, false, silent);
             } catch (initErr: any) {
               const initErrMsg = String(initErr.message || "").toLowerCase();
               if (
@@ -247,12 +251,11 @@ export default function StockOverview({
                 initErrMsg.includes("exists")
               ) {
                 console.log("Sheet already exists, continuing to load data.");
-                return loadData(false);
+                return loadData(false, false, silent);
               }
               console.error("Auto-init from StockOverview failed:", initErr);
             }
           }
-          // Fallback to individual catches if init fails or retry is off
           txRowsNormal = await fetchSheetData(
             spreadsheetId,
             "'INPUT'!A2:J",
@@ -315,14 +318,28 @@ export default function StockOverview({
         processRows(txRowsSupplies, "INPUT SUPPLIES");
       }
 
-      setProductsMap(pMap);
-      setLocatorsMap(lMap);
-      console.log("mappedRows total:", mappedRows.length);
-      setAllTransactions(mappedRows);
+      // Hash comparison
+      const currentHash = JSON.stringify({ mappedRows, pMap: Array.from(pMap.entries()), lMap: Array.from(lMap.entries()) });
+      
+      setLastSyncTime(new Date());
+      setSyncStatus('success');
+
+      if (currentHash !== lastHash) {
+        setLastHash(currentHash);
+        setProductsMap(pMap);
+        setLocatorsMap(lMap);
+        setAllTransactions(mappedRows);
+        
+        if (silent && lastHash !== '') { // Only show toast if it's an auto-refresh and data changed
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 3000);
+        }
+      }
     } catch (err: any) {
-      alert(`Gagal memuat overview stok: ${err.message}`);
+      setSyncStatus('error');
+      if (!silent) alert(`Gagal memuat overview stok: ${err.message}`);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -332,8 +349,8 @@ export default function StockOverview({
     let intervalId: NodeJS.Timeout;
     if (autoRefresh) {
       intervalId = setInterval(() => {
-        loadData(false, true); // retryOnMissing = false, forceFresh = true
-      }, 30000); // Poll every 30 seconds
+        loadData(false, true, true); // retryOnMissing = false, forceFresh = true, silent = true
+      }, 10000); // Poll every 10 seconds per user request
     }
     
     return () => {
@@ -606,7 +623,23 @@ export default function StockOverview({
   const stockRillFiltered = filtered.reduce((acc, s) => acc + s.stock, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Toast Notification */}
+      {showToast && (
+        <div className="fixed top-4 right-4 z-50 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="bg-emerald-50 border border-emerald-200 shadow-lg rounded-xl p-4 flex items-center gap-3">
+            <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-emerald-800">Pembaruan Berhasil</p>
+              <p className="text-xs text-emerald-600 font-medium mt-0.5">Data Google Sheet berhasil diperbarui.</p>
+            </div>
+            <button onClick={() => setShowToast(false)} className="ml-2 text-emerald-600 hover:text-emerald-800 focus:outline-none">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">
@@ -617,7 +650,7 @@ export default function StockOverview({
           </p>
         </div>
         <button
-          onClick={loadData}
+          onClick={() => loadData(true, true)}
           className="px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
         >
           Refresh Data
@@ -1063,6 +1096,22 @@ export default function StockOverview({
               )}
             </div>
 
+            {/* Sync Badge */}
+            <div className="flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-slate-600 bg-slate-100 rounded-lg shrink-0 hidden sm:flex">
+              {syncStatus === 'syncing' ? (
+                <><Loader2 className="w-3 h-3 animate-spin text-blue-500"/> Menyinkronkan...</>
+              ) : syncStatus === 'error' ? (
+                <><span className="w-2 h-2 rounded-full bg-rose-500"></span> Gagal</>
+              ) : (
+                <><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Sinkron</>
+              )}
+              {lastSyncTime && (
+                <span className="text-slate-400 border-l border-slate-300 pl-2 ml-1">
+                  {lastSyncTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              )}
+            </div>
+
             {/* Auto Refresh Toggle */}
             <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg bg-white shrink-0">
               <input 
@@ -1073,7 +1122,7 @@ export default function StockOverview({
                 className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
               />
               <label htmlFor="auto-refresh" className="text-xs font-semibold text-slate-600 cursor-pointer">
-                Auto-Refresh (30s)
+                Auto-Refresh (10s)
               </label>
             </div>
           </div>
