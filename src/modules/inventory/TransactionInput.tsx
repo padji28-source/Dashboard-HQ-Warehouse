@@ -283,11 +283,19 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
       let lRows: any[] = [];
       
       try {
-        [txRows, pRows, lRows] = await Promise.all([
-          fetchSheetData(spreadsheetId, `'${sheetName}'!A2:J`),
+        [pRows, lRows] = await Promise.all([
           fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:C"), // Need Satuan (UOM)
           fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E")
         ]);
+        txRows = await fetchSheetData(spreadsheetId, `'${sheetName}'!A2:J`).catch((err: any) => {
+          const errMsg = String(err.message || '');
+          if (errMsg.includes('Kisaran tidak ditemukan') || errMsg.includes('not found') || errMsg.includes('Range not found')) {
+            console.warn(`Sheet ${sheetName} tidak ditemukan. Menggunakan array kosong.`);
+            alert(`Sheet '${sheetName}' belum ada di Spreadsheet Anda. Silakan buat sheet dengan nama '${sheetName}' secara manual di Google Sheets.`);
+            return [];
+          }
+          throw err;
+        });
       } catch (fetchErr: any) {
         if (retryOnMissing) {
           console.log("Error fetching transactions or master data. Attempting auto-initialization...");
@@ -354,7 +362,12 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
       setLocators(uniqueL as Locator[]);
 
     } catch (err: any) {
-      alert(`Gagal memuat transaksi dari ${sheetName}: ${err.message}`);
+      const errMsg = String(err.message || '');
+      if (errMsg.includes('Kisaran tidak ditemukan') || errMsg.includes('not found') || errMsg.includes('Range not found')) {
+        alert(`Sheet '${sheetName}' belum ada di Spreadsheet Anda. Silakan buat sheet dengan nama '${sheetName}' secara manual di Google Sheets Anda, atau perbarui/deploy ulang kode Apps Script.`);
+      } else {
+        alert(`Gagal memuat transaksi dari ${sheetName}: ${err.message}`);
+      }
     } finally {
       setLoading(false);
     }
