@@ -4,7 +4,6 @@ import { db } from '../lib/firebase';
 import { Users, Clock, ShieldCheck, MapPin, Monitor, Smartphone, Globe, Info } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
-import { ADMIN_ACCOUNTS } from '../App';
 
 interface ActiveUser {
   id: string;
@@ -16,6 +15,7 @@ interface ActiveUser {
   status?: string;
   browser?: string;
   device?: string;
+  app?: string;
 }
 
 export default function ActiveUsersMonitor() {
@@ -54,32 +54,18 @@ export default function ActiveUsersMonitor() {
     return { text: 'Online', color: 'bg-emerald-500' };
   };
 
-  // Map predefined accounts to their active states
-  const allUsersList = ADMIN_ACCOUNTS.map(account => {
-    // Find if this account is currently active by matching username
-    // Note: If multiple sessions exist for the same username, take the most recently active one
-    const sessions = activeUsers.filter(u => u.username === account.username);
-    const activeSession = sessions.sort((a, b) => {
-      const timeA = a.lastActive?.toMillis() || 0;
-      const timeB = b.lastActive?.toMillis() || 0;
-      return timeB - timeA;
-    })[0];
+  const loggedInSessions = activeUsers.filter(user => {
+    // If there is an app field, ensure it is HQ (to exclude WMS users if they share the db)
+    if (user.app && user.app !== 'HQ') return false;
+    // Also exclude explicitly marked WMS users just in case
+    if (user.app === 'WMS') return false;
 
-    const statusInfo = getStatusInfo(activeSession);
-
-    return {
-      account,
-      activeSession,
-      statusInfo,
-      sortValue: statusInfo.text === 'Online' ? 3 : statusInfo.text === 'Idle' ? 2 : 1
-    };
+    const statusInfo = getStatusInfo(user);
+    return statusInfo.text !== 'Offline';
   }).sort((a, b) => {
-    if (a.sortValue !== b.sortValue) {
-      return b.sortValue - a.sortValue; // Online first, then Idle, then Offline
-    }
-    const timeA = a.activeSession?.loginTime?.toMillis() || 0;
-    const timeB = b.activeSession?.loginTime?.toMillis() || 0;
-    return timeB - timeA;
+    const timeA = a.loginTime?.toMillis() || 0;
+    const timeB = b.loginTime?.toMillis() || 0;
+    return timeB - timeA; // newest login first
   });
 
   const getRelativeTime = (timestamp: Timestamp | null | undefined) => {
@@ -91,7 +77,7 @@ export default function ActiveUsersMonitor() {
     }
   };
 
-  const onlineCount = allUsersList.filter(u => u.statusInfo.text === 'Online' || u.statusInfo.text === 'Idle').length;
+  const onlineCount = loggedInSessions.length;
 
   return (
     <div className="p-4 sm:p-6 bg-slate-50 min-h-full">
@@ -123,85 +109,79 @@ export default function ActiveUsersMonitor() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {allUsersList.map(item => {
-          const { account, activeSession, statusInfo } = item;
-          
-          return (
-            <div key={account.username} className={`bg-white rounded-xl border shadow-sm p-5 hover:shadow-md transition-shadow relative overflow-hidden ${statusInfo.text === 'Offline' ? 'border-slate-200 opacity-75' : 'border-slate-200'}`}>
-              {/* Decorative top border */}
-              <div className={`absolute top-0 left-0 w-full h-1 ${statusInfo.color}`}></div>
-              
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold uppercase shrink-0 ${statusInfo.text === 'Offline' ? 'bg-slate-100 text-slate-400 border border-slate-200' : 'bg-blue-50 text-blue-700 border border-blue-100'}`}>
-                    {account.username.substring(0, 2)}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800 leading-tight">{account.username}</h3>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <span className="flex h-2 w-2 relative">
-                        {statusInfo.text === 'Online' && (
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        )}
-                        <span className={`relative inline-flex rounded-full h-2 w-2 ${statusInfo.color}`}></span>
-                      </span>
-                      <span className={`text-xs font-semibold ${statusInfo.text === 'Idle' ? 'text-amber-600' : statusInfo.text === 'Offline' ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {statusInfo.text}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-2.5 text-sm text-slate-600 bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-slate-400 shrink-0" />
-                  <span className="font-medium text-slate-700">{account.label}</span>
-                </div>
+        {loggedInSessions.length === 0 ? (
+          <div className="col-span-full p-8 text-center bg-white rounded-xl border border-slate-200">
+            <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500">Tidak ada pengguna aktif saat ini.</p>
+          </div>
+        ) : (
+          loggedInSessions.map(session => {
+            const statusInfo = getStatusInfo(session);
+            
+            return (
+              <div key={session.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow relative overflow-hidden">
+                {/* Decorative top border */}
+                <div className={`absolute top-0 left-0 w-full h-1 ${statusInfo.color}`}></div>
                 
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                  <span className="text-slate-700">Area: <span className="font-medium">{account.allowedArea}</span></span>
-                </div>
-                
-                {statusInfo.text !== 'Offline' ? (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <Info className="w-4 h-4 text-slate-400 shrink-0" />
-                      <span className="text-xs">
-                        Login: <span className="font-semibold text-slate-700">{activeSession?.loginTime ? new Date(activeSession.loginTime.toMillis()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
-                      </span>
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-700 font-bold uppercase shrink-0">
+                      {session.username.substring(0, 2)}
                     </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-                      <span className="text-xs">
-                        Aktif: <span className="font-semibold text-slate-700">{getRelativeTime(activeSession?.lastActive)}</span>
-                      </span>
-                    </div>
-
-                    {(activeSession?.device || activeSession?.browser) && (
-                      <div className="pt-2 mt-2 border-t border-slate-200/60 flex items-center gap-4 text-xs text-slate-500">
-                        <div className="flex items-center gap-1.5">
-                          {activeSession?.device === 'Mobile' ? <Smartphone className="w-3.5 h-3.5" /> : <Monitor className="w-3.5 h-3.5" />}
-                          <span>{activeSession?.device || 'Unknown'}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Globe className="w-3.5 h-3.5" />
-                          <span>{activeSession?.browser || 'Unknown'}</span>
-                        </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 leading-tight">{session.username}</h3>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="flex h-2 w-2 relative">
+                          {statusInfo.text === 'Online' && (
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          )}
+                          <span className={`relative inline-flex rounded-full h-2 w-2 ${statusInfo.color}`}></span>
+                        </span>
+                        <span className={`text-xs font-semibold ${statusInfo.text === 'Idle' ? 'text-amber-600' : 'text-slate-500'}`}>
+                          {statusInfo.text}
+                        </span>
                       </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="pt-2 mt-2 border-t border-slate-200/60 text-xs text-slate-400 text-center italic">
-                    Pengguna tidak aktif
+                    </div>
                   </div>
-                )}
+                </div>
+                
+                <div className="space-y-2.5 text-sm text-slate-600 bg-slate-50 p-3.5 rounded-lg border border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="font-medium text-slate-700">{session.role || 'User'}</span>
+                    <span className="text-slate-300 mx-1">•</span>
+                    <span className="font-medium text-slate-700">{session.area || 'All Area'}</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Info className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="text-xs">
+                      Login: <span className="font-semibold text-slate-700">{session.loginTime ? new Date(session.loginTime.toMillis()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="text-xs">
+                      Aktif: <span className="font-semibold text-slate-700">{getRelativeTime(session.lastActive)}</span>
+                    </span>
+                  </div>
+
+                  <div className="pt-2 mt-2 border-t border-slate-200/60 flex items-center gap-4 text-xs text-slate-500">
+                    <div className="flex items-center gap-1.5">
+                      {session.device === 'Mobile' ? <Smartphone className="w-3.5 h-3.5" /> : <Monitor className="w-3.5 h-3.5" />}
+                      <span>{session.device || 'Unknown'}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5" />
+                      <span>{session.browser || 'Unknown'}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );

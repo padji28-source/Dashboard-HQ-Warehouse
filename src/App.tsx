@@ -158,7 +158,8 @@ export default function App() {
           lastActive: serverTimestamp(),
           status: 'Online',
           browser: getBrowserInfo(),
-          device: getDeviceInfo()
+          device: getDeviceInfo(),
+          app: 'HQ'
         }, { merge: true });
       } catch(e) {
         console.error("Gagal mark login:", e);
