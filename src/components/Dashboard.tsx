@@ -37,7 +37,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
   const safeActiveTab = activeTab === 'pencocokan' && !isAuthorizedForPencocokan ? 'stock' : activeTab;
 
   const mainTabs = [
-    { id: 'stock', label: 'Stock Overview', icon: LayoutDashboard },
+    { id: 'stock', label: 'Executive Dashboard', icon: LayoutDashboard },
     { id: 'cek_stock', label: 'Cek Stock', icon: Package },
     ...(!isReadOnly && isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
     ...(!isReadOnly && area === 'All Cabang' ? [{ id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 }] : []),
@@ -269,7 +269,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
       <main className="flex-1 w-full max-w-full min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         <div className="w-full">
           <div className={cn(safeActiveTab !== 'stock' && 'hidden')}>
-            <StockOverview spreadsheetId={spreadsheetId} area={area} />
+            <StockOverview spreadsheetId={spreadsheetId} area={area} onNavigateToTab={setActiveTab as any} />
           </div>
           <div className={cn(safeActiveTab !== 'cek_stock' && 'hidden')}>
             <CekStock spreadsheetId={spreadsheetId} area={area} />
