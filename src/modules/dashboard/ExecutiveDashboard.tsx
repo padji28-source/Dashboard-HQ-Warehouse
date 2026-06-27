@@ -62,6 +62,22 @@ export default function ExecutiveDashboard({
     };
   }, [stockSummary]);
 
+  const topTransactionProduct = useMemo(() => {
+    if (stockSummary.length === 0) return null;
+    let topProduct = stockSummary[0];
+    let maxTrans = -1;
+    
+    stockSummary.forEach(item => {
+      const totalTrans = item.totalIn + item.totalOut;
+      if (totalTrans > maxTrans) {
+        maxTrans = totalTrans;
+        topProduct = item;
+      }
+    });
+    
+    return maxTrans > 0 ? { ...topProduct, totalTrans: maxTrans } : null;
+  }, [stockSummary]);
+
   // 2. Extract recent activities for Today or current period
   const recentActivities = useMemo(() => {
     return allTransactions
@@ -314,40 +330,60 @@ export default function ExecutiveDashboard({
           </div>
         </div>
 
-        {/* WhatsApp Stock Monitor & twilio Bot Details */}
+        {/* Top Transaction Details */}
         <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-6 rounded-2xl shadow-md border border-slate-800 flex flex-col justify-between">
           <div className="space-y-3">
             <div className="flex justify-between items-start">
-              <div className="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold border border-emerald-500/30">
-                <Bot className="w-3.5 h-3.5" />
-                Bot WhatsApp Aktif
+              <div className="flex items-center gap-2 bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-xs font-bold border border-blue-500/30">
+                <TrendingUp className="w-3.5 h-3.5" />
+                Transaksi Terbanyak
               </div>
               <span className="text-[10px] text-slate-350 bg-white/10 px-2 py-0.5 rounded-full font-mono uppercase">
-                Twilio Webhook
+                Perputaran Barang
               </span>
             </div>
 
-            <h4 className="text-lg font-black tracking-tight pt-1">Automasi & Monitoring WhatsApp</h4>
+            <h4 className="text-lg font-black tracking-tight pt-1">Aktivitas Tertinggi</h4>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Bot asisten stok terhubung langsung ke basis data system PSN Smart Inventory. User dan mitra dapat mengecek ketersediaan unit melalui chat WhatsApp secara real-time.
+              Produk dengan frekuensi keluar/masuk (mutasi) paling tinggi saat ini, menunjukkan perputaran stok paling aktif di area {area}.
             </p>
 
-            <div className="bg-black/20 rounded-xl p-3 text-[11px] font-mono border border-white/5 space-y-1">
-              <span className="text-emerald-400 font-bold">&bull; stok [nama]</span> - Cari posisi & jumlah stok<br />
-              <span className="text-emerald-400 font-bold">&bull; stok rendah</span> - Lihat daftar krisis stok<br />
-              <span className="text-emerald-400 font-bold">&bull; help</span> - Panduan lengkap asisten
-            </div>
+            {topTransactionProduct ? (
+              <div className="bg-black/20 rounded-xl p-3 text-xs border border-white/5 space-y-2 mt-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Nama Produk</span>
+                    <span className="font-bold text-white leading-tight">{topTransactionProduct.namaProduk}</span>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/10">
+                  <div>
+                    <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Locator</span>
+                    <span className="font-bold text-blue-300">{topTransactionProduct.whGroup}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Total Mutasi</span>
+                    <span className="font-bold text-emerald-400">{formatNumber(topTransactionProduct.totalTrans)} Unit</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-black/20 rounded-xl p-4 text-xs border border-white/5 text-slate-400 text-center italic mt-2">
+                Belum ada data transaksi yang cukup.
+              </div>
+            )}
           </div>
 
           <div className="pt-4 border-t border-white/10 mt-4 flex items-center justify-between gap-4">
             <div className="text-[10px] text-slate-350">
-              Grup WH No: <code className="bg-white/10 px-1 py-0.5 rounded font-bold text-white">{CONFIG.TWILIO.sandboxWhatsApp}</code>
+              Periode Real-Time
             </div>
             <button
-              onClick={() => onNavigateToTab('whatsapp')}
-              className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 text-xs font-black rounded-lg transition-colors shadow"
+              onClick={() => onNavigateToTab('stock')}
+              className="px-3.5 py-1.5 bg-blue-500 hover:bg-blue-400 active:bg-blue-600 text-white text-xs font-black rounded-lg transition-colors shadow"
             >
-              Buka WhatsApp Bot Console &rarr;
+              Lihat Detail Stok &rarr;
             </button>
           </div>
         </div>
