@@ -86,7 +86,7 @@ interface CacheEntry {
   data: any[][];
 }
 const fetchCache = new Map<string, CacheEntry>();
-const CACHE_TTL = 300000; // Increased to 5 minutes (300,000 ms) for extreme speed boost and reduced GSheet API load
+const CACHE_TTL = 0; // Disabled cache to ensure real-time sync with no delay
 
 // Map to store in-flight requests (Request Coalescing)
 const inFlightRequests = new Map<string, Promise<any[][]>>();
