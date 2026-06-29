@@ -11,6 +11,7 @@ import {
   ArrowUpRight,
   ChevronDown,
   ChevronUp,
+  X,
 } from "lucide-react";
 import {
   BarChart,
@@ -33,6 +34,7 @@ interface MappedTransaction {
   pCode: string;
   pName: string;
   lCode: string;
+  toLocator?: string;
   qty: number;
   source: string;
   area: string;
@@ -53,6 +55,11 @@ export default function CekStock({ spreadsheetId, area }: Props) {
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedProduct, setSelectedProduct] = useState<{
+    kodeProduk: string;
+    namaProduk: string;
+    locator: string;
+  } | null>(null);
 
   // Refs for closing locator dropdown when clicking outside
   const locatorDropdownRef = useRef<HTMLDivElement>(null);
@@ -123,17 +130,30 @@ export default function CekStock({ spreadsheetId, area }: Props) {
               tipe: "OUT",
               pCode,
               pName,
-              lCode: fromLocator || toLocator || "UNKNOWN_L",
+              lCode: fromLocator || "UNKNOWN_L",
+              toLocator,
               qty,
               source,
               area: sourceAreaName,
             });
+            if (toLocator) {
+              mappedRows.push({
+                tipe: "IN",
+                pCode,
+                pName,
+                lCode: toLocator,
+                qty,
+                source,
+                area: sourceAreaName,
+              });
+            }
           } else {
             mappedRows.push({
               tipe: tipe || "IN",
               pCode,
               pName,
               lCode: fromLocator || toLocator || "UNKNOWN_L",
+              toLocator,
               qty,
               source,
               area: sourceAreaName,
@@ -238,8 +258,15 @@ export default function CekStock({ spreadsheetId, area }: Props) {
     }
 
     loadAllData();
+    
+    // Auto-refresh interval
+    const intervalId = setInterval(() => {
+      loadAllData();
+    }, 5000);
+
     return () => {
       isMounted = false;
+      clearInterval(intervalId);
     };
   }, [spreadsheetId, area]);
 
@@ -815,7 +842,11 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                 </thead>
                 <tbody className="divide-y divide-slate-150">
                   {paginatedTableData.map((s, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors text-slate-700">
+                    <tr 
+                      key={idx} 
+                      onClick={() => setSelectedProduct({ kodeProduk: s.kodeProduk, namaProduk: s.namaProduk, locator: s.whGroup })}
+                      className="hover:bg-slate-50 transition-colors text-slate-700 cursor-pointer"
+                    >
                       <td className="px-5 py-4">
                         <div className="font-semibold text-slate-900 leading-tight">
                           {s.namaLocator || s.whGroup}
@@ -935,6 +966,70 @@ export default function CekStock({ spreadsheetId, area }: Props) {
             )}
           </div>
         </>
+      )}
+
+      {/* Modal Detail Transaksi */}
+      {selectedProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden">
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-lg tracking-tight">Detail Transaksi Produk</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  <span className="font-semibold text-slate-700">{selectedProduct.namaProduk}</span> &bull; 
+                  Locator: <span className="font-mono text-blue-600 bg-blue-50 px-1 py-0.5 rounded ml-1">{selectedProduct.locator}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedProduct(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors focus:outline-none"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-[#FAFBFD] border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="px-4 py-3">Tipe</th>
+                      <th className="px-4 py-3">Qty</th>
+                      <th className="px-4 py-3">Locator Tujuan / Asal</th>
+                      <th className="px-4 py-3">Sumber Data</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-150">
+                    {allTransactions
+                      .filter(t => t.pCode === selectedProduct.kodeProduk && t.lCode === selectedProduct.locator)
+                      .map((t, idx) => {
+                        const isOut = ['OUT', 'KELUAR', 'ISSUE', 'PEMAKAIAN', 'TRANSFER', 'TF'].includes(t.tipe.replace(/\s+/g, '').toUpperCase());
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-4 py-3">
+                              <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${
+                                isOut 
+                                  ? 'bg-rose-50 border-rose-100 text-rose-700' 
+                                  : 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                              }`}>
+                                {t.tipe}
+                              </span>
+                            </td>
+                            <td className={`px-4 py-3 font-mono font-bold ${isOut ? 'text-rose-600' : 'text-emerald-600'}`}>
+                              {isOut ? '-' : '+'}{t.qty}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600 text-xs font-mono font-bold">
+                              {t.toLocator || '-'}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600 text-xs">{t.source}</td>
+                          </tr>
+                        );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
