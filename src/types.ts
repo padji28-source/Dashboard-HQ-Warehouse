@@ -36,4 +36,6 @@ export interface StockSummary {
   totalIn: number;
   totalOut: number;
   stock: number;
+  qtySistem?: number;
+  selisih?: number;
 }
