@@ -87,6 +87,7 @@ export default function StockOverview({
   const [locatorsMap, setLocatorsMap] = useState<
     Map<string, { nama: string; whType: string; area: string }>
   >(new Map());
+  const [mtsMap, setMtsMap] = useState<Map<string, number>>(new Map());
 
   const loadData = async (retryOnMissing = true, forceFresh = false) => {
     try {
@@ -141,10 +142,20 @@ export default function StockOverview({
               tipe: "OUT",
               pCode,
               pName,
-              lCode: fromLocator || toLocator || "UNKNOWN_L",
+              lCode: fromLocator || "UNKNOWN_L",
               qty,
               source,
             });
+            if (toLocator) {
+              mappedRows.push({
+                tipe: "IN",
+                pCode,
+                pName,
+                lCode: toLocator,
+                qty,
+                source,
+              });
+            }
           } else {
             mappedRows.push({
               tipe: tipe || "IN",
@@ -168,14 +179,27 @@ export default function StockOverview({
         await Promise.all(
           urlEntries.map(async ([aName, aUrl]) => {
             try {
-              const [tn, tr, tm, ts, pr, lr] = await Promise.all([
+              const [tn, tr, tm, ts, pr, lr, mr] = await Promise.all([
                 fetchSheetData(aUrl, "'INPUT'!A2:J", forceFresh).catch(() => []),
                 fetchSheetData(aUrl, "'INPUT RM'!A2:J", forceFresh).catch(() => []),
                 fetchSheetData(aUrl, "'INPUT MFG'!A2:J", forceFresh).catch(() => []),
                 fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", forceFresh).catch(() => []),
                 fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:B", forceFresh).catch(() => []),
                 fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", forceFresh).catch(() => []),
+                fetchSheetData(aUrl, "'MTS'!A2:E", forceFresh).catch(() => []),
               ]);
+
+              // Merge MTS
+              mr.forEach((r: any[]) => {
+                if (r.length < 5) return;
+                const pCode = String(r[0] || "").trim();
+                const lCode = String(r[2] || "").trim();
+                let qty = parseFloat(String(r[4] || "0").replace(",", ".")) || 0;
+                if (isNaN(qty)) qty = 0;
+                if (pCode && lCode) {
+                  setMtsMap(prev => new Map(prev).set(`${pCode}_${lCode}`, qty));
+                }
+              });
 
               // Merge products map
               pr.filter((r: any[]) => r.length > 0 && r[0]).forEach(
@@ -221,9 +245,10 @@ export default function StockOverview({
         let txRowsSupplies: any[] = [];
         let pRows: any[] = [];
         let lRows: any[] = [];
+        let mtsRows: any[] = [];
 
         try {
-          [txRowsNormal, txRowsRM, txRowsMfg, txRowsSupplies, pRows, lRows] =
+          [txRowsNormal, txRowsRM, txRowsMfg, txRowsSupplies, pRows, lRows, mtsRows] =
             await Promise.all([
               fetchSheetData(spreadsheetId, "'INPUT'!A2:J", forceFresh),
               fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J", forceFresh),
@@ -231,6 +256,7 @@ export default function StockOverview({
               fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J", forceFresh),
               fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B", forceFresh),
               fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E", forceFresh),
+              fetchSheetData(spreadsheetId, "'MTS'!A2:E", forceFresh).catch(() => []),
             ]);
         } catch (fetchErr: any) {
           if (retryOnMissing) {
@@ -286,7 +312,24 @@ export default function StockOverview({
             "'MASTER_LOCATOR'!A2:E",
             forceFresh
           ).catch(() => []);
+          mtsRows = await fetchSheetData(
+            spreadsheetId,
+            "'MTS'!A2:E",
+            forceFresh
+          ).catch(() => []);
         }
+
+        const mtsMap = new Map<string, number>();
+        mtsRows.forEach((r: any[]) => {
+          if (r.length < 5) return;
+          const pCode = String(r[0] || "").trim();
+          const lCode = String(r[2] || "").trim();
+          let qty = parseFloat(String(r[4] || "0").replace(",", ".")) || 0;
+          if (isNaN(qty)) qty = 0;
+          if (pCode && lCode) {
+            mtsMap.set(`${pCode}_${lCode}`, qty);
+          }
+        });
 
         pRows
           .filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A')
@@ -316,6 +359,7 @@ export default function StockOverview({
         processRows(txRowsRM, "INPUT RM");
         processRows(txRowsMfg, "INPUT MFG");
         processRows(txRowsSupplies, "INPUT SUPPLIES");
+        setMtsMap(mtsMap);
       }
 
       setProductsMap(pMap);
@@ -342,7 +386,7 @@ export default function StockOverview({
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [spreadsheetId, autoRefresh]);
+  }, [spreadsheetId, area, autoRefresh]);
 
   useEffect(() => {
     const stockMap = new Map<string, StockSummary>(); // Key: kodeProduk_whGroup
@@ -400,6 +444,14 @@ export default function StockOverview({
           summary.stock += qty;
         }
       }
+    });
+
+    // Populate qtySistem and selisih
+    stockMap.forEach((summary, key) => {
+      const qtySistem = mtsMap.get(key) || 0;
+      summary.qtySistem = qtySistem;
+      // Round to avoid float issues
+      summary.selisih = Math.round((summary.stock - qtySistem) * 1000) / 1000;
     });
 
     console.log("Stock map size:", stockMap.size);
@@ -464,7 +516,7 @@ export default function StockOverview({
     });
 
     setStockSummary(filteredByArea);
-  }, [allTransactions, productsMap, locatorsMap, selectedSource, area]);
+  }, [allTransactions, productsMap, locatorsMap, selectedSource, area, mtsMap]);
 
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
