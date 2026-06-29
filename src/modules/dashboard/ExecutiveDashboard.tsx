@@ -42,8 +42,8 @@ export default function ExecutiveDashboard({
       totalOut += item.totalOut;
     });
 
-    // Low stock count (stock is greater than zero but less than minimum threshold)
-    const lowStockItems = stockSummary.filter(item => item.stock > 0 && item.stock <= CONFIG.DEFAULT_MIN_STOCK);
+    // Products with discrepancies (Selisih)
+    const discrepancyItems = stockSummary.filter(item => Math.abs(item.selisih || 0) >= 0.001);
 
     // Stale/unmoved products: Active products that have no transactions today
     // Let's count items with transactions <= 0 or very old. Since allTransactions is active,
@@ -56,26 +56,21 @@ export default function ExecutiveDashboard({
       totalStock,
       totalIn,
       totalOut,
-      lowStockCount: lowStockItems.length,
-      lowStockList: lowStockItems.slice(0, 5), // top 5 for preview
+      lowStockCount: discrepancyItems.length,
+      lowStockList: discrepancyItems, // show all items instead of slice(0, 5)
       unmovedCount: unmovedItems.length
     };
   }, [stockSummary]);
 
-  const topTransactionProduct = useMemo(() => {
-    if (stockSummary.length === 0) return null;
-    let topProduct = stockSummary[0];
-    let maxTrans = -1;
+  const topTransactionProducts = useMemo(() => {
+    if (stockSummary.length === 0) return [];
     
-    stockSummary.forEach(item => {
-      const totalTrans = item.totalIn + item.totalOut;
-      if (totalTrans > maxTrans) {
-        maxTrans = totalTrans;
-        topProduct = item;
-      }
-    });
-    
-    return maxTrans > 0 ? { ...topProduct, totalTrans: maxTrans } : null;
+    const withTrans = stockSummary.map(item => ({
+      ...item,
+      totalTrans: item.totalIn + item.totalOut
+    })).filter(item => item.totalTrans > 0);
+
+    return withTrans.sort((a, b) => b.totalTrans - a.totalTrans).slice(0, 3);
   }, [stockSummary]);
 
   // 2. Extract recent activities for Today or current period
@@ -168,7 +163,7 @@ export default function ExecutiveDashboard({
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between hover:border-emerald-200 transition-colors group">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Stok Akumulatif</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Stok Akumulatif {area === 'ALL' ? 'Semua Area' : area}</p>
               <h3 className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{formatNumber(stats.totalStock)}</h3>
             </div>
             <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl group-hover:scale-110 transition-transform">
@@ -189,9 +184,9 @@ export default function ExecutiveDashboard({
         )}>
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Stok Minimum Alert</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Selisih Stock {area === 'ALL' ? 'Semua Area' : area}</p>
               <h3 className={cn("text-2xl font-black mt-1 tracking-tight", stats.lowStockCount > 0 ? "text-rose-600" : "text-emerald-600")}>
-                {stats.lowStockCount > 0 ? `${stats.lowStockCount} Peringatan` : "0 Kritikal"}
+                {stats.lowStockCount > 0 ? `${stats.lowStockCount} Selisih` : "0 Selisih"}
               </h3>
             </div>
             <div className={cn(
@@ -202,7 +197,7 @@ export default function ExecutiveDashboard({
             </div>
           </div>
           <span className="text-xs font-medium text-slate-500 mt-3">
-            {stats.lowStockCount > 0 ? `Terdapat barang segera habis!` : `Seluruh stok dalam kondisi aman`}
+            {stats.lowStockCount > 0 ? `Terdapat perbedaan qty fisik vs sistem` : `Fisik & Sistem telah selaras`}
           </span>
         </div>
       </div>
@@ -289,21 +284,21 @@ export default function ExecutiveDashboard({
         </div>
       </div>
 
-      {/* Secondary Row: Low Stock Guard & Quick Bot Status */}
+      {/* Secondary Row: Discrepancy & Top Transaction Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Low Stock Warning Section */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        {/* Discrepancy (Selisih) Section */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
           <div className="border-b border-slate-100 pb-3 mb-4 flex justify-between items-center">
             <div>
-              <h4 className="font-extrabold text-slate-900 text-base">Peringatan Stock Rendah</h4>
-              <p className="text-xs text-slate-500 mt-0.5">Segera lalukan pengadaan ulang (Reorder)</p>
+              <h4 className="font-extrabold text-slate-900 text-base">Selisih Stock {area !== 'ALL' ? area : ''}</h4>
+              <p className="text-xs text-slate-500 mt-0.5">Produk dengan selisih kuantitas fisik dan sistem</p>
             </div>
-            <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-black rounded-full select-none">
-              Batas Min: {CONFIG.DEFAULT_MIN_STOCK}
+            <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-black rounded-full select-none shrink-0 ml-2">
+              Beda Qty
             </span>
           </div>
 
-          <div className="space-y-2.5 max-h-[220px] overflow-y-auto">
+          <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1 flex-1">
             {stats.lowStockList.length > 0 ? (
               stats.lowStockList.map((item, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-red-50/50 hover:bg-red-50 border border-red-100/50 rounded-xl transition-all">
@@ -317,14 +312,16 @@ export default function ExecutiveDashboard({
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-black text-rose-600 leading-none">{item.stock}</p>
-                    <p className="text-[10px] text-slate-405 mt-1 font-bold">Stok saat ini</p>
+                    <p className={cn("text-sm font-black leading-none", (item.selisih || 0) > 0 ? "text-blue-600" : "text-rose-600")}>
+                      {(item.selisih || 0) > 0 ? `+${item.selisih}` : item.selisih}
+                    </p>
+                    <p className="text-[9px] text-slate-400 mt-1 uppercase font-bold">Qty Selisih</p>
                   </div>
                 </div>
               ))
             ) : (
               <div className="flex items-center justify-center h-28 text-slate-400 text-xs italic">
-                Seluruh produk memiliki stok di atas batas pengaman ({CONFIG.DEFAULT_MIN_STOCK}).
+                Seluruh produk telah selaras dengan sistem.
               </div>
             )}
           </div>
@@ -348,31 +345,35 @@ export default function ExecutiveDashboard({
               Produk dengan frekuensi keluar/masuk (mutasi) paling tinggi saat ini, menunjukkan perputaran stok paling aktif di area {area}.
             </p>
 
-            {topTransactionProduct ? (
-              <div className="bg-black/20 rounded-xl p-3 text-xs border border-white/5 space-y-2 mt-2">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Nama Produk</span>
-                    <span className="font-bold text-white leading-tight">{topTransactionProduct.namaProduk}</span>
+            <div className="space-y-2 mt-2">
+              {topTransactionProducts.length > 0 ? (
+                topTransactionProducts.map((product, idx) => (
+                  <div key={idx} className="bg-black/20 rounded-xl p-3 text-xs border border-white/5 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Nama Produk</span>
+                        <span className="font-bold text-white leading-tight">{product.namaProduk}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/10">
+                      <div>
+                        <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Locator</span>
+                        <span className="font-bold text-blue-300">{product.whGroup}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Total Mutasi</span>
+                        <span className="font-bold text-emerald-400">{formatNumber(product.totalTrans)} Unit</span>
+                      </div>
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="bg-black/20 rounded-xl p-4 text-xs border border-white/5 text-slate-400 text-center italic mt-2">
+                  Belum ada data transaksi yang cukup.
                 </div>
-                
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/10">
-                  <div>
-                    <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Locator</span>
-                    <span className="font-bold text-blue-300">{topTransactionProduct.whGroup}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Total Mutasi</span>
-                    <span className="font-bold text-emerald-400">{formatNumber(topTransactionProduct.totalTrans)} Unit</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-black/20 rounded-xl p-4 text-xs border border-white/5 text-slate-400 text-center italic mt-2">
-                Belum ada data transaksi yang cukup.
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           <div className="pt-4 border-t border-white/10 mt-4 flex items-center justify-between gap-4">
@@ -380,7 +381,7 @@ export default function ExecutiveDashboard({
               Periode Real-Time
             </div>
             <button
-              onClick={() => onNavigateToTab('stock')}
+              onClick={() => onNavigateToTab('cek_stock')}
               className="px-3.5 py-1.5 bg-blue-500 hover:bg-blue-400 active:bg-blue-600 text-white text-xs font-black rounded-lg transition-colors shadow"
             >
               Lihat Detail Stok &rarr;
