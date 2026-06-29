@@ -298,7 +298,7 @@ export default function ExecutiveDashboard({
             </span>
           </div>
 
-          <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1 flex-1">
+          <div className="space-y-2.5 overflow-y-auto pr-1 flex-1">
             {stats.lowStockList.length > 0 ? (
               stats.lowStockList.map((item, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-red-50/50 hover:bg-red-50 border border-red-100/50 rounded-xl transition-all">
