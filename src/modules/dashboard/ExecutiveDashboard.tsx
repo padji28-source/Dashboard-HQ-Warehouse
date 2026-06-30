@@ -25,8 +25,8 @@ export default function ExecutiveDashboard({
 
   // 1. Calculate aggregated summary metrics
   const stats = useMemo(() => {
-    // Total unique products
-    const uniqueProducts = new Set(stockSummary.map(s => s.kodeProduk || s.namaProduk)).size;
+    // Total unique SKUs/combinations (matching PencocokanData)
+    const uniqueProducts = stockSummary.length;
     
     // Total locator groups
     const uniqueLocators = new Set(stockSummary.map(s => s.whGroup)).size;
@@ -131,7 +131,7 @@ export default function ExecutiveDashboard({
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between hover:border-blue-200 transition-colors group">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Produk</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total SKU / Kombinasi</p>
               <h3 className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{formatNumber(stats.uniqueProducts)}</h3>
             </div>
             <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl group-hover:scale-110 transition-transform">
