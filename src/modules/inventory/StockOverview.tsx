@@ -105,10 +105,13 @@ export default function StockOverview({
           const resMts = await fetch(csvUrl);
           if (resMts.ok) {
             const contentType = resMts.headers.get('content-type') || '';
-            if (!contentType.includes('text/html')) {
-              textMts = await resMts.text();
-              fetchedSuccess = true;
+            if (contentType.includes('text/html')) {
+              throw new Error('API returned HTML page (static host route mismatch)');
             }
+            textMts = await resMts.text();
+            fetchedSuccess = true;
+          } else {
+            throw new Error(`HTTP ${resMts.status}`);
           }
         } catch (apiErr) {
           console.warn('Backend proxy /api/mts failed, fetching directly from Google Sheets...', apiErr);
@@ -436,15 +439,15 @@ export default function StockOverview({
     allTransactions.forEach((t) => {
       if (selectedSource !== "ALL" && t.source !== selectedSource) return;
 
-      const { tipe, pCode, pName, lCode, qty } = t;
-      const key = `${pCode}_${lCode}`;
+      const { tipe, pCode, pName, lCode, qty, area: rowArea } = t;
+      const key = `${rowArea}_${lCode}_${pCode}`;
       if (!stockMap.has(key)) {
         const lookupKey = lCode.trim();
         const lData = locatorsMap.get(lookupKey) ||
           locatorsMap.get(lookupKey.toUpperCase()) || {
             nama: lCode,
             whType: "",
-            area: "",
+            area: rowArea,
           };
         stockMap.set(key, {
           kodeProduk: pCode === pName ? "" : pCode,
@@ -452,7 +455,7 @@ export default function StockOverview({
           whGroup: lCode,
           namaLocator: lData.nama,
           whType: lData.whType,
-          area: lData.area,
+          area: rowArea || lData.area || area,
           totalIn: 0,
           totalOut: 0,
           stock: 0,
@@ -513,9 +516,8 @@ export default function StockOverview({
     console.log("Stock map size:", stockMap.size);
 
     const filteredByArea = Array.from(stockMap.values()).filter((s) => {
-      const hasActivity = s.totalIn > 0 || s.totalOut > 0 || s.stock !== 0;
-      if (!hasActivity) return false;
-
+      // Remove hasActivity check so ALL items from allTransactions are included, just like in PencocokanData
+      
       if (
         area &&
         area !== "HQ" &&
