@@ -74,9 +74,13 @@ export default function Pengepokan() {
       setErrorMsg(null);
 
       // Construct Google Sheet CSV URL with explicit GID for the "Update MTS POK" sheet tab
-      const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=32687697&single=true&output=csv';
+      const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=32687697&single=true&output=csv&hl=id';
 
-      const res = await fetch(csvUrl);
+      const res = await fetch(csvUrl, {
+        headers: {
+          "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
+        }
+      });
       if (!res.ok) {
         throw new Error('Gagal memuat file dari Google Sheets. Pastikan sheet telah dipublikasikan ke web.');
       }

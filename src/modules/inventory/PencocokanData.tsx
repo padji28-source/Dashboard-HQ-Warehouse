@@ -138,25 +138,37 @@ function parseToIsoDate(dtStr: string): string {
   if (!dtStr) return '';
   const cleaned = dtStr.trim();
   
-  // Try YYYY-MM-DD
-  const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (yyyymmdd) {
-    const y = yyyymmdd[1];
-    const m = yyyymmdd[2].padStart(2, '0');
-    const d = yyyymmdd[3].padStart(2, '0');
-    return `${y}-${m}-${d}`;
+  // Try exact YYYY-MM-DD (don't match ISO strings with T like 2024-07-31T17:00:00.000Z to avoid timezone shifts)
+  if (!cleaned.includes('T')) {
+    const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (yyyymmdd) {
+      const y = yyyymmdd[1];
+      const m = yyyymmdd[2].padStart(2, '0');
+      const d = yyyymmdd[3].padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
   }
   
-  // Try MM/DD/YYYY or M/D/YY (consistent with other modules and input formatting)
+  // Try DD/MM/YYYY or MM/DD/YYYY
   const slashed = cleaned.split('/');
   if (slashed.length === 3) {
-    let m = slashed[0].padStart(2, '0');
-    let d = slashed[1].padStart(2, '0');
+    let p1 = slashed[0].padStart(2, '0');
+    let p2 = slashed[1].padStart(2, '0');
     let y = slashed[2].trim();
     if (y.length === 2) {
       y = '20' + y;
     }
-    return `${y.padStart(4, '20')}-${m}-${d}`;
+    
+    // If p1 > 12, it must be DD/MM/YYYY
+    if (parseInt(p1) > 12) {
+      return `${y.padStart(4, '20')}-${p2}-${p1}`;
+    }
+    // If p2 > 12, it must be MM/DD/YYYY
+    if (parseInt(p2) > 12) {
+      return `${y.padStart(4, '20')}-${p1}-${p2}`;
+    }
+    // Default to DD/MM/YYYY for Indonesian locale
+    return `${y.padStart(4, '20')}-${p2}-${p1}`;
   }
 
   // Try standard Date parsing
