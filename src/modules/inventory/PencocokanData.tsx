@@ -1010,7 +1010,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         'Locator': `${item.namaLocator} (${item.whGroup})`,
         'Kode Produk': item.kodeProduk,
         'Nama Produk': item.namaProduk,
-        'Stok Rill (Awal Bulan)': item.stokKemarin,
+        'Stok Awal Bulan': item.stokKemarin,
         'Mutasi Bulan Ini IN': (item as any).mutasiQtyIn ?? 0,
         'Mutasi Bulan Ini OUT': (item as any).mutasiQtyOut ?? 0,
         'Stock Rill (Akhir Bulan)': item.stokRill,
@@ -1425,7 +1425,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                     {(area === 'HQ' || spreadsheetId === 'HQ') && <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Area</th>}
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Locator</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Nama Produk</th>
-                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-slate-100/40 text-slate-700 font-medium">Stok Rill (awal bulan)</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-slate-100/40 text-slate-700 font-medium">Stok Awal Bulan</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-blue-50/30 text-blue-800">Mutasi Bulan Ini IN</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-rose-50/10 text-rose-800 font-bold">Mutasi Bulan Ini OUT</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-emerald-50/20 text-emerald-800">Stock Rill (akhir bulan)</th>
