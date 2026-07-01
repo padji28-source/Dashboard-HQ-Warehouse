@@ -142,10 +142,16 @@ export default function AkurasiStock() {
     return localNow.toISOString().split('T')[0];
   });
   const [reconType, setReconType] = useState<'daily' | 'monthly'>('daily');
-  const [selectedMonth, setSelectedMonth] = useState(() => {
+  const [selectedStartDate, setSelectedStartDate] = useState(() => {
     const now = new Date();
     const mm = String(now.getMonth() + 1).padStart(2, '0');
-    return `${now.getFullYear()}-${mm}`;
+    return `${now.getFullYear()}-${mm}-01`;
+  });
+  const [selectedEndDate, setSelectedEndDate] = useState(() => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const localNow = new Date(now.getTime() - offset * 60 * 1000);
+    return localNow.toISOString().split('T')[0];
   });
 
   const [allStockItems, setAllStockItems] = useState<CompiledStockItem[]>([]);
@@ -347,8 +353,7 @@ export default function AkurasiStock() {
               if (reconType === 'daily') {
                 includeInCumulative = !tanggal || tanggal <= selectedDate;
               } else {
-                const transMonth = tanggal ? tanggal.substring(0, 7) : '';
-                includeInCumulative = !tanggal || transMonth <= selectedMonth;
+                includeInCumulative = !tanggal || tanggal <= selectedEndDate;
               }
 
               if (includeInCumulative) {
@@ -429,7 +434,7 @@ export default function AkurasiStock() {
 
   useEffect(() => {
     loadData();
-  }, [reconType, selectedDate, selectedMonth]);
+  }, [reconType, selectedDate, selectedStartDate, selectedEndDate]);
 
   // Derived states
   const categoryCounts = useMemo(() => {
@@ -533,7 +538,7 @@ export default function AkurasiStock() {
       ];
       ws['!cols'] = fitCols;
 
-      XLSX.writeFile(wb, `Selisih_Akurasi_Stock_ALL_CABANG_${reconType === 'daily' ? formatToDDMMYYYY(selectedDate) : formatToDDMMYYYY(selectedMonth)}.xlsx`);
+      XLSX.writeFile(wb, `Selisih_Akurasi_Stock_ALL_CABANG_${reconType === 'daily' ? formatToDDMMYYYY(selectedDate) : `${formatToDDMMYYYY(selectedStartDate)}_to_${formatToDDMMYYYY(selectedEndDate)}`}.xlsx`);
     } catch (error: any) {
       alert('Ekspor ke Excel gagal: ' + error.message);
     }
@@ -607,12 +612,19 @@ export default function AkurasiStock() {
             </div>
           ) : (
             <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
-              <span className="text-[10px] uppercase tracking-wide font-bold text-slate-400">Bulan:</span>
+              <span className="text-[10px] uppercase tracking-wide font-bold text-slate-400">Periode:</span>
               <input
-                type="month"
-                value={selectedMonth}
-                onChange={e => setSelectedMonth(e.target.value)}
-                className="text-xs sm:text-sm font-bold text-slate-800 focus:outline-none"
+                type="date"
+                value={selectedStartDate}
+                onChange={e => setSelectedStartDate(e.target.value)}
+                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[110px]"
+              />
+              <span className="text-xs text-slate-400 font-bold">-</span>
+              <input
+                type="date"
+                value={selectedEndDate}
+                onChange={e => setSelectedEndDate(e.target.value)}
+                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[110px]"
               />
             </div>
           )}

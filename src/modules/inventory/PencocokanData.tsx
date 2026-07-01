@@ -218,10 +218,16 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     const localNow = new Date(now.getTime() - offset * 60 * 1000);
     return localNow.toISOString().split('T')[0];
   });
-  const [selectedMonth, setSelectedMonth] = useState(() => {
+  const [selectedStartDate, setSelectedStartDate] = useState(() => {
     const now = new Date();
     const mm = String(now.getMonth() + 1).padStart(2, '0');
-    return `${now.getFullYear()}-${mm}`;
+    return `${now.getFullYear()}-${mm}-01`;
+  });
+  const [selectedEndDate, setSelectedEndDate] = useState(() => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const localNow = new Date(now.getTime() - offset * 60 * 1000);
+    return localNow.toISOString().split('T')[0];
   });
 
   // Search & Filters
@@ -293,7 +299,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
   // Auto-reset page index when filters, type, or selection date changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedAreaFilter, selectedLocator, selectedStatusFilter, selectedSourceFilter, pageSize, reconType, selectedDate, selectedMonth]);
+  }, [searchQuery, selectedAreaFilter, selectedLocator, selectedStatusFilter, selectedSourceFilter, pageSize, reconType, selectedDate, selectedStartDate, selectedEndDate]);
 
   const loadData = async () => {
     try {
@@ -554,22 +560,9 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         includeInYesterday = !tanggal || tanggal < selectedDate || (isAwal && tanggal <= selectedDate);
         includeInMutation = tanggal === selectedDate && !isAwal;
       } else {
-        const transMonth = tanggal ? tanggal.substring(0, 7) : '';
-        includeInCumulative = !tanggal || transMonth <= selectedMonth;
-        
-        // Month before selectedMonth
-        const prevMonth = (() => {
-          if (!selectedMonth) return '';
-          const parts = selectedMonth.split('-');
-          if (parts.length !== 2) return '';
-          const y = parseInt(parts[0], 10);
-          const m = parseInt(parts[1], 10);
-          const prevD = new Date(y, m - 2, 1);
-          return `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, '0')}`;
-        })();
-        
-        includeInYesterday = !tanggal || (transMonth && transMonth <= prevMonth) || (isAwal && transMonth <= selectedMonth);
-        includeInMutation = transMonth === selectedMonth && !isAwal;
+        includeInCumulative = !tanggal || tanggal <= selectedEndDate;
+        includeInYesterday = !tanggal || tanggal < selectedStartDate || (isAwal && tanggal <= selectedEndDate);
+        includeInMutation = tanggal >= selectedStartDate && tanggal <= selectedEndDate && !isAwal;
       }
 
       if (!listMap.has(itemKey)) {
@@ -673,7 +666,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         status
       };
     });
-  }, [allTransactions, productsMap, locatorsMap, mtsLookupMap, area, reconType, selectedDate, selectedMonth]);
+  }, [allTransactions, productsMap, locatorsMap, mtsLookupMap, area, reconType, selectedDate, selectedStartDate, selectedEndDate]);
 
   // Filter unique locators for selection
   const uniqueLocators = useMemo(() => {
@@ -791,7 +784,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
 
   // Save action handlers
   const initSaveSession = () => {
-    const dStr = reconType === 'daily' ? selectedDate : selectedMonth;
+    const dStr = reconType === 'daily' ? selectedDate : `${selectedStartDate}_to_${selectedEndDate}`;
     const typeLabel = reconType === 'daily' ? 'Harian' : 'Bulanan';
     const areaLabel = selectedAreaFilter === 'ALL' ? (area === 'HQ' ? 'HQ-Pusat' : area) : selectedAreaFilter;
     setSessionNameInput(`Pencocokan ${typeLabel} ${areaLabel} (${dStr})`);
@@ -806,7 +799,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     
     try {
       setIsSaving(true);
-      const dStr = reconType === 'daily' ? selectedDate : selectedMonth;
+      const dStr = reconType === 'daily' ? selectedDate : `${selectedStartDate}_to_${selectedEndDate}`;
       
       const sessionData = {
         id: 'rec_' + Date.now(),
@@ -1000,7 +993,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     }
 
     let dataToExport = [];
-    const dateStr = currentReconType === 'daily' ? formatToDDMMYYYY(selectedDate) : formatToDDMMYYYY(selectedMonth);
+    const dateStr = currentReconType === 'daily' ? formatToDDMMYYYY(selectedDate) : `${formatToDDMMYYYY(selectedStartDate)} - ${formatToDDMMYYYY(selectedEndDate)}`;
     const typeLabel = currentReconType === 'daily' ? 'Harian' : 'Bulanan';
 
     if (currentReconType === 'daily') {
@@ -1022,10 +1015,10 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         'Locator': `${item.namaLocator} (${item.whGroup})`,
         'Kode Produk': item.kodeProduk,
         'Nama Produk': item.namaProduk,
-        'Stok Awal Bulan': item.stokKemarin,
-        'Mutasi Bulan Ini IN': (item as any).mutasiQtyIn ?? 0,
-        'Mutasi Bulan Ini OUT': (item as any).mutasiQtyOut ?? 0,
-        'Stock Rill (Akhir Bulan)': item.stokRill,
+        'Stok Awal Periode': item.stokKemarin,
+        'Mutasi Periode IN': (item as any).mutasiQtyIn ?? 0,
+        'Mutasi Periode OUT': (item as any).mutasiQtyOut ?? 0,
+        'Stock Rill (Akhir Periode)': item.stokRill,
         'Stock Tarikan MTS': item.stockSistem,
         'Selisih': item.selisih,
         'Status': item.status
@@ -1052,10 +1045,10 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           { wch: 25 }, // Locator
           { wch: 15 }, // Kode Produk
           { wch: 40 }, // Nama Produk
-          { wch: 22 }, // Stok Rill (Awal Bulan)
-          { wch: 20 }, // Mutasi Bulan Ini IN
-          { wch: 20 }, // Mutasi Bulan Ini OUT
-          { wch: 25 }, // Stock Rill (Akhir Bulan)
+          { wch: 22 }, // Stok Rill (Awal Periode)
+          { wch: 20 }, // Mutasi Periode IN
+          { wch: 20 }, // Mutasi Periode OUT
+          { wch: 25 }, // Stock Rill (Akhir Periode)
           { wch: 20 }, // Stock Tarikan MTS
           { wch: 12 }, // Selisih
           { wch: 15 }, // Status
@@ -1177,7 +1170,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
             )}
           >
             <Calendar className="w-4 h-4" />
-            Pencocokan Bulanan
+            Pencocokan Periode
           </button>
         </div>
       )}
@@ -1196,7 +1189,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
             </span>
           ) : (
             <span>
-              Sedang menampilkan <strong>Pencocokan Bulanan</strong> untuk periode <strong>{formatToDDMMYYYY(selectedMonth)}</strong>. Stok Rill diakumulasi dari seluruh transaksi <strong>sebelum atau pada akhir bulan tersebut</strong>, dengan kolom Mutasi mencatat total aktivitas mutasi bulanan.
+              Sedang menampilkan <strong>Pencocokan Periode</strong> untuk periode <strong>{formatToDDMMYYYY(selectedStartDate)} - {formatToDDMMYYYY(selectedEndDate)}</strong>. Stok Awal diakumulasi dari seluruh transaksi <strong>sebelum periode tersebut dimulai</strong>, dengan kolom Mutasi mencatat total aktivitas mutasi pada periode tersebut.
             </span>
           )}
         </div>
@@ -1344,14 +1337,26 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
               />
             </div>
           ) : (
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={e => setSelectedMonth(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
-              />
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={selectedStartDate}
+                  onChange={e => setSelectedStartDate(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
+                />
+              </div>
+              <span className="text-slate-500">-</span>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={selectedEndDate}
+                  onChange={e => setSelectedEndDate(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -1437,10 +1442,10 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                     {(area === 'HQ' || spreadsheetId === 'HQ') && <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Area</th>}
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Locator</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Nama Produk</th>
-                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-slate-100/40 text-slate-700 font-medium">Stok Awal Bulan</th>
-                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-blue-50/30 text-blue-800">Mutasi Bulan Ini IN</th>
-                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-rose-50/10 text-rose-800 font-bold">Mutasi Bulan Ini OUT</th>
-                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-emerald-50/20 text-emerald-800">Stock Rill (akhir bulan)</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-slate-100/40 text-slate-700 font-medium">Stok Awal Periode</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-blue-50/30 text-blue-800">Mutasi Periode IN</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-rose-50/10 text-rose-800 font-bold">Mutasi Periode OUT</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-emerald-50/20 text-emerald-800">Stock Rill (Akhir Periode)</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-cyan-50/25 text-slate-750 font-bold">Stock Tarikan MTS</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right">Selisih</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-center font-bold">Status</th>
