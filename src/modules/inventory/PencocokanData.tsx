@@ -1010,8 +1010,11 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         'Locator': `${item.namaLocator} (${item.whGroup})`,
         'Kode Produk': item.kodeProduk,
         'Nama Produk': item.namaProduk,
-        'Stok Rill (Akhir Bulan Ini)': item.stokRill,
-        'Stok Sistem (MTS)': item.stockSistem,
+        'Stok Rill (Awal Bulan)': item.stokKemarin,
+        'Mutasi Bulan Ini IN': (item as any).mutasiQtyIn ?? 0,
+        'Mutasi Bulan Ini OUT': (item as any).mutasiQtyOut ?? 0,
+        'Stock Rill (Akhir Bulan)': item.stokRill,
+        'Stock Tarikan MTS': item.stockSistem,
         'Selisih': item.selisih,
         'Status': item.status
       }));
@@ -1037,8 +1040,11 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           { wch: 25 }, // Locator
           { wch: 15 }, // Kode Produk
           { wch: 40 }, // Nama Produk
-          { wch: 25 }, // Stok Rill (Akhir Bulan Ini)
-          { wch: 20 }, // Stok Sistem (MTS)
+          { wch: 22 }, // Stok Rill (Awal Bulan)
+          { wch: 20 }, // Mutasi Bulan Ini IN
+          { wch: 20 }, // Mutasi Bulan Ini OUT
+          { wch: 25 }, // Stock Rill (Akhir Bulan)
+          { wch: 20 }, // Stock Tarikan MTS
           { wch: 12 }, // Selisih
           { wch: 15 }, // Status
         ];
@@ -1419,8 +1425,11 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                     {(area === 'HQ' || spreadsheetId === 'HQ') && <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Area</th>}
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Locator</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Nama Produk</th>
-                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-slate-100/40 text-slate-700 font-medium">Stok Rill (akhir bulan ini)</th>
-                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-blue-50/30 text-blue-800">Stok Sistem (MTS)</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-slate-100/40 text-slate-700 font-medium">Stok Rill (awal bulan)</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-blue-50/30 text-blue-800">Mutasi Bulan Ini IN</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-rose-50/10 text-rose-800 font-bold">Mutasi Bulan Ini OUT</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-emerald-50/20 text-emerald-800">Stock Rill (akhir bulan)</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-cyan-50/25 text-slate-750 font-bold">Stock Tarikan MTS</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right">Selisih</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-center font-bold">Status</th>
                   </tr>
@@ -1431,7 +1440,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                 {displayedList.length === 0 ? (
                   <tr>
                     <td 
-                      colSpan={currentReconType === 'daily' ? 9 : ((area === 'HQ' || spreadsheetId === 'HQ') ? 7 : 6)} 
+                      colSpan={currentReconType === 'daily' ? 9 : ((area === 'HQ' || spreadsheetId === 'HQ') ? 10 : 9)} 
                       className="p-12 text-center text-slate-500 italic"
                     >
                       Tidak ada rekonsiliasi yang cocok dengan kriteria filter atau arsip kosong.
@@ -1537,7 +1546,16 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                       {/* Custom Monthly layout columns */}
                       {currentReconType === 'monthly' && (
                         <>
-                          <td className="px-5 py-4 text-right font-bold text-slate-900 bg-slate-50/25">
+                          <td className="px-5 py-4 text-right font-medium text-slate-700 bg-slate-50/25">
+                            {formatValue(item.stokKemarin, item.uom)}
+                          </td>
+                          <td className="px-5 py-4 text-right font-semibold text-emerald-600 bg-emerald-50/5">
+                            {formatValue((item as any).mutasiQtyIn ?? 0, item.uom)}
+                          </td>
+                          <td className="px-5 py-4 text-right font-semibold text-rose-600 bg-rose-50/5">
+                            {formatValue((item as any).mutasiQtyOut ?? 0, item.uom)}
+                          </td>
+                          <td className="px-5 py-4 text-right font-bold text-slate-900 bg-emerald-50/10">
                             {formatValue(item.stokRill, item.uom)}
                           </td>
 
@@ -1590,7 +1608,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                 {!loading && displayedList.length > 0 && (
                   <tr className="bg-slate-100/60 border-t-2 border-slate-300 font-bold text-slate-900">
                     <td 
-                      colSpan={2} 
+                      colSpan={(currentReconType === 'monthly' && (area === 'HQ' || spreadsheetId === 'HQ')) ? 3 : 2} 
                       className="px-5 py-4 text-left font-extrabold text-slate-800 tracking-wider text-xs uppercase"
                     >
                       🚀 Grand Total ({displayedList.length} Baris Terfilter)
@@ -1636,7 +1654,19 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                     {/* Monthly Totals render */}
                     {currentReconType === 'monthly' && (
                       <>
-                        <td className="px-5 py-4 text-right text-slate-900 font-extrabold text-sm bg-slate-100/10">
+                        <td className="px-5 py-4 text-right text-slate-600 font-bold text-sm bg-slate-100/10">
+                          {formatValue(displayedTotals.stokKemarin)}
+                        </td>
+
+                        <td className="px-5 py-4 text-right font-extrabold text-sm text-emerald-700 bg-emerald-50/10">
+                          {formatValue((displayedTotals as any).mutasiQtyIn ?? 0)}
+                        </td>
+
+                        <td className="px-5 py-4 text-right font-extrabold text-sm text-rose-700 bg-rose-50/10">
+                          {formatValue((displayedTotals as any).mutasiQtyOut ?? 0)}
+                        </td>
+
+                        <td className="px-5 py-4 text-right text-slate-900 font-extrabold text-sm bg-emerald-50/10">
                           {formatValue(displayedTotals.stokRill)}
                         </td>
 
