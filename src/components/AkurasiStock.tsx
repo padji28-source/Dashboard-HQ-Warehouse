@@ -611,20 +611,20 @@ export default function AkurasiStock() {
               />
             </div>
           ) : (
-            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
+            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm focus-within:ring-2 focus-within:ring-blue-500">
               <span className="text-[10px] uppercase tracking-wide font-bold text-slate-400">Periode:</span>
               <input
                 type="date"
                 value={selectedStartDate}
                 onChange={e => setSelectedStartDate(e.target.value)}
-                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[110px]"
+                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[100px]"
               />
-              <span className="text-xs text-slate-400 font-bold">-</span>
+              <span className="text-[10px] font-medium text-slate-400">s.d</span>
               <input
                 type="date"
                 value={selectedEndDate}
                 onChange={e => setSelectedEndDate(e.target.value)}
-                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[110px]"
+                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[100px]"
               />
             </div>
           )}

@@ -1349,7 +1349,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         </div>
 
         {/* Date Selector depending on Type */}
-        <div className="w-full md:w-52 text-left">
+        <div className="w-full md:w-auto text-left flex-shrink-0">
           {activeSavedSession ? (
             <div className="w-full px-3.5 py-2 text-sm border border-amber-200 bg-amber-50 rounded-lg font-semibold text-amber-900 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1366,26 +1366,22 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
               />
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                <input
-                  type="date"
-                  value={selectedStartDate}
-                  onChange={e => setSelectedStartDate(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
-                />
-              </div>
-              <span className="text-slate-500">-</span>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                <input
-                  type="date"
-                  value={selectedEndDate}
-                  onChange={e => setSelectedEndDate(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
-                />
-              </div>
+            <div className="flex items-center gap-2 px-2 py-1.5 border border-slate-200 bg-white rounded-lg focus-within:ring-2 focus-within:ring-blue-500">
+              <input
+                type="date"
+                value={selectedStartDate}
+                onChange={e => setSelectedStartDate(e.target.value)}
+                className="w-full text-xs sm:text-sm outline-none bg-transparent font-semibold text-slate-700"
+                title="Tanggal Mulai"
+              />
+              <span className="text-slate-400 text-xs font-medium">s.d</span>
+              <input
+                type="date"
+                value={selectedEndDate}
+                onChange={e => setSelectedEndDate(e.target.value)}
+                className="w-full text-xs sm:text-sm outline-none bg-transparent font-semibold text-slate-700"
+                title="Tanggal Selesai"
+              />
             </div>
           )}
         </div>
