@@ -468,24 +468,14 @@ export default function StockOverview({
       }
 
       const summary = stockMap.get(key)!;
-      const normalizedTipe = tipe.replace(/\s+/g, "");
-      if (
-        normalizedTipe === "IN" ||
-        normalizedTipe === "AWAL" ||
-        normalizedTipe === "MASUK" ||
-        normalizedTipe === "RECEIPT" ||
-        normalizedTipe === "SALDOAWAL"
-      ) {
+      const normalizedTipe = tipe.replace(/\s+/g, "").toUpperCase();
+      const isIN = normalizedTipe === "IN" || normalizedTipe.includes("AWAL") || normalizedTipe === "MASUK" || normalizedTipe === "RECEIPT";
+      const isOUT = normalizedTipe === "OUT" || normalizedTipe === "KELUAR" || normalizedTipe === "ISSUE" || normalizedTipe === "PEMAKAIAN" || normalizedTipe === "TRANSFER" || normalizedTipe === "TF";
+
+      if (isIN) {
         summary.totalIn += qty;
         summary.stock += qty;
-      } else if (
-        normalizedTipe === "OUT" ||
-        normalizedTipe === "KELUAR" ||
-        normalizedTipe === "ISSUE" ||
-        normalizedTipe === "PEMAKAIAN" ||
-        normalizedTipe === "TRANSFER" ||
-        normalizedTipe === "TF"
-      ) {
+      } else if (isOUT) {
         summary.totalOut += qty;
         summary.stock -= qty;
       } else {

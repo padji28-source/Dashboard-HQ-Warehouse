@@ -52,8 +52,19 @@ interface CompiledStockItem {
 
 function parseToIsoDate(dtStr: string): string {
   if (!dtStr) return '';
-  const cleaned = dtStr.trim();
+  // Remove time part if exists (e.g. "06-01-2026 14:30:00" -> "06-01-2026")
+  let cleaned = dtStr.trim();
+  if (cleaned.includes(' ')) {
+    cleaned = cleaned.split(' ')[0];
+  }
   
+  // Excel Serial Date check (e.g. 45000)
+  const num = Number(cleaned);
+  if (!isNaN(num) && num > 10000) {
+    const dateObj = new Date(Math.round((num - 25569) * 86400 * 1000));
+    return dateObj.toISOString().split('T')[0];
+  }
+
   // Try exact YYYY-MM-DD (don't match ISO strings with T like 2024-07-31T17:00:00.000Z to avoid timezone shifts)
   if (!cleaned.includes('T')) {
     const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
@@ -65,12 +76,18 @@ function parseToIsoDate(dtStr: string): string {
     }
   }
   
-  // Try DD/MM/YYYY or MM/DD/YYYY
-  const slashed = cleaned.split('/');
-  if (slashed.length === 3) {
-    let p1 = slashed[0].padStart(2, '0');
-    let p2 = slashed[1].padStart(2, '0');
-    let y = slashed[2].trim();
+  // Try DD/MM/YYYY, MM/DD/YYYY, DD-MM-YYYY, MM-DD-YYYY
+  const parts = cleaned.includes('/') ? cleaned.split('/') : cleaned.split('-');
+  if (parts.length === 3) {
+    let p1 = parts[0].padStart(2, '0');
+    let p2 = parts[1].padStart(2, '0');
+    let y = parts[2].trim();
+    
+    // If the year is first (e.g. 2026-06-01), but somehow didn't match the regex
+    if (p1.length === 4) {
+       return `${p1}-${p2}-${y.padStart(2, '0')}`;
+    }
+
     if (y.length === 2) {
       y = '20' + y;
     }
@@ -322,6 +339,9 @@ export default function AkurasiStock() {
 
                 if (tipe === 'TRANSFER' || tipe === 'TF') {
                   rawTransactions.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || toLocator || 'UNKNOWN_L', qty, uom, tanggal, source: sourceSheet });
+                  if (toLocator) {
+                    rawTransactions.push({ tipe: 'IN', pCode, pName, lCode: toLocator, qty, uom, tanggal, source: sourceSheet });
+                  }
                 } else {
                   rawTransactions.push({ 
                     tipe: tipe || 'IN', 
@@ -371,11 +391,13 @@ export default function AkurasiStock() {
                 }
 
                 const item = areaStocksMap.get(itemKey)!;
-                const normType = tipe.replace(/\s+/g, '');
+                const normType = tipe.replace(/\s+/g, '').toUpperCase();
+                const isIN = normType === 'IN' || normType.includes('AWAL') || normType === 'MASUK' || normType === 'RECEIPT';
+                const isOUT = normType === 'OUT' || normType === 'KELUAR' || normType === 'ISSUE' || normType === 'PEMAKAIAN' || normType === 'TRANSFER' || normType === 'TF';
 
-                if (normType === 'IN' || normType === 'AWAL' || normType === 'MASUK' || normType === 'RECEIPT' || normType === 'SALDOAWAL') {
+                if (isIN) {
                   item.physicalQty += qty;
-                } else if (normType === 'OUT' || normType === 'KELUAR' || normType === 'ISSUE' || normType === 'PEMAKAIAN' || normType === 'TRANSFER' || normType === 'TF') {
+                } else if (isOUT) {
                   item.physicalQty -= qty;
                 } else {
                   if (qty > 0) {
@@ -611,20 +633,20 @@ export default function AkurasiStock() {
               />
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm focus-within:ring-2 focus-within:ring-blue-500">
+            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
               <span className="text-[10px] uppercase tracking-wide font-bold text-slate-400">Periode:</span>
               <input
                 type="date"
                 value={selectedStartDate}
                 onChange={e => setSelectedStartDate(e.target.value)}
-                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[100px]"
+                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[110px]"
               />
-              <span className="text-[10px] font-medium text-slate-400">s.d</span>
+              <span className="text-xs text-slate-400 font-bold">-</span>
               <input
                 type="date"
                 value={selectedEndDate}
                 onChange={e => setSelectedEndDate(e.target.value)}
-                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[100px]"
+                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[110px]"
               />
             </div>
           )}

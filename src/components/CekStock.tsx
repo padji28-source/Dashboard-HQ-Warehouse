@@ -301,25 +301,14 @@ export default function CekStock({ spreadsheetId, area }: Props) {
       }
 
       const summary = stockMap.get(key)!;
-      const normalizedTipe = t.tipe.replace(/\s+/g, "");
+      const normalizedTipe = t.tipe.replace(/\s+/g, "").toUpperCase();
+      const isIN = normalizedTipe === "IN" || normalizedTipe.includes("AWAL") || normalizedTipe === "MASUK" || normalizedTipe === "RECEIPT";
+      const isOUT = normalizedTipe === "OUT" || normalizedTipe === "KELUAR" || normalizedTipe === "ISSUE" || normalizedTipe === "PEMAKAIAN" || normalizedTipe === "TRANSFER" || normalizedTipe === "TF";
 
-      if (
-        normalizedTipe === "IN" ||
-        normalizedTipe === "AWAL" ||
-        normalizedTipe === "MASUK" ||
-        normalizedTipe === "RECEIPT" ||
-        normalizedTipe === "SALDOAWAL"
-      ) {
+      if (isIN) {
         summary.totalIn += t.qty;
         summary.stock += t.qty;
-      } else if (
-        normalizedTipe === "OUT" ||
-        normalizedTipe === "KELUAR" ||
-        normalizedTipe === "ISSUE" ||
-        normalizedTipe === "PEMAKAIAN" ||
-        normalizedTipe === "TRANSFER" ||
-        normalizedTipe === "TF"
-      ) {
+      } else if (isOUT) {
         summary.totalOut += t.qty;
         summary.stock -= t.qty;
       } else {

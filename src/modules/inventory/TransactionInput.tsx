@@ -462,9 +462,20 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const totalIn = filtered.reduce((sum, t) => t.tipe === 'IN' ? sum + t.kuantitas : sum, 0);
-  const totalOut = filtered.reduce((sum, t) => t.tipe === 'OUT' ? sum + t.kuantitas : sum, 0);
-  const totalAwal = filtered.reduce((sum, t) => t.tipe === 'AWAL' ? sum + t.kuantitas : sum, 0);
+  const totalIn = filtered.reduce((sum, t) => {
+    const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
+    const isIN = (norm === 'IN' || norm === 'MASUK' || norm === 'RECEIPT') && !norm.includes('AWAL');
+    return isIN ? sum + t.kuantitas : sum;
+  }, 0);
+  const totalOut = filtered.reduce((sum, t) => {
+    const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
+    const isOUT = norm === 'OUT' || norm === 'KELUAR' || norm === 'ISSUE' || norm === 'PEMAKAIAN' || norm === 'TRANSFER' || norm === 'TF';
+    return isOUT ? sum + t.kuantitas : sum;
+  }, 0);
+  const totalAwal = filtered.reduce((sum, t) => {
+    const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
+    return norm.includes('AWAL') ? sum + t.kuantitas : sum;
+  }, 0);
   const grandTotalQty = filtered.reduce((sum, t) => sum + t.kuantitas, 0);
 
   const locatorsWithStock = useMemo(() => {
@@ -473,20 +484,23 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
     
     transactions.forEach(t => {
       if (t.kodeProduk === formKodeProduk) {
-        const type = (t.tipe || '').toUpperCase();
+        const typeNorm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
         const rawQtyStr = t.qty !== undefined ? String(t.qty) : String(t.kuantitas || 0);
         const qty = parseFloat(rawQtyStr.replace(/,/g, '')) || 0;
 
         const locAsal = t.locator;
         const locTujuan = t.locatorTo;
 
-        if (type === 'IN' || type === 'AWAL' || type === 'MASUK' || type === 'RECEIPT' || type === 'SALDOAWAL') {
+        const isIN = typeNorm === 'IN' || typeNorm.includes('AWAL') || typeNorm === 'MASUK' || typeNorm === 'RECEIPT';
+        const isOUT = typeNorm === 'OUT' || typeNorm === 'KELUAR' || typeNorm === 'ISSUE' || typeNorm === 'PEMAKAIAN' || typeNorm === 'TRANSFER' || typeNorm === 'TF';
+
+        if (isIN) {
           if (locAsal) stockMap[locAsal] = (stockMap[locAsal] || 0) + qty;
-        } else if (type === 'OUT' || type === 'KELUAR' || type === 'ISSUE' || type === 'PEMAKAIAN') {
+        } else if (isOUT) {
           if (locAsal) stockMap[locAsal] = (stockMap[locAsal] || 0) - qty;
-        } else if (type === 'TRANSFER' || type === 'TF') {
-          if (locAsal) stockMap[locAsal] = (stockMap[locAsal] || 0) - qty;
-          if (locTujuan) stockMap[locTujuan] = (stockMap[locTujuan] || 0) + qty;
+          if ((typeNorm === 'TRANSFER' || typeNorm === 'TF') && locTujuan) {
+             stockMap[locTujuan] = (stockMap[locTujuan] || 0) + qty;
+          }
         }
       }
     });
@@ -1086,24 +1100,37 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                       </td>
                       <td className="px-5 py-3 text-right font-medium text-lg tabular-nums">
                         <div className={
-                           t.tipe === 'IN' ? 'text-emerald-600' : 
-                           t.tipe === 'OUT' ? 'text-rose-600' : 'text-slate-700'
+                           (() => {
+                             const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
+                             const isIN = norm === 'IN' || norm.includes('AWAL') || norm === 'MASUK' || norm === 'RECEIPT';
+                             const isOUT = norm === 'OUT' || norm === 'KELUAR' || norm === 'ISSUE' || norm === 'PEMAKAIAN' || norm === 'TRANSFER' || norm === 'TF';
+                             return isIN ? 'text-emerald-600' : isOUT ? 'text-rose-600' : 'text-slate-700';
+                           })()
                         }>{t.kuantitas.toLocaleString()}</div>
                       </td>
                       <td className="px-5 py-3 text-slate-500 text-sm">
                         {t.uom}
                       </td>
                       <td className="px-5 py-3">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${
-                           t.tipe === 'IN' ? 'bg-emerald-100 text-emerald-700' : 
-                           t.tipe === 'AWAL' ? 'bg-blue-100 text-blue-700' : 
-                           'bg-rose-100 text-rose-700'
-                        }`}>
-                          {t.tipe === 'IN' && <ArrowDownRight className="w-3 h-3" />}
-                          {t.tipe === 'OUT' && <ArrowUpRight className="w-3 h-3" />}
-                          {t.tipe === 'AWAL' && <CheckCircle2 className="w-3 h-3" />}
-                          {t.tipe}
-                        </span>
+                        {(() => {
+                           const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
+                           const isAwal = norm.includes('AWAL');
+                           const isIN = norm === 'IN' || norm === 'MASUK' || norm === 'RECEIPT';
+                           const isOUT = norm === 'OUT' || norm === 'KELUAR' || norm === 'ISSUE' || norm === 'PEMAKAIAN' || norm === 'TRANSFER' || norm === 'TF';
+                           
+                           return (
+                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${
+                                isIN ? 'bg-emerald-100 text-emerald-700' : 
+                                isAwal ? 'bg-blue-100 text-blue-700' : 
+                                'bg-rose-100 text-rose-700'
+                             }`}>
+                               {isIN && <ArrowDownRight className="w-3 h-3" />}
+                               {isOUT && <ArrowUpRight className="w-3 h-3" />}
+                               {isAwal && <CheckCircle2 className="w-3 h-3" />}
+                               {t.tipe}
+                             </span>
+                           );
+                        })()}
                       </td>
                       <td className="px-5 py-3">
                         <div className="font-medium text-slate-900 flex items-center gap-1">

@@ -146,8 +146,19 @@ async function deleteFromFirestore(fireId: string) {
 // Helper to normalize dates to YYYY-MM-DD
 function parseToIsoDate(dtStr: string): string {
   if (!dtStr) return '';
-  const cleaned = dtStr.trim();
+  // Remove time part if exists (e.g. "06-01-2026 14:30:00" -> "06-01-2026")
+  let cleaned = dtStr.trim();
+  if (cleaned.includes(' ')) {
+    cleaned = cleaned.split(' ')[0];
+  }
   
+  // Excel Serial Date check (e.g. 45000)
+  const num = Number(cleaned);
+  if (!isNaN(num) && num > 10000) {
+    const dateObj = new Date(Math.round((num - 25569) * 86400 * 1000));
+    return dateObj.toISOString().split('T')[0];
+  }
+
   // Try exact YYYY-MM-DD (don't match ISO strings with T like 2024-07-31T17:00:00.000Z to avoid timezone shifts)
   if (!cleaned.includes('T')) {
     const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
@@ -159,12 +170,18 @@ function parseToIsoDate(dtStr: string): string {
     }
   }
   
-  // Try DD/MM/YYYY or MM/DD/YYYY
-  const slashed = cleaned.split('/');
-  if (slashed.length === 3) {
-    let p1 = slashed[0].padStart(2, '0');
-    let p2 = slashed[1].padStart(2, '0');
-    let y = slashed[2].trim();
+  // Try DD/MM/YYYY, MM/DD/YYYY, DD-MM-YYYY, MM-DD-YYYY
+  const parts = cleaned.includes('/') ? cleaned.split('/') : cleaned.split('-');
+  if (parts.length === 3) {
+    let p1 = parts[0].padStart(2, '0');
+    let p2 = parts[1].padStart(2, '0');
+    let y = parts[2].trim();
+    
+    // If the year is first (e.g. 2026-06-01), but somehow didn't match the regex
+    if (p1.length === 4) {
+       return `${p1}-${p2}-${y.padStart(2, '0')}`;
+    }
+
     if (y.length === 2) {
       y = '20' + y;
     }
@@ -432,6 +449,9 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
 
           if (tipe === 'TRANSFER' || tipe === 'TF') {
             mappedRows.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || toLocator || 'UNKNOWN_L', qty, uom, source, area: currentArea, tanggal });
+            if (toLocator) {
+              mappedRows.push({ tipe: 'IN', pCode, pName, lCode: toLocator, qty, uom, source, area: currentArea, tanggal });
+            }
           } else {
             mappedRows.push({ 
               tipe: tipe || 'IN', 
@@ -562,8 +582,8 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       let includeInYesterday = false;
       let includeInMutation = false;
 
-      const normalizedType = tipe.replace(/\s+/g, '');
-      const isAwal = normalizedType === 'AWAL' || normalizedType === 'SALDOAWAL' || normalizedType === 'INITIAL' || normalizedType === 'SALDO';
+      const normalizedType = tipe.replace(/\s+/g, '').toUpperCase();
+      const isAwal = normalizedType.includes('AWAL') || normalizedType === 'SALDO' || normalizedType === 'INITIAL';
 
       if (reconType === 'daily') {
         includeInCumulative = !tanggal || tanggal <= selectedDate;
@@ -602,10 +622,13 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
 
       const item = listMap.get(itemKey)!;
 
+      const isIN = normalizedType === 'IN' || normalizedType.includes('AWAL') || normalizedType === 'MASUK' || normalizedType === 'RECEIPT';
+      const isOUT = normalizedType === 'OUT' || normalizedType === 'KELUAR' || normalizedType === 'ISSUE' || normalizedType === 'PEMAKAIAN' || normalizedType === 'TRANSFER' || normalizedType === 'TF';
+
       if (includeInYesterday) {
-        if (normalizedType === 'IN' || normalizedType === 'AWAL' || normalizedType === 'MASUK' || normalizedType === 'RECEIPT' || normalizedType === 'SALDOAWAL') {
+        if (isIN) {
           item.stokKemarin += qty;
-        } else if (normalizedType === 'OUT' || normalizedType === 'KELUAR' || normalizedType === 'ISSUE' || normalizedType === 'PEMAKAIAN' || normalizedType === 'TRANSFER' || normalizedType === 'TF') {
+        } else if (isOUT) {
           item.stokKemarin -= qty;
         } else {
           if (qty > 0 && !['TRANSFER', 'TF'].includes(normalizedType)) {
@@ -615,9 +638,9 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       }
 
       if (includeInCumulative) {
-        if (normalizedType === 'IN' || normalizedType === 'AWAL' || normalizedType === 'MASUK' || normalizedType === 'RECEIPT' || normalizedType === 'SALDOAWAL') {
+        if (isIN) {
           item.stokRill += qty;
-        } else if (normalizedType === 'OUT' || normalizedType === 'KELUAR' || normalizedType === 'ISSUE' || normalizedType === 'PEMAKAIAN' || normalizedType === 'TRANSFER' || normalizedType === 'TF') {
+        } else if (isOUT) {
           item.stokRill -= qty;
         } else {
           if (qty > 0 && !['TRANSFER', 'TF'].includes(normalizedType)) {
@@ -627,10 +650,10 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       }
 
       if (includeInMutation) {
-        if (normalizedType === 'IN' || normalizedType === 'AWAL' || normalizedType === 'MASUK' || normalizedType === 'RECEIPT' || normalizedType === 'SALDOAWAL') {
+        if (isIN) {
           item.mutasiQty += qty;
           item.mutasiQtyIn += qty;
-        } else if (normalizedType === 'OUT' || normalizedType === 'KELUAR' || normalizedType === 'ISSUE' || normalizedType === 'PEMAKAIAN' || normalizedType === 'TRANSFER' || normalizedType === 'TF') {
+        } else if (isOUT) {
           item.mutasiQty -= qty;
           item.mutasiQtyOut += Math.abs(qty);
         } else {
@@ -1349,7 +1372,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         </div>
 
         {/* Date Selector depending on Type */}
-        <div className="w-full md:w-auto text-left flex-shrink-0">
+        <div className="w-full md:w-52 text-left">
           {activeSavedSession ? (
             <div className="w-full px-3.5 py-2 text-sm border border-amber-200 bg-amber-50 rounded-lg font-semibold text-amber-900 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1366,22 +1389,26 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
               />
             </div>
           ) : (
-            <div className="flex items-center gap-2 px-2 py-1.5 border border-slate-200 bg-white rounded-lg focus-within:ring-2 focus-within:ring-blue-500">
-              <input
-                type="date"
-                value={selectedStartDate}
-                onChange={e => setSelectedStartDate(e.target.value)}
-                className="w-full text-xs sm:text-sm outline-none bg-transparent font-semibold text-slate-700"
-                title="Tanggal Mulai"
-              />
-              <span className="text-slate-400 text-xs font-medium">s.d</span>
-              <input
-                type="date"
-                value={selectedEndDate}
-                onChange={e => setSelectedEndDate(e.target.value)}
-                className="w-full text-xs sm:text-sm outline-none bg-transparent font-semibold text-slate-700"
-                title="Tanggal Selesai"
-              />
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={selectedStartDate}
+                  onChange={e => setSelectedStartDate(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
+                />
+              </div>
+              <span className="text-slate-500">-</span>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={selectedEndDate}
+                  onChange={e => setSelectedEndDate(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
+                />
+              </div>
             </div>
           )}
         </div>
