@@ -72,7 +72,12 @@ async function startServer() {
 
       console.log("Fetching fresh MTS CSV from Google Sheets...");
       const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv';
-      const response = await fetch(csvUrl);
+      const response = await fetch(csvUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+          "Accept": "text/csv,application/csv,text/plain,*/*"
+        }
+      });
       if (!response.ok) {
         throw new Error(`Failed to fetch from Google Sheets: ${response.status} ${response.statusText}`);
       }

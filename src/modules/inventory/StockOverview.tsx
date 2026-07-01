@@ -80,6 +80,7 @@ export default function StockOverview({
       lCode: string;
       qty: number;
       source: string;
+      area?: string;
     }[]
   >([]);
   const [productsMap, setProductsMap] = useState<Map<string, string>>(
@@ -183,9 +184,10 @@ export default function StockOverview({
         lCode: string;
         qty: number;
         source: string;
+        area?: string;
       }[] = [];
 
-      const processRows = (rows: any[], source: string) => {
+      const processRows = (rows: any[], source: string, currentArea?: string) => {
         console.log(`Processing rows for ${source}:`, rows?.length);
         const validRows = (rows || []).filter((r: any[]) => {
           if (r.length === 0) return false;
@@ -223,6 +225,7 @@ export default function StockOverview({
               lCode: fromLocator || "UNKNOWN_L",
               qty,
               source,
+              area: currentArea,
             });
             if (toLocator) {
               mappedRows.push({
@@ -232,6 +235,7 @@ export default function StockOverview({
                 lCode: toLocator,
                 qty,
                 source,
+                area: currentArea,
               });
             }
           } else {
@@ -242,6 +246,7 @@ export default function StockOverview({
               lCode: fromLocator || toLocator || "UNKNOWN_L",
               qty,
               source,
+              area: currentArea,
             });
           }
         });
@@ -294,10 +299,10 @@ export default function StockOverview({
                 },
               );
 
-              processRows(tn, "INPUT");
-              processRows(tr, "INPUT RM");
-              processRows(tm, "INPUT MFG");
-              processRows(ts, "INPUT SUPPLIES");
+              processRows(tn, "INPUT", aName);
+              processRows(tr, "INPUT RM", aName);
+              processRows(tm, "INPUT MFG", aName);
+              processRows(ts, "INPUT SUPPLIES", aName);
             } catch (e) {
               console.error(`Error loading data for area ${aName}:`, e);
             }
@@ -401,10 +406,10 @@ export default function StockOverview({
             }
           });
 
-        processRows(txRowsNormal, "INPUT");
-        processRows(txRowsRM, "INPUT RM");
-        processRows(txRowsMfg, "INPUT MFG");
-        processRows(txRowsSupplies, "INPUT SUPPLIES");
+        processRows(txRowsNormal, "INPUT", area);
+        processRows(txRowsRM, "INPUT RM", area);
+        processRows(txRowsMfg, "INPUT MFG", area);
+        processRows(txRowsSupplies, "INPUT SUPPLIES", area);
       }
 
       setProductsMap(pMap);
@@ -516,7 +521,8 @@ export default function StockOverview({
     console.log("Stock map size:", stockMap.size);
 
     const filteredByArea = Array.from(stockMap.values()).filter((s) => {
-      // Remove hasActivity check so ALL items from allTransactions are included, just like in PencocokanData
+      const hasActivity = s.totalIn > 0 || s.totalOut > 0 || Math.abs(s.stock) > 0.001 || Math.abs(s.qtySistem) > 0.001;
+      if (!hasActivity) return false;
       
       if (
         area &&
