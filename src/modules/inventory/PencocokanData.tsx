@@ -131,10 +131,14 @@ async function loadFromFirestore(): Promise<any[]> {
 
 async function deleteFromFirestore(fireId: string) {
   try {
-    await deleteDoc(doc(db, 'saved_reconciliations', fireId));
+    const deletePromise = deleteDoc(doc(db, 'saved_reconciliations', fireId));
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Koneksi timeout. Menghapus dari cloud memakan waktu terlalu lama.')), 5000);
+    });
+    await Promise.race([deletePromise, timeoutPromise]);
     return true;
-  } catch (e) {
-    console.error('Failed to delete from Firestore:', e);
+  } catch (e: any) {
+    console.warn('Failed to delete from Firestore (will delete locally):', e.message);
     return false;
   }
 }
@@ -880,17 +884,23 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     }
     
     try {
-      if (sess.fireId) {
-        await deleteFromFirestore(sess.fireId);
-      }
+      // Hapus dari local storage langsung agar UI responsif
       deleteLocalReconciliation(sess.id);
       
       if (activeSavedSession?.id === sess.id) {
         setActiveSavedSession(null);
       }
       
-      alert('Arsip berhasil dihapus!');
       loadSavedSessions();
+      
+      // Hapus dari Firestore di background
+      if (sess.fireId) {
+        deleteFromFirestore(sess.fireId).then(success => {
+          if (!success) {
+             console.warn('Arsip dihapus secara lokal, tapi gagal dihapus dari Cloud.');
+          }
+        });
+      }
     } catch (e: any) {
       console.error(e);
       alert('Gagal menghapus arsip: ' + e.message);
