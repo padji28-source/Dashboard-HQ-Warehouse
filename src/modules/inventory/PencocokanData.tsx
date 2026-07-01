@@ -78,8 +78,9 @@ function saveLocalReconciliation(record: any) {
     const records = getLocalSavedReconciliations();
     records.unshift(record);
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(records));
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to save record to localStorage:', e);
+    throw new Error('Gagal menyimpan ke penyimpanan perangkat (mungkin kuota penuh).');
   }
 }
 
@@ -97,10 +98,15 @@ function deleteLocalReconciliation(id: string) {
 async function saveToFirestore(record: any) {
   try {
     const colRef = collection(db, 'saved_reconciliations');
-    await addDoc(colRef, record);
+    // Add timeout to prevent hanging when offline
+    const addPromise = addDoc(colRef, record);
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Koneksi timeout. Menyimpan ke cloud memakan waktu terlalu lama (mungkin offline atau data terlalu besar).')), 5000);
+    });
+    await Promise.race([addPromise, timeoutPromise]);
     return true;
-  } catch (e) {
-    console.error('Failed to save to Firestore:', e);
+  } catch (e: any) {
+    console.warn('Failed to save to Firestore (will save locally):', e.message);
     return false;
   }
 }
@@ -837,20 +843,33 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         }))
       };
 
-      const firestoreSuccess = await saveToFirestore(sessionData);
-      saveLocalReconciliation(sessionData);
+      // Simpan ke local storage secara langsung agar UI merespon super cepat
+      try {
+        saveLocalReconciliation(sessionData);
+      } catch (localErr: any) {
+        // Fix for "kalau ada error langsung perbaiki" (quota exceeded, etc)
+        alert('Gagal menyimpan ke penyimpanan lokal (mungkin data terlalu besar). Error: ' + localErr.message);
+        setIsSaving(false);
+        return;
+      }
       
+      // Update UI langsung tanpa menunggu Cloud
       setShowSaveModal(false);
-      alert(firestoreSuccess 
-        ? 'Sesi pencocokan berhasil dikunci & disimpan di cloud!' 
-        : 'Sesi disimpan di penyimpanan lokal (Cloud tidak terjangkau).'
-      );
-      
+      setIsSaving(false);
       loadSavedSessions();
+      
+      // Background Sync to Cloud dengan timeout 5 detik
+      saveToFirestore(sessionData).then(firestoreSuccess => {
+        if (!firestoreSuccess) {
+          console.warn('Sesi berhasil disimpan di lokal, tetapi gagal disinkronkan ke Cloud (Offline/Timeout).');
+        } else {
+          console.log('Sesi pencocokan berhasil disinkronkan ke Cloud!');
+        }
+      });
+      
     } catch (e: any) {
       console.error(e);
-      alert('Gagal menyimpan sesi: ' + e.message);
-    } finally {
+      alert('Gagal memproses sesi: ' + e.message);
       setIsSaving(false);
     }
   };
