@@ -42,6 +42,7 @@ export interface StockSummary {
   qtySistem?: number;
   selisih?: number;
   rph?: number;
+  source?: string;
 }
 
 export interface SavedReconciliation {

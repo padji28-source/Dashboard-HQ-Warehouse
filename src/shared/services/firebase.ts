@@ -1,13 +1,15 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp, doc, setDoc } from 'firebase/firestore';
+import { initializeFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp, doc, setDoc } from 'firebase/firestore';
 import firebaseConfig from '../../../firebase-applet-config.json';
 import type { AuditLog, WhatsAppLog } from '../types';
 
 // Initialize Firebase
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Get Firestore reference with Database ID
-export const db = getFirestore(app);
+// Get Firestore reference with Database ID and force long polling
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+});
 
 // Audit Logging helper
 export async function logAudit(username: string, module: string, action: string, details: string) {

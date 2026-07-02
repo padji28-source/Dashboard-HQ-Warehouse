@@ -1,11 +1,13 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Get Firestore reference with Database ID
-export const db = getFirestore(app);
+// Get Firestore reference with Database ID and force long polling
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+});
 
 export default db;

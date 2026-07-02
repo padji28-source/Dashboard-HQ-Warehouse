@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import Papa from "papaparse";
 import { fetchSheetData } from "../lib/sheets";
 import { AREA_URLS } from "../App";
 import type { StockSummary } from "../types";
@@ -50,6 +51,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
   const [allTransactions, setAllTransactions] = useState<MappedTransaction[]>([]);
   const [productsMap, setProductsMap] = useState<Map<string, { nama: string, rph?: number }>>(new Map());
   const [locatorsMap, setLocatorsMap] = useState<Map<string, { nama: string; whType: string; area: string }>>(new Map());
+  const [pengepokanMap, setPengepokanMap] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -284,9 +286,91 @@ export default function CekStock({ spreadsheetId, area }: Props) {
         processRows(ts, "INPUT SUPPLIES", area);
       }
 
+      // Fetch and Parse Pengepokan Sheet Data for Move Qty metrics
+      const penMap = new Map<string, number>();
+      try {
+        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=32687697&single=true&output=csv&hl=id';
+        const res = await fetch(csvUrl, {
+          headers: {
+            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
+          }
+        });
+        if (res.ok) {
+          const csvText = await res.text();
+          const parsed = Papa.parse<any[]>(csvText, { skipEmptyLines: true });
+          const data = parsed.data || [];
+          if (data.length > 0) {
+            let headerIndex = -1;
+            for (let i = 0; i < Math.min(10, data.length); i++) {
+              const rowString = data[i].map(val => String(val || '').toLowerCase());
+              const hasLocator = rowString.some(val => val.includes('locator'));
+              const hasSearchKey = rowString.some(val => val.includes('search key') || val.includes('sku'));
+              if (hasLocator || hasSearchKey) {
+                headerIndex = i;
+                break;
+              }
+            }
+            if (headerIndex === -1) headerIndex = 0;
+            const headers = data[headerIndex].map((h: any) => String(h || '').trim());
+            const getColIndex = (names: string[]) => {
+              return headers.findIndex(h => 
+                names.some(name => h.toLowerCase() === name.toLowerCase())
+              );
+            };
+            const idxSearchKey = getColIndex(['search key', 'sku']);
+            const idxMoveQty = getColIndex(['move qty', 'move_qty']);
+            const idxCabang = getColIndex(['cabang', 'area', 'branch']);
+            const idxLocator = getColIndex(['locator']);
+            const idxName = getColIndex(['name', 'nama', 'nama bahan']);
+
+            const parseNumber = (val: any): number => {
+              if (val === undefined || val === null) return 0;
+              let str = String(val).trim().replace(/[^0-9.-]/g, '');
+              if (str.startsWith('.')) str = '0' + str;
+              const parsedVal = parseFloat(str);
+              return isNaN(parsedVal) ? 0 : parsedVal;
+            };
+
+            for (let i = headerIndex + 1; i < data.length; i++) {
+              const row = data[i];
+              if (row.length === 0 || !row.some((val: any) => String(val || '').trim() !== '')) {
+                continue;
+              }
+              const locator = idxLocator !== -1 ? String(row[idxLocator] || '').trim() : '';
+              const searchKey = idxSearchKey !== -1 ? String(row[idxSearchKey] || '').trim().toUpperCase() : '';
+              const name = idxName !== -1 ? String(row[idxName] || '').trim() : '';
+              const cabang = idxCabang !== -1 ? String(row[idxCabang] || '').trim().toUpperCase() : 'CABANG UTAMA';
+              const moveQty = idxMoveQty !== -1 ? parseNumber(row[idxMoveQty]) : 0;
+
+              const locatorLower = locator.toLowerCase();
+              const searchKeyLower = searchKey.toLowerCase();
+              const nameLower = name.toLowerCase();
+              const cabangLower = cabang.toLowerCase();
+
+              const isSubTotal = 
+                locatorLower === 'total' || locatorLower.includes('subtotal') || locatorLower.includes('sub total') ||
+                searchKeyLower === 'total' || searchKeyLower.includes('subtotal') || searchKeyLower.includes('sub total') ||
+                nameLower === 'total' || nameLower.includes('subtotal') || nameLower.includes('sub total') || nameLower.startsWith('total ') ||
+                cabangLower === 'total' || cabangLower.includes('subtotal') || cabangLower.includes('sub total');
+
+              if (isSubTotal) continue;
+
+              if (searchKey && cabang) {
+                const key = `${cabang}||${searchKey}`;
+                const existing = penMap.get(key) || 0;
+                penMap.set(key, existing + moveQty);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error loading Pengepokan Move Qty in CekStock:", e);
+      }
+
       setAllTransactions(mappedRows);
       setProductsMap(pMap);
       setLocatorsMap(lMap);
+      setPengepokanMap(penMap);
       setLastRefresh(new Date());
     } catch (err: any) {
       console.error("Critical error in CekStock loading:", err);
@@ -333,6 +417,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
           totalOut: 0,
           stock: 0,
           rph: prodRph,
+          source: t.source,
         });
       }
 
@@ -361,6 +446,35 @@ export default function CekStock({ spreadsheetId, area }: Props) {
 
     return activeStocks;
   }, [allTransactions, productsMap, locatorsMap, selectedSource, area]);
+
+  // Group by product and branch/area to compute metrics for DOI calculation:
+  // (Move Qty + Stock Riil) / RPH
+  const productAreaMetrics = useMemo(() => {
+    const metricsMap = new Map<string, { totalMoveQty: number; totalStock: number; rph?: number }>();
+
+    stockSummary.forEach((s) => {
+      const pCodeClean = s.kodeProduk.toUpperCase().trim();
+      const areaClean = s.area.toUpperCase().trim();
+      const key = `${areaClean}||${pCodeClean}`;
+
+      const existing = metricsMap.get(key);
+      if (existing) {
+        existing.totalMoveQty += s.totalOut;
+        existing.totalStock += s.stock;
+        if (s.rph !== undefined && !isNaN(s.rph)) {
+          existing.rph = s.rph;
+        }
+      } else {
+        metricsMap.set(key, {
+          totalMoveQty: s.totalOut,
+          totalStock: s.stock,
+          rph: s.rph,
+        });
+      }
+    });
+
+    return metricsMap;
+  }, [stockSummary]);
 
   // Unique list of WhGroups for custom locator dropdown
   const uniqueLocators = useMemo(() => {
@@ -413,8 +527,21 @@ export default function CekStock({ spreadsheetId, area }: Props) {
     let countDOI = 0;
 
     finalStockSummary.forEach(s => {
-      if (s.rph !== undefined && s.rph > 0 && !isNaN(s.rph) && s.stock > 0) {
-        const doi = s.stock / s.rph;
+      const rph = s.rph;
+      const isExcluded = (s.source || "").toUpperCase().trim() === "INPUT" && 
+                         ((s.whGroup || "").toUpperCase().trim().startsWith("PID") || (s.namaLocator || "").toUpperCase().trim().startsWith("PID")) && 
+                         ((s.area || "").toUpperCase().trim() === "SEMARANG" || (s.area || "").toUpperCase().trim() === "KARAWANG");
+      const isRphValid = rph !== undefined && !isNaN(rph) && rph > 0 && !isExcluded;
+      if (isRphValid) {
+        const pCodeClean = s.kodeProduk.toUpperCase().trim();
+        const areaClean = s.area.toUpperCase().trim();
+        const key = `${areaClean}||${pCodeClean}`;
+        const metrics = productAreaMetrics.get(key);
+        
+        const moveQty = pengepokanMap.get(key) || 0;
+        const stockRiil = metrics ? metrics.totalStock : 0;
+        
+        const doi = Math.max(0, (stockRiil - moveQty) / rph);
         totalDOISum += doi;
         countDOI += 1;
         
@@ -441,7 +568,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
       totalStockOver,
       totalStockTidakAman,
     };
-  }, [stockSummary, selectedLocators, selectedArea]);
+  }, [stockSummary, selectedLocators, selectedArea, productAreaMetrics, pengepokanMap]);
 
   // Chart: Qty In & Out group by area (excluding 'All Cabang' for chart categories)
   const areaChartData = useMemo(() => {
@@ -543,10 +670,24 @@ export default function CekStock({ spreadsheetId, area }: Props) {
     // Filter by DOI Status
     if (selectedDoiStatus !== "ALL") {
       result = result.filter((s) => {
-        if (s.rph === undefined || s.rph <= 0 || isNaN(s.rph) || s.stock <= 0) {
+        const rph = s.rph;
+        const isExcluded = (s.source || "").toUpperCase().trim() === "INPUT" && 
+                           ((s.whGroup || "").toUpperCase().trim().startsWith("PID") || (s.namaLocator || "").toUpperCase().trim().startsWith("PID")) && 
+                           ((s.area || "").toUpperCase().trim() === "SEMARANG" || (s.area || "").toUpperCase().trim() === "KARAWANG");
+        const isRphValid = rph !== undefined && !isNaN(rph) && rph > 0 && !isExcluded;
+        if (!isRphValid) {
           return selectedDoiStatus === "TANPA_RPH";
         }
-        const doi = s.stock / s.rph;
+
+        const pCodeClean = s.kodeProduk.toUpperCase().trim();
+        const areaClean = s.area.toUpperCase().trim();
+        const key = `${areaClean}||${pCodeClean}`;
+        const metrics = productAreaMetrics.get(key);
+        
+        const moveQty = pengepokanMap.get(key) || 0;
+        const stockRiil = metrics ? metrics.totalStock : 0;
+        const doi = Math.max(0, (stockRiil - moveQty) / rph);
+
         if (selectedDoiStatus === "TIDAK_AMAN") {
           return doi < 45;
         } else if (selectedDoiStatus === "OVER") {
@@ -572,7 +713,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
     }
 
     return result;
-  }, [stockSummary, selectedLocators, selectedArea, selectedDoiStatus, search]);
+  }, [stockSummary, selectedLocators, selectedArea, selectedDoiStatus, search, productAreaMetrics, pengepokanMap]);
 
   // Totals for filtered list
   const filteredTotals = useMemo(() => {
@@ -1044,16 +1185,44 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                         {s.stock.toLocaleString()}
                       </td>
                       <td className={(() => {
-                        if (s.rph === undefined || s.rph <= 0 || isNaN(s.rph) || s.stock <= 0) return "px-5 py-4 text-right";
-                        const doi = s.stock / s.rph;
-                        if (isNaN(doi)) return "px-5 py-4 text-right";
+                        const rph = s.rph;
+                        const isExcluded = (s.source || "").toUpperCase().trim() === "INPUT" && 
+                                           ((s.whGroup || "").toUpperCase().trim().startsWith("PID") || (s.namaLocator || "").toUpperCase().trim().startsWith("PID")) && 
+                                           ((s.area || "").toUpperCase().trim() === "SEMARANG" || (s.area || "").toUpperCase().trim() === "KARAWANG");
+                        const isRphValid = rph !== undefined && !isNaN(rph) && rph > 0 && !isExcluded;
+                        if (!isRphValid) return "px-5 py-4 text-right text-slate-400";
+
+                        const pCodeClean = s.kodeProduk.toUpperCase().trim();
+                        const areaClean = s.area.toUpperCase().trim();
+                        const key = `${areaClean}||${pCodeClean}`;
+                        const metrics = productAreaMetrics.get(key);
+                        
+                        const moveQty = pengepokanMap.get(key) || 0;
+                        const stockRiil = metrics ? metrics.totalStock : 0;
+                        const doi = Math.max(0, (stockRiil - moveQty) / rph);
+
+                        if (isNaN(doi)) return "px-5 py-4 text-right text-slate-400";
                         if (doi < 45) return "px-5 py-4 text-right bg-rose-100/90 text-rose-900 font-medium transition-colors";
                         if (doi > 60) return "px-5 py-4 text-right bg-yellow-100 text-yellow-900 font-medium transition-colors";
                         return "px-5 py-4 text-right bg-emerald-100/90 text-emerald-900 font-medium transition-colors";
                       })()}>
                         {(() => {
-                          if (s.rph === undefined || s.rph <= 0 || isNaN(s.rph) || s.stock <= 0) return <span className="text-slate-400 font-mono">-</span>;
-                          const doi = s.stock / s.rph;
+                          const rph = s.rph;
+                          const isExcluded = (s.source || "").toUpperCase().trim() === "INPUT" && 
+                                             ((s.whGroup || "").toUpperCase().trim().startsWith("PID") || (s.namaLocator || "").toUpperCase().trim().startsWith("PID")) && 
+                                             ((s.area || "").toUpperCase().trim() === "SEMARANG" || (s.area || "").toUpperCase().trim() === "KARAWANG");
+                          const isRphValid = rph !== undefined && !isNaN(rph) && rph > 0 && !isExcluded;
+                          if (!isRphValid) return <span className="text-slate-400 font-mono">-</span>;
+
+                          const pCodeClean = s.kodeProduk.toUpperCase().trim();
+                          const areaClean = s.area.toUpperCase().trim();
+                          const key = `${areaClean}||${pCodeClean}`;
+                          const metrics = productAreaMetrics.get(key);
+                          
+                          const moveQty = pengepokanMap.get(key) || 0;
+                          const stockRiil = metrics ? metrics.totalStock : 0;
+                          const doi = Math.max(0, (stockRiil - moveQty) / rph);
+
                           if (isNaN(doi)) return <span className="text-slate-400 font-mono">-</span>;
                           let statusLabel = '';
                           
