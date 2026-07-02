@@ -3,6 +3,7 @@ export interface Product {
   nama: string;
   satuan: string;
   kategori: string;
+  rph?: number;
 }
 
 export interface Locator {
@@ -38,4 +39,5 @@ export interface StockSummary {
   stock: number;
   qtySistem?: number;
   selisih?: number;
+  rph?: number;
 }

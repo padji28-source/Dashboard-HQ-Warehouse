@@ -19,7 +19,7 @@ export default function MtsData() {
   const [sortColumn, setSortColumn] = useState<number | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  const csvUrl = '/api/mts';
+  const csvUrl = '/api/stock-summary';
 
   const loadData = async () => {
     try {

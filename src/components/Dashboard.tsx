@@ -308,7 +308,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
           </div>
           <div className={cn(safeActiveTab !== 'produk' && 'hidden')}>
             {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Master Produk" /> : (
-              <MasterProduk spreadsheetId={spreadsheetId} />
+              <MasterProduk spreadsheetId={spreadsheetId} area={area} />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'locator' && 'hidden')}>

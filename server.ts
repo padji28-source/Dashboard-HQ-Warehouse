@@ -62,7 +62,7 @@ async function startServer() {
   let cacheTime = 0;
 
   // API Route to proxy the MTS CSV
-  app.get("/api/mts", async (req, res) => {
+  app.get("/api/stock-summary", async (req, res) => {
     try {
       const now = Date.now();
       if (cachedMts && now - cacheTime < 600000) {

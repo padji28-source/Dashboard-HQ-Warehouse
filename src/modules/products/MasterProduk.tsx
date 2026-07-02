@@ -3,7 +3,7 @@ import { fetchSheetData, appendSheetRow } from '../../lib/sheets';
 import type { Product } from '../../shared/types';
 import { Loader2, Plus, Search } from 'lucide-react';
 
-export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string }) {
+export default function MasterProduk({ spreadsheetId, area }: { spreadsheetId: string, area?: string }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -15,13 +15,16 @@ export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string 
   const [nama, setNama] = useState('');
   const [satuan, setSatuan] = useState('');
   const [kategori, setKategori] = useState('');
+  const [rph, setRph] = useState('');
+
+  const showRph = true;
 
   const loadData = async (retryOnMissing = true) => {
     try {
       setLoading(true);
       let rows: any[] = [];
       try {
-        rows = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:D");
+        rows = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:E");
       } catch (fetchErr: any) {
         const errorMsg = String(fetchErr.message || '').toLowerCase();
         const isMissingSheet = errorMsg.includes('not found') || errorMsg.includes('range') || errorMsg.includes('unparseable') || errorMsg.includes('cannot read');
@@ -45,12 +48,16 @@ export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string 
           throw fetchErr;
         }
       }
-      setProducts(rows.filter((r: any[]) => r.length > 0 && r[0] && r[1] && r[0] !== '#N/A' && r[1] !== '#N/A').map((r: any[]) => ({
-        kode: String(r[0] || ''),
-        nama: String(r[1] || ''),
-        satuan: String(r[2] || ''),
-        kategori: String(r[3] || '')
-      })));
+      setProducts(rows.filter((r: any[]) => r.length > 0 && r[0] && r[1] && r[0] !== '#N/A' && r[1] !== '#N/A').map((r: any[]) => {
+        const parsedVal = r[4] ? parseFloat(String(r[4]).replace(/,/g, '.')) : undefined;
+        return {
+          kode: String(r[0] || ''),
+          nama: String(r[1] || ''),
+          satuan: String(r[2] || ''),
+          kategori: String(r[3] || ''),
+          rph: (parsedVal !== undefined && !isNaN(parsedVal)) ? parsedVal : undefined
+        };
+      }));
     } catch (err: any) {
       alert(`Gagal memuat produk: ${err.message}`);
     } finally {
@@ -67,11 +74,11 @@ export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string 
     if (!kode || !nama) return;
     setSubmitting(true);
     try {
-      await appendSheetRow(spreadsheetId, "'MASTER_PRODUK'!A:D", [
-        [kode, nama, satuan, kategori]
+      await appendSheetRow(spreadsheetId, "'MASTER_PRODUK'!A:E", [
+        [kode, nama, satuan, kategori, rph]
       ]);
       setFormOpen(false);
-      setKode(''); setNama(''); setSatuan(''); setKategori('');
+      setKode(''); setNama(''); setSatuan(''); setKategori(''); setRph('');
       await loadData();
     } catch (err: any) {
       alert(`Gagal menyimpan produk: ${err.message}`);
@@ -135,6 +142,12 @@ export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string 
               <label className="block text-sm font-medium text-slate-700 mb-1">Kategori</label>
               <input type="text" value={kategori} onChange={e => setKategori(e.target.value)} className="w-full px-3 py-2 border rounded-md" />
             </div>
+            {showRph && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">RPH (Rata-rata Pemakaian Harian)</label>
+                <input type="number" step="any" value={rph} onChange={e => setRph(e.target.value)} className="w-full px-3 py-2 border rounded-md" placeholder="Contoh: 10.5" />
+              </div>
+            )}
             <div className="sm:col-span-2 flex justify-end gap-3 mt-2">
               <button type="button" onClick={() => setFormOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900">Batal</button>
               <button disabled={submitting} type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
@@ -163,6 +176,7 @@ export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string 
                   <th className="px-5 py-4 font-medium">Nama Produk</th>
                   <th className="px-5 py-4 font-medium">Satuan</th>
                   <th className="px-5 py-4 font-medium">Kategori</th>
+                  {showRph && <th className="px-5 py-4 font-medium">RPH</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -172,10 +186,11 @@ export default function MasterProduk({ spreadsheetId }: { spreadsheetId: string 
                     <td className="px-5 py-4 font-medium text-slate-900">{p.nama}</td>
                     <td className="px-5 py-4">{p.satuan || '-'}</td>
                     <td className="px-5 py-4"><span className="inline-flex bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-xs font-medium">{p.kategori || 'Uncategorized'}</span></td>
+                    {showRph && <td className="px-5 py-4 font-medium tabular-nums">{(p.rph !== undefined && !isNaN(p.rph)) ? p.rph : '-'}</td>}
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={4} className="p-12 text-center text-slate-500">Tidak ada data produk ditemukan.</td></tr>
+                  <tr><td colSpan={showRph ? 5 : 4} className="p-12 text-center text-slate-500">Tidak ada data produk ditemukan.</td></tr>
                 )}
               </tbody>
             </table>

@@ -3,6 +3,7 @@ export interface Product {
   nama: string;
   satuan: string;
   kategori: string;
+  rph?: number;
   minStock?: number; // Optional threshold
 }
 
@@ -40,6 +41,7 @@ export interface StockSummary {
   stock: number;
   qtySistem?: number;
   selisih?: number;
+  rph?: number;
 }
 
 export interface SavedReconciliation {

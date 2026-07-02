@@ -185,7 +185,7 @@ export default function AkurasiStock() {
       setErrorMsg(null);
 
       // 1. Fetch MTS Sheet Data (System Stock)
-      const csvUrl = '/api/mts';
+      const csvUrl = '/api/stock-summary';
       const mtsMap = new Map<string, number>();
 
       try {

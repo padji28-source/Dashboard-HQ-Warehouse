@@ -13,7 +13,11 @@ import {
   ChevronUp,
   X,
   RefreshCw,
-  Clock
+  Clock,
+  Activity,
+  CheckCircle2,
+  AlertTriangle,
+  TrendingUp
 } from "lucide-react";
 import {
   BarChart,
@@ -44,7 +48,7 @@ interface MappedTransaction {
 
 export default function CekStock({ spreadsheetId, area }: Props) {
   const [allTransactions, setAllTransactions] = useState<MappedTransaction[]>([]);
-  const [productsMap, setProductsMap] = useState<Map<string, string>>(new Map());
+  const [productsMap, setProductsMap] = useState<Map<string, { nama: string, rph?: number }>>(new Map());
   const [locatorsMap, setLocatorsMap] = useState<Map<string, { nama: string; whType: string; area: string }>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +61,8 @@ export default function CekStock({ spreadsheetId, area }: Props) {
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedArea, setSelectedArea] = useState<string>("ALL");
+  const [selectedDoiStatus, setSelectedDoiStatus] = useState<string>("ALL");
   const [selectedProduct, setSelectedProduct] = useState<{
     kodeProduk: string;
     namaProduk: string;
@@ -89,7 +95,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
     else setLoading(true);
     setError(null);
 
-    const pMap = new Map<string, string>();
+    const pMap = new Map<string, { nama: string, rph?: number }>();
     const lMap = new Map<string, { nama: string; whType: string; area: string }>();
     const mappedRows: MappedTransaction[] = [];
 
@@ -181,13 +187,30 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                 fetchSheetData(aUrl, "'INPUT RM'!A2:J").catch(() => []),
                 fetchSheetData(aUrl, "'INPUT MFG'!A2:J").catch(() => []),
                 fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J").catch(() => []),
-                fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:B").catch(() => []),
+                fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:E").catch(() => []),
                 fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E").catch(() => []),
               ]);
 
               // Merge products
               pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
-                pMap.set(String(r[0]).trim().toUpperCase(), String(r[1] || "").trim());
+                const parsedVal = r[4] ? parseFloat(String(r[4]).replace(/,/g, '.')) : undefined;
+                const key = String(r[0]).trim().toUpperCase();
+                const areaKey = `${aName.toUpperCase().trim()}||${key}`;
+                const existing = pMap.get(areaKey) || pMap.get(key);
+                const newRph = (parsedVal !== undefined && !isNaN(parsedVal)) ? parsedVal : undefined;
+                const mergedRph = newRph !== undefined ? newRph : existing?.rph;
+
+                pMap.set(areaKey, {
+                  nama: String(r[1] || "").trim() || existing?.nama || "",
+                  rph: mergedRph
+                });
+
+                if (!pMap.has(key)) {
+                  pMap.set(key, {
+                    nama: String(r[1] || "").trim() || existing?.nama || "",
+                    rph: mergedRph
+                  });
+                }
               });
 
               // Merge locators
@@ -218,12 +241,27 @@ export default function CekStock({ spreadsheetId, area }: Props) {
           fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J").catch(() => []),
           fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J").catch(() => []),
           fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J").catch(() => []),
-          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B").catch(() => []),
+          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:E").catch(() => []),
           fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => []),
         ]);
 
         pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
-          pMap.set(String(r[0]).trim().toUpperCase(), String(r[1] || "").trim());
+          const parsedVal = r[4] ? parseFloat(String(r[4]).replace(/,/g, '.')) : undefined;
+          const key = String(r[0]).trim().toUpperCase();
+          const areaKey = `${area.toUpperCase().trim()}||${key}`;
+          const existing = pMap.get(areaKey) || pMap.get(key);
+          const newRph = (parsedVal !== undefined && !isNaN(parsedVal)) ? parsedVal : undefined;
+          const mergedRph = newRph !== undefined ? newRph : existing?.rph;
+
+          pMap.set(areaKey, {
+            nama: String(r[1] || "").trim() || existing?.nama || "",
+            rph: mergedRph
+          });
+
+          pMap.set(key, {
+            nama: String(r[1] || "").trim() || existing?.nama || "",
+            rph: mergedRph
+          });
         });
 
         lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
@@ -275,7 +313,11 @@ export default function CekStock({ spreadsheetId, area }: Props) {
       const key = `${pCodeClean}||${locatorClean}`;
 
       if (!stockMap.has(key)) {
-        const prodNameFromMap = productsMap.get(pCodeClean) || t.pName;
+        const tAreaClean = (t.area || area).toUpperCase().trim();
+        const areaProdKey = `${tAreaClean}||${pCodeClean}`;
+        const prodFromMap = productsMap.get(areaProdKey) || productsMap.get(pCodeClean);
+        const prodNameFromMap = prodFromMap?.nama || t.pName;
+        const prodRph = prodFromMap?.rph;
         const locMeta = locatorsMap.get(locatorClean);
 
         stockMap.set(key, {
@@ -288,6 +330,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
           totalIn: 0,
           totalOut: 0,
           stock: 0,
+          rph: prodRph,
         });
       }
 
@@ -331,12 +374,26 @@ export default function CekStock({ spreadsheetId, area }: Props) {
     }));
   }, [stockSummary]);
 
+  // Unique list of Areas for the Cabang/Area dropdown filter
+  const uniqueAreas = useMemo(() => {
+    const set = new Set<string>();
+    stockSummary.forEach((s) => {
+      if (s.area) {
+        set.add(s.area);
+      }
+    });
+    return Array.from(set).sort();
+  }, [stockSummary]);
+
   // Compute overall KPI status cards
   const stats = useMemo(() => {
-    // Apply locator multi-select prefix filter for stats if active
+    // Apply locator multi-select prefix and area filters for stats if active
     const finalStockSummary = stockSummary.filter((s) => {
-      if (selectedLocators.length > 0) {
-        return selectedLocators.includes(s.whGroup.toUpperCase().trim());
+      if (selectedLocators.length > 0 && !selectedLocators.includes(s.whGroup.toUpperCase().trim())) {
+        return false;
+      }
+      if (selectedArea !== "ALL" && s.area !== selectedArea) {
+        return false;
       }
       return true;
     });
@@ -347,14 +404,42 @@ export default function CekStock({ spreadsheetId, area }: Props) {
     const totalInQty = finalStockSummary.reduce((acc, s) => acc + s.totalIn, 0);
     const totalOutQty = finalStockSummary.reduce((acc, s) => acc + s.totalOut, 0);
 
+    let totalStockAman = 0;
+    let totalStockOver = 0;
+    let totalStockTidakAman = 0;
+    let totalDOISum = 0;
+    let countDOI = 0;
+
+    finalStockSummary.forEach(s => {
+      if (s.rph !== undefined && s.rph > 0 && !isNaN(s.rph) && s.stock > 0) {
+        const doi = s.stock / s.rph;
+        totalDOISum += doi;
+        countDOI += 1;
+        
+        if (doi < 45) {
+          totalStockTidakAman += 1;
+        } else if (doi > 60) {
+          totalStockOver += 1;
+        } else {
+          totalStockAman += 1;
+        }
+      }
+    });
+
+    const averageDOI = countDOI > 0 ? totalDOISum / countDOI : 0;
+
     return {
       totalKuantitasGlobal,
       totalSKU,
       skuTanpaPergerakan,
       totalInQty,
       totalOutQty,
+      averageDOI,
+      totalStockAman,
+      totalStockOver,
+      totalStockTidakAman,
     };
-  }, [stockSummary, selectedLocators]);
+  }, [stockSummary, selectedLocators, selectedArea]);
 
   // Chart: Qty In & Out group by area (excluding 'All Cabang' for chart categories)
   const areaChartData = useMemo(() => {
@@ -394,7 +479,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
       if (search.trim() !== "") {
         const q = search.toLowerCase().trim();
         const pCodeClean = t.pCode.toLowerCase().trim();
-        const pName = (productsMap.get(t.pCode.toUpperCase().trim()) || t.pName).toLowerCase().trim();
+        const pName = (productsMap.get(t.pCode.toUpperCase().trim())?.nama || t.pName).toLowerCase().trim();
         const lName = (locatorsMap.get(lCodeClean)?.nama || t.lCode).toLowerCase().trim();
         const lCodeLower = t.lCode.toLowerCase().trim();
 
@@ -448,6 +533,29 @@ export default function CekStock({ spreadsheetId, area }: Props) {
       result = result.filter((s) => selectedLocators.includes(s.whGroup.toUpperCase().trim()));
     }
 
+    // Filter by Area
+    if (selectedArea !== "ALL") {
+      result = result.filter((s) => s.area === selectedArea);
+    }
+
+    // Filter by DOI Status
+    if (selectedDoiStatus !== "ALL") {
+      result = result.filter((s) => {
+        if (s.rph === undefined || s.rph <= 0 || isNaN(s.rph) || s.stock <= 0) {
+          return selectedDoiStatus === "TANPA_RPH";
+        }
+        const doi = s.stock / s.rph;
+        if (selectedDoiStatus === "TIDAK_AMAN") {
+          return doi < 45;
+        } else if (selectedDoiStatus === "OVER") {
+          return doi > 60;
+        } else if (selectedDoiStatus === "AMAN") {
+          return doi >= 45 && doi <= 60;
+        }
+        return true;
+      });
+    }
+
     // Filter by search text
     if (search.trim() !== "") {
       const q = search.toLowerCase().trim();
@@ -462,7 +570,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
     }
 
     return result;
-  }, [stockSummary, selectedLocators, search]);
+  }, [stockSummary, selectedLocators, selectedArea, selectedDoiStatus, search]);
 
   // Totals for filtered list
   const filteredTotals = useMemo(() => {
@@ -483,7 +591,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
   // Auto-reset page when filtering
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedSource, selectedLocators, search, pageSize]);
+  }, [selectedSource, selectedLocators, search, pageSize, selectedArea, selectedDoiStatus]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-250">
@@ -542,7 +650,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
       ) : (
         <>
           {/* Bento Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
             {/* 1. Total Kuantitas Global */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
               <div className="w-12 h-12 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center shrink-0">
@@ -605,6 +713,32 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                   {stats.totalOutQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </h4>
                 <p className="text-xs font-bold text-slate-450 uppercase tracking-wide mt-0.5">Total Transaksi Out (Qty)</p>
+              </div>
+            </div>
+
+            {/* 7. Stock Over */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+              <div className="w-12 h-12 bg-yellow-50 border border-yellow-100 rounded-full flex items-center justify-center shrink-0">
+                <TrendingUp className="w-5 h-5 text-yellow-600" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-xl sm:text-2xl font-black text-yellow-600 truncate">
+                  {stats.totalStockOver.toLocaleString()}
+                </h4>
+                <p className="text-xs font-bold text-slate-450 uppercase tracking-wide mt-0.5">Stock Over</p>
+              </div>
+            </div>
+
+            {/* 8. Stock Tidak Aman */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+              <div className="w-12 h-12 bg-rose-50 border border-rose-100 rounded-full flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-xl sm:text-2xl font-black text-rose-600 truncate">
+                  {stats.totalStockTidakAman.toLocaleString()}
+                </h4>
+                <p className="text-xs font-bold text-slate-450 uppercase tracking-wide mt-0.5">Stock Tidak Aman</p>
               </div>
             </div>
           </div>
@@ -692,6 +826,33 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                   <option value="INPUT RM">Raw Material</option>
                   <option value="INPUT MFG">Manufacturing</option>
                   <option value="INPUT SUPPLIES">Supplies & GA</option>
+                </select>
+
+                {/* Filter Cabang/Area */}
+                <select
+                  value={selectedArea}
+                  onChange={(e) => setSelectedArea(e.target.value)}
+                  className="w-full sm:w-auto px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white font-semibold text-slate-700 cursor-pointer outline-none transition"
+                >
+                  <option value="ALL">Semua Cabang/Area</option>
+                  {uniqueAreas.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Filter DOI Status */}
+                <select
+                  value={selectedDoiStatus}
+                  onChange={(e) => setSelectedDoiStatus(e.target.value)}
+                  className="w-full sm:w-auto px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white font-semibold text-slate-700 cursor-pointer outline-none transition"
+                >
+                  <option value="ALL">Semua Status DOI</option>
+                  <option value="AMAN">Stock Aman (DOI 45-60)</option>
+                  <option value="OVER">Stock Over (DOI &gt; 60)</option>
+                  <option value="TIDAK_AMAN">Stock Tidak Aman (DOI &lt; 45)</option>
+                  <option value="TANPA_RPH">Tanpa DOI (Belum Ada RPH)</option>
                 </select>
 
                 {/* Locator Dropdown Filter */}
@@ -836,6 +997,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                     <th className="px-5 py-4 text-right">Volume In</th>
                     <th className="px-5 py-4 text-right">Volume Out</th>
                     <th className="px-5 py-4 text-right">Stok Rill Saat Ini</th>
+                    <th className="px-5 py-4 text-right">DOI (Status)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-150">
@@ -879,6 +1041,36 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                       >
                         {s.stock.toLocaleString()}
                       </td>
+                      <td className={(() => {
+                        if (s.rph === undefined || s.rph <= 0 || isNaN(s.rph) || s.stock <= 0) return "px-5 py-4 text-right";
+                        const doi = s.stock / s.rph;
+                        if (isNaN(doi)) return "px-5 py-4 text-right";
+                        if (doi < 45) return "px-5 py-4 text-right bg-rose-100/90 text-rose-900 font-medium transition-colors";
+                        if (doi > 60) return "px-5 py-4 text-right bg-yellow-100 text-yellow-900 font-medium transition-colors";
+                        return "px-5 py-4 text-right bg-emerald-100/90 text-emerald-900 font-medium transition-colors";
+                      })()}>
+                        {(() => {
+                          if (s.rph === undefined || s.rph <= 0 || isNaN(s.rph) || s.stock <= 0) return <span className="text-slate-400 font-mono">-</span>;
+                          const doi = s.stock / s.rph;
+                          if (isNaN(doi)) return <span className="text-slate-400 font-mono">-</span>;
+                          let statusLabel = '';
+                          
+                          if (doi < 45) {
+                            statusLabel = 'Stock Tidak Aman';
+                          } else if (doi > 60) {
+                            statusLabel = 'Stock Over';
+                          } else {
+                            statusLabel = 'Stock Aman';
+                          }
+                          
+                          return (
+                            <div className="flex flex-col items-end">
+                              <span className="font-mono text-[13px] font-black">{doi.toFixed(1)}</span>
+                              <span className="text-[10px] font-bold uppercase tracking-wider opacity-90">{statusLabel}</span>
+                            </div>
+                          );
+                        })()}
+                      </td>
                     </tr>
                   ))}
 
@@ -901,13 +1093,14 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                       >
                         {filteredTotals.totalStock.toLocaleString()}
                       </td>
+                      <td className="px-5 py-4.5 bg-slate-100/85"></td>
                     </tr>
                   )}
 
                   {/* Empty State */}
                   {filteredTableData.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="p-16 text-center text-slate-450 text-sm font-semibold">
+                      <td colSpan={6} className="p-16 text-center text-slate-450 text-sm font-semibold">
                         ❌ Tidak ada rincian analitis stok yang cocok dengan kriteria filter.
                       </td>
                     </tr>

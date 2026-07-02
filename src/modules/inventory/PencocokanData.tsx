@@ -332,7 +332,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     try {
       setLoading(true);
       
-      const csvUrl = '/api/mts';
+      const csvUrl = '/api/stock-summary';
       const mtsMap = new Map<string, number>();
       
       try {

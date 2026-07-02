@@ -96,7 +96,7 @@ export default function StockOverview({
       setLoading(true);
 
       // Fetch global MTS
-      const csvUrl = '/api/mts';
+      const csvUrl = '/api/stock-summary';
       const mtsMapLocal = new Map<string, number>();
 
       try {
