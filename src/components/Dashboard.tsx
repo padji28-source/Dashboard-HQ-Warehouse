@@ -42,13 +42,18 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
     ['mp', 'ppic', 'hq', 'admin'].includes((activeUsername || '').toLowerCase()) ||
     (activeUsername || '').toLowerCase().startsWith('admin');
 
+  const isAuthorizedForPengepokan = 
+    area === 'All Cabang' || 
+    ['mp', 'ppic', 'hq', 'admin'].includes((activeUsername || '').toLowerCase()) ||
+    (activeUsername || '').toLowerCase().startsWith('admin');
+
   const mainTabs = [
     { id: 'stock', label: 'Executive Dashboard', icon: LayoutDashboard },
     { id: 'cek_stock', label: 'Cek Stock', icon: Package },
     ...(isAuthorizedForDoiMp ? [{ id: 'doi_mp', label: 'DOI MP', icon: TrendingUp }] : []),
     ...(!isReadOnly && isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
     ...(!isReadOnly && area === 'All Cabang' ? [{ id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 }] : []),
-    ...(area === 'All Cabang' ? [{ id: 'pengepokan', label: 'Pengepokan', icon: Box }] : []),
+    ...(isAuthorizedForPengepokan ? [{ id: 'pengepokan', label: 'Pengepokan', icon: Box }] : []),
     ...(!isReadOnly ? [{ id: 'whatsapp', label: 'WhatsApp Bot', icon: MessageSquare }] : []),
     ...(userRole === 'ALL' ? [{ id: 'monitor', label: 'Monitor Pengguna', icon: Eye }] : []),
   ] as const;
