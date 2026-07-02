@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye } from 'lucide-react';
+import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye, TrendingUp } from 'lucide-react';
 import MasterProduk from './MasterProduk';
 import MasterLocator from './MasterLocator';
 import TransactionInput from './TransactionInput';
@@ -10,6 +10,7 @@ import WhatsAppConsole from '../modules/whatsapp/WhatsAppConsole';
 import AkurasiStock from './AkurasiStock';
 import Pengepokan from './Pengepokan';
 import CekStock from './CekStock';
+import DoiMp from './DoiMp';
 import ActiveUsersMonitor from './ActiveUsersMonitor';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -26,19 +27,25 @@ interface Props {
   userRole?: string;
   onAreaChange?: (newArea: string) => void;
   isReadOnly?: boolean;
+  activeUsername?: string;
 }
 
-export default function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange, isReadOnly = false }: Props) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'monitor'>('stock');
+export default function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange, isReadOnly = false, activeUsername = '' }: Props) {
+  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'monitor' | 'doi_mp'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
 
   const isAuthorizedForPencocokan = true; // Aktif untuk semua admin
   const safeActiveTab = activeTab === 'pencocokan' && !isAuthorizedForPencocokan ? 'stock' : activeTab;
 
+  const isAuthorizedForDoiMp = 
+    ['mp', 'ppic', 'hq', 'admin'].includes((activeUsername || '').toLowerCase()) ||
+    (activeUsername || '').toLowerCase().startsWith('admin');
+
   const mainTabs = [
     { id: 'stock', label: 'Executive Dashboard', icon: LayoutDashboard },
     { id: 'cek_stock', label: 'Cek Stock', icon: Package },
+    ...(isAuthorizedForDoiMp ? [{ id: 'doi_mp', label: 'DOI MP', icon: TrendingUp }] : []),
     ...(!isReadOnly && isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
     ...(!isReadOnly && area === 'All Cabang' ? [{ id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 }] : []),
     ...(area === 'All Cabang' ? [{ id: 'pengepokan', label: 'Pengepokan', icon: Box }] : []),
@@ -273,6 +280,9 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
           </div>
           <div className={cn(safeActiveTab !== 'cek_stock' && 'hidden')}>
             <CekStock spreadsheetId={spreadsheetId} area={area} />
+          </div>
+          <div className={cn(safeActiveTab !== 'doi_mp' && 'hidden')}>
+            <DoiMp spreadsheetId={spreadsheetId} area={area} activeUsername={activeUsername} userRole={userRole} />
           </div>
           <div className={cn(safeActiveTab !== 'pencocokan' && 'hidden')}>
             <PencocokanData spreadsheetId={spreadsheetId} area={area} />

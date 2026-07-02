@@ -793,7 +793,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
       ) : (
         <>
           {/* Bento Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
             {/* 1. Total Kuantitas Global */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
               <div className="w-12 h-12 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center shrink-0">
@@ -856,32 +856,6 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                   {stats.totalOutQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </h4>
                 <p className="text-xs font-bold text-slate-450 uppercase tracking-wide mt-0.5">Total Transaksi Out (Qty)</p>
-              </div>
-            </div>
-
-            {/* 7. Stock Over */}
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
-              <div className="w-12 h-12 bg-yellow-50 border border-yellow-100 rounded-full flex items-center justify-center shrink-0">
-                <TrendingUp className="w-5 h-5 text-yellow-600" />
-              </div>
-              <div className="min-w-0">
-                <h4 className="text-xl sm:text-2xl font-black text-yellow-600 truncate">
-                  {stats.totalStockOver.toLocaleString()}
-                </h4>
-                <p className="text-xs font-bold text-slate-450 uppercase tracking-wide mt-0.5">Stock Over</p>
-              </div>
-            </div>
-
-            {/* 8. Stock Tidak Aman */}
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
-              <div className="w-12 h-12 bg-rose-50 border border-rose-100 rounded-full flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-rose-600" />
-              </div>
-              <div className="min-w-0">
-                <h4 className="text-xl sm:text-2xl font-black text-rose-600 truncate">
-                  {stats.totalStockTidakAman.toLocaleString()}
-                </h4>
-                <p className="text-xs font-bold text-slate-450 uppercase tracking-wide mt-0.5">Stock Tidak Aman</p>
               </div>
             </div>
           </div>
@@ -985,18 +959,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                   ))}
                 </select>
 
-                {/* Filter DOI Status */}
-                <select
-                  value={selectedDoiStatus}
-                  onChange={(e) => setSelectedDoiStatus(e.target.value)}
-                  className="w-full sm:w-auto px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white font-semibold text-slate-700 cursor-pointer outline-none transition"
-                >
-                  <option value="ALL">Semua Status DOI</option>
-                  <option value="AMAN">Stock Aman (DOI 45-60)</option>
-                  <option value="OVER">Stock Over (DOI &gt; 60)</option>
-                  <option value="TIDAK_AMAN">Stock Tidak Aman (DOI &lt; 45)</option>
-                  <option value="TANPA_RPH">Tanpa DOI (Belum Ada RPH)</option>
-                </select>
+
 
                 {/* Locator Dropdown Filter */}
                 <div ref={locatorDropdownRef} className="relative w-full sm:w-auto z-20">
@@ -1140,7 +1103,6 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                     <th className="px-5 py-4 text-right">Volume In</th>
                     <th className="px-5 py-4 text-right">Volume Out</th>
                     <th className="px-5 py-4 text-right">Stok Rill Saat Ini</th>
-                    <th className="px-5 py-4 text-right">DOI (Status)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-150">
@@ -1184,64 +1146,6 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                       >
                         {s.stock.toLocaleString()}
                       </td>
-                      <td className={(() => {
-                        const rph = s.rph;
-                        const isExcluded = (s.source || "").toUpperCase().trim() === "INPUT" && 
-                                           ((s.whGroup || "").toUpperCase().trim().startsWith("PID") || (s.namaLocator || "").toUpperCase().trim().startsWith("PID")) && 
-                                           ((s.area || "").toUpperCase().trim() === "SEMARANG" || (s.area || "").toUpperCase().trim() === "KARAWANG");
-                        const isRphValid = rph !== undefined && !isNaN(rph) && rph > 0 && !isExcluded;
-                        if (!isRphValid) return "px-5 py-4 text-right text-slate-400";
-
-                        const pCodeClean = s.kodeProduk.toUpperCase().trim();
-                        const areaClean = s.area.toUpperCase().trim();
-                        const key = `${areaClean}||${pCodeClean}`;
-                        const metrics = productAreaMetrics.get(key);
-                        
-                        const moveQty = pengepokanMap.get(key) || 0;
-                        const stockRiil = metrics ? metrics.totalStock : 0;
-                        const doi = Math.max(0, (stockRiil - moveQty) / rph);
-
-                        if (isNaN(doi)) return "px-5 py-4 text-right text-slate-400";
-                        if (doi < 45) return "px-5 py-4 text-right bg-rose-100/90 text-rose-900 font-medium transition-colors";
-                        if (doi > 60) return "px-5 py-4 text-right bg-yellow-100 text-yellow-900 font-medium transition-colors";
-                        return "px-5 py-4 text-right bg-emerald-100/90 text-emerald-900 font-medium transition-colors";
-                      })()}>
-                        {(() => {
-                          const rph = s.rph;
-                          const isExcluded = (s.source || "").toUpperCase().trim() === "INPUT" && 
-                                             ((s.whGroup || "").toUpperCase().trim().startsWith("PID") || (s.namaLocator || "").toUpperCase().trim().startsWith("PID")) && 
-                                             ((s.area || "").toUpperCase().trim() === "SEMARANG" || (s.area || "").toUpperCase().trim() === "KARAWANG");
-                          const isRphValid = rph !== undefined && !isNaN(rph) && rph > 0 && !isExcluded;
-                          if (!isRphValid) return <span className="text-slate-400 font-mono">-</span>;
-
-                          const pCodeClean = s.kodeProduk.toUpperCase().trim();
-                          const areaClean = s.area.toUpperCase().trim();
-                          const key = `${areaClean}||${pCodeClean}`;
-                          const metrics = productAreaMetrics.get(key);
-                          
-                          const moveQty = pengepokanMap.get(key) || 0;
-                          const stockRiil = metrics ? metrics.totalStock : 0;
-                          const doi = Math.max(0, (stockRiil - moveQty) / rph);
-
-                          if (isNaN(doi)) return <span className="text-slate-400 font-mono">-</span>;
-                          let statusLabel = '';
-                          
-                          if (doi < 45) {
-                            statusLabel = 'Stock Tidak Aman';
-                          } else if (doi > 60) {
-                            statusLabel = 'Stock Over';
-                          } else {
-                            statusLabel = 'Stock Aman';
-                          }
-                          
-                          return (
-                            <div className="flex flex-col items-end">
-                              <span className="font-mono text-[13px] font-black">{doi.toFixed(1)}</span>
-                              <span className="text-[10px] font-bold uppercase tracking-wider opacity-90">{statusLabel}</span>
-                            </div>
-                          );
-                        })()}
-                      </td>
                     </tr>
                   ))}
 
@@ -1264,14 +1168,13 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                       >
                         {filteredTotals.totalStock.toLocaleString()}
                       </td>
-                      <td className="px-5 py-4.5 bg-slate-100/85"></td>
                     </tr>
                   )}
 
                   {/* Empty State */}
                   {filteredTableData.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="p-16 text-center text-slate-450 text-sm font-semibold">
+                      <td colSpan={5} className="p-16 text-center text-slate-450 text-sm font-semibold">
                         ❌ Tidak ada rincian analitis stok yang cocok dengan kriteria filter.
                       </td>
                     </tr>

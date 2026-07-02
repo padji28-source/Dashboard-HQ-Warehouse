@@ -309,6 +309,7 @@ export default function App() {
       userRole={loggedInUserRole} 
       onAreaChange={handleAreaChange} 
       isReadOnly={isReadOnly}
+      activeUsername={activeUsername}
     />
   );
 }
