@@ -275,7 +275,7 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
     }
   };
 
-  const loadData = async (retryOnMissing = true) => {
+  const loadData = async (forceFresh = false, retryOnMissing = true) => {
     try {
       setLoading(true);
       
@@ -285,10 +285,10 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
       
       try {
         [pRows, lRows] = await Promise.all([
-          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:C"), // Need Satuan (UOM)
-          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E")
+          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:C", forceFresh), // Need Satuan (UOM)
+          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E", forceFresh)
         ]);
-        txRows = await fetchSheetData(spreadsheetId, `'${sheetName}'!A2:J`).catch((err: any) => {
+        txRows = await fetchSheetData(spreadsheetId, `'${sheetName}'!A2:J`, forceFresh).catch((err: any) => {
           const errMsg = String(err.message || '');
           if (errMsg.includes('Kisaran tidak ditemukan') || errMsg.includes('not found') || errMsg.includes('Range not found')) {
             console.warn(`Sheet ${sheetName} tidak ditemukan. Menggunakan array kosong.`);
@@ -303,12 +303,12 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
           try {
             const { initializeERPSpreadsheet } = await import('../../lib/sheets');
             await initializeERPSpreadsheet(spreadsheetId);
-            return loadData(false);
+            return loadData(forceFresh, false);
           } catch (initErr: any) {
             const initErrMsg = String(initErr.message || '').toLowerCase();
             if (initErrMsg.includes('already exists') || initErrMsg.includes('ada') || initErrMsg.includes('exists')) {
               console.log("Sheet already exists, continuing to load data.");
-              return loadData(false);
+              return loadData(forceFresh, false);
             }
             console.error("Auto-initialization fallback failed:", initErr);
             throw fetchErr;

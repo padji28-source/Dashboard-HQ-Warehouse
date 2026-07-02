@@ -185,12 +185,12 @@ export default function CekStock({ spreadsheetId, area }: Props) {
           urlEntries.map(async ([aName, aUrl]) => {
             try {
               const [tn, tr, tm, ts, pr, lr] = await Promise.all([
-                fetchSheetData(aUrl, "'INPUT'!A2:J").catch(() => []),
-                fetchSheetData(aUrl, "'INPUT RM'!A2:J").catch(() => []),
-                fetchSheetData(aUrl, "'INPUT MFG'!A2:J").catch(() => []),
-                fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J").catch(() => []),
-                fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:E").catch(() => []),
-                fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E").catch(() => []),
+                fetchSheetData(aUrl, "'INPUT'!A2:J", isManual).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT RM'!A2:J", isManual).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT MFG'!A2:J", isManual).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", isManual).catch(() => []),
+                fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:E", isManual).catch(() => []),
+                fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", isManual).catch(() => []),
               ]);
 
               // Merge products
@@ -240,12 +240,12 @@ export default function CekStock({ spreadsheetId, area }: Props) {
         );
       } else {
         const [tn, tr, tm, ts, pr, lr] = await Promise.all([
-          fetchSheetData(spreadsheetId, "'INPUT'!A2:J").catch(() => []),
-          fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J").catch(() => []),
-          fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J").catch(() => []),
-          fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J").catch(() => []),
-          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:E").catch(() => []),
-          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => []),
+          fetchSheetData(spreadsheetId, "'INPUT'!A2:J", isManual).catch(() => []),
+          fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J", isManual).catch(() => []),
+          fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J", isManual).catch(() => []),
+          fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J", isManual).catch(() => []),
+          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:E", isManual).catch(() => []),
+          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E", isManual).catch(() => []),
         ]);
 
         pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {

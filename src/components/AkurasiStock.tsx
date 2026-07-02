@@ -179,7 +179,7 @@ export default function AkurasiStock() {
   const [tableSearch, setTableSearch] = useState('');
   const [selectedAreaFilter, setSelectedAreaFilter] = useState('ALL');
 
-  const loadData = async () => {
+  const loadData = async (isManual = false) => {
     try {
       setLoading(true);
       setErrorMsg(null);
@@ -274,12 +274,12 @@ export default function AkurasiStock() {
         urlEntries.map(async ([aName, aUrl]) => {
           try {
             const [tn, tr, tm, ts, pr, lr] = await Promise.all([
-              fetchSheetData(aUrl, "'INPUT'!A2:J").catch(() => []),
-              fetchSheetData(aUrl, "'INPUT RM'!A2:J").catch(() => []),
-              fetchSheetData(aUrl, "'INPUT MFG'!A2:J").catch(() => []),
-              fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J").catch(() => []),
-              fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:D").catch(() => []),
-              fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E").catch(() => [])
+              fetchSheetData(aUrl, "'INPUT'!A2:J", isManual).catch(() => []),
+              fetchSheetData(aUrl, "'INPUT RM'!A2:J", isManual).catch(() => []),
+              fetchSheetData(aUrl, "'INPUT MFG'!A2:J", isManual).catch(() => []),
+              fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", isManual).catch(() => []),
+              fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:D", isManual).catch(() => []),
+              fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", isManual).catch(() => [])
             ]);
 
             const pMap = new Map<string, { nama: string; satuan: string }>();
@@ -652,7 +652,7 @@ export default function AkurasiStock() {
           )}
 
           <button
-            onClick={loadData}
+            onClick={() => loadData(true)}
             title="Reload Data"
             disabled={loading}
             className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors disabled:opacity-50"

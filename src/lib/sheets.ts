@@ -86,7 +86,7 @@ interface CacheEntry {
   data: any[][];
 }
 const fetchCache = new Map<string, CacheEntry>();
-const CACHE_TTL = 0; // Disabled cache to ensure real-time sync with no delay
+const CACHE_TTL = 60000; // 1 minute cache to improve performance
 
 // Map to store in-flight requests (Request Coalescing)
 const inFlightRequests = new Map<string, Promise<any[][]>>();

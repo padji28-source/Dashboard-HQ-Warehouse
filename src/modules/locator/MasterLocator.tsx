@@ -17,12 +17,12 @@ export default function MasterLocator({ spreadsheetId }: { spreadsheetId: string
   const [whType, setWhType] = useState('');
   const [area, setArea] = useState('');
 
-  const loadData = async (retryOnMissing = true) => {
+  const loadData = async (forceFresh = false, retryOnMissing = true) => {
     try {
       setLoading(true);
       let rows: any[] = [];
       try {
-        rows = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E");
+        rows = await fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E", forceFresh);
       } catch (fetchErr: any) {
         const errorMsg = String(fetchErr.message || '').toLowerCase();
         const isMissingSheet = errorMsg.includes('not found') || errorMsg.includes('range') || errorMsg.includes('unparseable') || errorMsg.includes('cannot read');
@@ -32,12 +32,12 @@ export default function MasterLocator({ spreadsheetId }: { spreadsheetId: string
           try {
             const { initializeERPSpreadsheet } = await import('../../lib/sheets');
             await initializeERPSpreadsheet(spreadsheetId);
-            return loadData(false);
+            return loadData(forceFresh, false);
           } catch (initErr: any) {
             const initErrMsg = String(initErr.message || '').toLowerCase();
             if (initErrMsg.includes('already exists') || initErrMsg.includes('ada') || initErrMsg.includes('exists')) {
               console.log("Sheet already exists, continuing to load data.");
-              return loadData(false);
+              return loadData(forceFresh, false);
             }
             console.error("Auto-init from MasterLocator failed:", initErr);
             throw fetchErr;
@@ -107,7 +107,7 @@ export default function MasterLocator({ spreadsheetId }: { spreadsheetId: string
           <p className="text-sm text-slate-500">Daftar lokasi atau gudang penyimpanan.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={loadData} className="px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+          <button onClick={() => loadData(true)} className="px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
             Refresh
           </button>
           <button 
