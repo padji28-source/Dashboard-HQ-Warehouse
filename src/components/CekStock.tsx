@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { fetchSheetData } from "../lib/sheets";
 import { AREA_URLS } from "../App";
 import type { StockSummary } from "../types";
@@ -12,6 +12,8 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  RefreshCw,
+  Clock
 } from "lucide-react";
 import {
   BarChart,
@@ -79,196 +81,185 @@ export default function CekStock({ spreadsheetId, area }: Props) {
     };
   }, []);
 
-  // Fetch and compile all data
-  useEffect(() => {
-    let isMounted = true;
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-    async function loadAllData() {
-      setLoading(true);
-      setError(null);
+  const loadAllData = useCallback(async (isManual = false) => {
+    if (isManual) setIsRefreshing(true);
+    else setLoading(true);
+    setError(null);
 
-      const pMap = new Map<string, string>();
-      const lMap = new Map<string, { nama: string; whType: string; area: string }>();
-      const mappedRows: MappedTransaction[] = [];
+    const pMap = new Map<string, string>();
+    const lMap = new Map<string, { nama: string; whType: string; area: string }>();
+    const mappedRows: MappedTransaction[] = [];
 
-      const processRows = (rows: any[], source: string, sourceAreaName: string) => {
-        const validRows = (rows || []).filter((r: any[]) => {
-          if (r.length === 0) return false;
-          const tanggal = String(r[0] || "").trim();
-          const nama = String(r[1] || "").trim();
-          const kode = String(r[9] || "").trim();
-          return (
-            tanggal !== "" &&
-            nama !== "" &&
-            kode !== "#N/A" &&
-            nama !== "#N/A" &&
-            tanggal !== "#N/A"
-          );
-        });
+    const processRows = (rows: any[], source: string, sourceAreaName: string) => {
+      const validRows = (rows || []).filter((r: any[]) => {
+        if (r.length === 0) return false;
+        const tanggal = String(r[0] || "").trim();
+        const nama = String(r[1] || "").trim();
+        const kode = String(r[9] || "").trim();
+        return (
+          tanggal !== "" &&
+          nama !== "" &&
+          kode !== "#N/A" &&
+          nama !== "#N/A" &&
+          tanggal !== "#N/A"
+        );
+      });
 
-        validRows.forEach((r: any[]) => {
-          const pName = String(r[1] || "").trim();
-          let pCode = String(r[9] || "").trim();
-          const tipe = String(r[4] || "").trim().toUpperCase();
+      validRows.forEach((r: any[]) => {
+        const pName = String(r[1] || "").trim();
+        let pCode = String(r[9] || "").trim();
+        const tipe = String(r[4] || "").trim().toUpperCase();
 
-          if (!pName && !pCode) return;
-          if (!pCode) {
-            pCode = pName;
-          }
+        if (!pName && !pCode) return;
+        if (!pCode) {
+          pCode = pName;
+        }
 
-          const qtyStr = String(r[2] || "0").replace(",", ".");
-          let qty = parseFloat(qtyStr) || 0;
-          if (isNaN(qty)) qty = 0;
+        const qtyStr = String(r[2] || "0").replace(",", ".");
+        let qty = parseFloat(qtyStr) || 0;
+        if (isNaN(qty)) qty = 0;
 
-          let fromLocator = String(r[5] || "").trim();
-          let toLocator = String(r[6] || "").trim();
+        let fromLocator = String(r[5] || "").trim();
+        let toLocator = String(r[6] || "").trim();
 
-          if (!fromLocator && !toLocator) fromLocator = "UNKNOWN_L";
+        if (!fromLocator && !toLocator) fromLocator = "UNKNOWN_L";
 
-          if (tipe === "TRANSFER" || tipe === "TF") {
+        if (tipe === "TRANSFER" || tipe === "TF") {
+          mappedRows.push({
+            tipe: "OUT",
+            pCode,
+            pName,
+            lCode: fromLocator || "UNKNOWN_L",
+            toLocator,
+            qty,
+            source,
+            area: sourceAreaName,
+          });
+          if (toLocator) {
             mappedRows.push({
-              tipe: "OUT",
+              tipe: "IN",
               pCode,
               pName,
-              lCode: fromLocator || "UNKNOWN_L",
-              toLocator,
-              qty,
-              source,
-              area: sourceAreaName,
-            });
-            if (toLocator) {
-              mappedRows.push({
-                tipe: "IN",
-                pCode,
-                pName,
-                lCode: toLocator,
-                qty,
-                source,
-                area: sourceAreaName,
-              });
-            }
-          } else {
-            mappedRows.push({
-              tipe: tipe || "IN",
-              pCode,
-              pName,
-              lCode: fromLocator || toLocator || "UNKNOWN_L",
-              toLocator,
+              lCode: toLocator,
               qty,
               source,
               area: sourceAreaName,
             });
           }
-        });
-      };
-
-      try {
-        const isGlobal =
-          area === "HQ" ||
-          spreadsheetId === "HQ" ||
-          area === "All Cabang" ||
-          area.toLowerCase() === "all";
-
-        if (isGlobal) {
-          const urlEntries = Object.entries(AREA_URLS);
-          await Promise.all(
-            urlEntries.map(async ([aName, aUrl]) => {
-              try {
-                const [tn, tr, tm, ts, pr, lr] = await Promise.all([
-                  fetchSheetData(aUrl, "'INPUT'!A2:J").catch(() => []),
-                  fetchSheetData(aUrl, "'INPUT RM'!A2:J").catch(() => []),
-                  fetchSheetData(aUrl, "'INPUT MFG'!A2:J").catch(() => []),
-                  fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J").catch(() => []),
-                  fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:B").catch(() => []),
-                  fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E").catch(() => []),
-                ]);
-
-                // Merge products
-                pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
-                  pMap.set(String(r[0]).trim().toUpperCase(), String(r[1] || "").trim());
-                });
-
-                // Merge locators
-                lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
-                  const val = {
-                    nama: String(r[1] || r[0]).trim(),
-                    whType: String(r[3] || "").trim(),
-                    area: String(r[4] || aName).trim(),
-                  };
-                  if (r[0]) {
-                    const k = String(r[0]).trim().toUpperCase();
-                    lMap.set(k, val);
-                  }
-                });
-
-                processRows(tn, "INPUT", aName);
-                processRows(tr, "INPUT RM", aName);
-                processRows(tm, "INPUT MFG", aName);
-                processRows(ts, "INPUT SUPPLIES", aName);
-              } catch (e) {
-                console.error(`Error loading data for area ${aName}:`, e);
-              }
-            })
-          );
         } else {
-          const [tn, tr, tm, ts, pr, lr] = await Promise.all([
-            fetchSheetData(spreadsheetId, "'INPUT'!A2:J").catch(() => []),
-            fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J").catch(() => []),
-            fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J").catch(() => []),
-            fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J").catch(() => []),
-            fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B").catch(() => []),
-            fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => []),
-          ]);
-
-          pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
-            pMap.set(String(r[0]).trim().toUpperCase(), String(r[1] || "").trim());
+          mappedRows.push({
+            tipe: tipe || "IN",
+            pCode,
+            pName,
+            lCode: fromLocator || toLocator || "UNKNOWN_L",
+            toLocator,
+            qty,
+            source,
+            area: sourceAreaName,
           });
-
-          lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
-            const val = {
-              nama: String(r[1] || r[0]).trim(),
-              whType: String(r[3] || "").trim(),
-              area: String(r[4] || area).trim(),
-            };
-            if (r[0]) {
-              const k = String(r[0]).trim().toUpperCase();
-              lMap.set(k, val);
-            }
-          });
-
-          processRows(tn, "INPUT", area);
-          processRows(tr, "INPUT RM", area);
-          processRows(tm, "INPUT MFG", area);
-          processRows(ts, "INPUT SUPPLIES", area);
         }
-
-        if (isMounted) {
-          setAllTransactions(mappedRows);
-          setProductsMap(pMap);
-          setLocatorsMap(lMap);
-          setLoading(false);
-        }
-      } catch (err: any) {
-        console.error("Critical error in CekStock loading:", err);
-        if (isMounted) {
-          setError(err.message || "Failed to load stock data");
-          setLoading(false);
-        }
-      }
-    }
-
-    loadAllData();
-    
-    // Auto-refresh interval
-    const intervalId = setInterval(() => {
-      loadAllData();
-    }, 5000);
-
-    return () => {
-      isMounted = false;
-      clearInterval(intervalId);
+      });
     };
+
+    try {
+      const isGlobal =
+        area === "HQ" ||
+        spreadsheetId === "HQ" ||
+        area === "All Cabang" ||
+        area.toLowerCase() === "all";
+
+      if (isGlobal) {
+        const urlEntries = Object.entries(AREA_URLS);
+        await Promise.all(
+          urlEntries.map(async ([aName, aUrl]) => {
+            try {
+              const [tn, tr, tm, ts, pr, lr] = await Promise.all([
+                fetchSheetData(aUrl, "'INPUT'!A2:J").catch(() => []),
+                fetchSheetData(aUrl, "'INPUT RM'!A2:J").catch(() => []),
+                fetchSheetData(aUrl, "'INPUT MFG'!A2:J").catch(() => []),
+                fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J").catch(() => []),
+                fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:B").catch(() => []),
+                fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E").catch(() => []),
+              ]);
+
+              // Merge products
+              pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
+                pMap.set(String(r[0]).trim().toUpperCase(), String(r[1] || "").trim());
+              });
+
+              // Merge locators
+              lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
+                const val = {
+                  nama: String(r[1] || r[0]).trim(),
+                  whType: String(r[3] || "").trim(),
+                  area: String(r[4] || aName).trim(),
+                };
+                if (r[0]) {
+                  const k = String(r[0]).trim().toUpperCase();
+                  lMap.set(k, val);
+                }
+              });
+
+              processRows(tn, "INPUT", aName);
+              processRows(tr, "INPUT RM", aName);
+              processRows(tm, "INPUT MFG", aName);
+              processRows(ts, "INPUT SUPPLIES", aName);
+            } catch (e) {
+              console.error(`Error loading data for area ${aName}:`, e);
+            }
+          })
+        );
+      } else {
+        const [tn, tr, tm, ts, pr, lr] = await Promise.all([
+          fetchSheetData(spreadsheetId, "'INPUT'!A2:J").catch(() => []),
+          fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J").catch(() => []),
+          fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J").catch(() => []),
+          fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J").catch(() => []),
+          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:B").catch(() => []),
+          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => []),
+        ]);
+
+        pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
+          pMap.set(String(r[0]).trim().toUpperCase(), String(r[1] || "").trim());
+        });
+
+        lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1])).forEach((r: any[]) => {
+          const val = {
+            nama: String(r[1] || r[0]).trim(),
+            whType: String(r[3] || "").trim(),
+            area: String(r[4] || area).trim(),
+          };
+          if (r[0]) {
+            const k = String(r[0]).trim().toUpperCase();
+            lMap.set(k, val);
+          }
+        });
+
+        processRows(tn, "INPUT", area);
+        processRows(tr, "INPUT RM", area);
+        processRows(tm, "INPUT MFG", area);
+        processRows(ts, "INPUT SUPPLIES", area);
+      }
+
+      setAllTransactions(mappedRows);
+      setProductsMap(pMap);
+      setLocatorsMap(lMap);
+      setLastRefresh(new Date());
+    } catch (err: any) {
+      console.error("Critical error in CekStock loading:", err);
+      setError(err.message || "Failed to load stock data");
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
   }, [spreadsheetId, area]);
+
+  useEffect(() => {
+    loadAllData();
+  }, [loadAllData]);
 
   // Aggregate stock per locator + product SKU
   const stockSummary = useMemo(() => {
@@ -507,8 +498,26 @@ export default function CekStock({ spreadsheetId, area }: Props) {
             Analisis realtime kuantitas barang, pergerakan IN/OUT, serta perbandingan aktivitas antar cabang.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs bg-blue-50 text-blue-800 font-semibold px-3 py-1.5 rounded-full border border-blue-100 self-start md:self-auto">
-          🟢 Status Koneksi: Terhubung Ke GSheet ({area})
+        <div className="flex flex-col gap-3 self-start md:self-auto md:items-end">
+          <div className="flex items-center gap-2 text-xs bg-blue-50 text-blue-800 font-semibold px-3 py-1.5 rounded-full border border-blue-100">
+            🟢 Status Koneksi: Terhubung Ke GSheet ({area})
+          </div>
+          <div className="flex items-center gap-2">
+            {lastRefresh && (
+              <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                <Clock className="w-3.5 h-3.5" />
+                {lastRefresh.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} - {lastRefresh.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </span>
+            )}
+            <button
+              onClick={() => loadAllData(true)}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 font-semibold text-xs rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Memperbarui...' : 'Refresh Manual'}
+            </button>
+          </div>
         </div>
       </div>
 
