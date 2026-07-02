@@ -196,18 +196,19 @@ export default function CekStock({ spreadsheetId, area }: Props) {
                 const parsedVal = r[4] ? parseFloat(String(r[4]).replace(/,/g, '.')) : undefined;
                 const key = String(r[0]).trim().toUpperCase();
                 const areaKey = `${aName.toUpperCase().trim()}||${key}`;
-                const existing = pMap.get(areaKey) || pMap.get(key);
+                const existingArea = pMap.get(areaKey);
+                const existingGeneral = pMap.get(key);
                 const newRph = (parsedVal !== undefined && !isNaN(parsedVal)) ? parsedVal : undefined;
-                const mergedRph = newRph !== undefined ? newRph : existing?.rph;
+                const mergedRph = newRph !== undefined ? newRph : existingArea?.rph;
 
                 pMap.set(areaKey, {
-                  nama: String(r[1] || "").trim() || existing?.nama || "",
+                  nama: String(r[1] || "").trim() || existingArea?.nama || existingGeneral?.nama || "",
                   rph: mergedRph
                 });
 
                 if (!pMap.has(key)) {
                   pMap.set(key, {
-                    nama: String(r[1] || "").trim() || existing?.nama || "",
+                    nama: String(r[1] || "").trim() || existingGeneral?.nama || "",
                     rph: mergedRph
                   });
                 }
@@ -249,17 +250,18 @@ export default function CekStock({ spreadsheetId, area }: Props) {
           const parsedVal = r[4] ? parseFloat(String(r[4]).replace(/,/g, '.')) : undefined;
           const key = String(r[0]).trim().toUpperCase();
           const areaKey = `${area.toUpperCase().trim()}||${key}`;
-          const existing = pMap.get(areaKey) || pMap.get(key);
+          const existingArea = pMap.get(areaKey);
+          const existingGeneral = pMap.get(key);
           const newRph = (parsedVal !== undefined && !isNaN(parsedVal)) ? parsedVal : undefined;
-          const mergedRph = newRph !== undefined ? newRph : existing?.rph;
+          const mergedRph = newRph !== undefined ? newRph : existingArea?.rph;
 
           pMap.set(areaKey, {
-            nama: String(r[1] || "").trim() || existing?.nama || "",
+            nama: String(r[1] || "").trim() || existingArea?.nama || existingGeneral?.nama || "",
             rph: mergedRph
           });
 
           pMap.set(key, {
-            nama: String(r[1] || "").trim() || existing?.nama || "",
+            nama: String(r[1] || "").trim() || existingGeneral?.nama || "",
             rph: mergedRph
           });
         });
