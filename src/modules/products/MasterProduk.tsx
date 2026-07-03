@@ -1,10 +1,35 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { fetchSheetData, appendSheetRow } from '../../lib/sheets';
-import type { Product } from '../../shared/types';
+import { fetchCombinedProducts, saveProductOverride, CombinedProduct } from '../../lib/sheets';
 import { Loader2, Plus, Search } from 'lucide-react';
 
-export default function MasterProduk({ spreadsheetId, area }: { spreadsheetId: string, area?: string }) {
-  const [products, setProducts] = useState<Product[]>([]);
+interface LocalProduct {
+  sheetRow: number;
+  kode: string;
+  nama: string;
+  satuan: string;
+  kategori: string;
+  rphMap: Record<string, number>;
+}
+
+const RPH_AREAS = [
+  "Jakarta", "Karawang", "Semarang", "Surabaya", "Jember", "Palembang", 
+  "Medan", "Pekanbaru", "Pontianak", "Banjarmasin", "Makassar"
+];
+
+export default function MasterProduk({ 
+  spreadsheetId, 
+  area, 
+  isReadOnly = false, 
+  activeUsername = '', 
+  userRole = '' 
+}: { 
+  spreadsheetId: string; 
+  area?: string; 
+  isReadOnly?: boolean; 
+  activeUsername?: string; 
+  userRole?: string; 
+}) {
+  const [products, setProducts] = useState<LocalProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
@@ -17,47 +42,54 @@ export default function MasterProduk({ spreadsheetId, area }: { spreadsheetId: s
   const [kategori, setKategori] = useState('');
   const [rph, setRph] = useState('');
 
+  // RPH Area Selector
+  const [selectedRphArea, setSelectedRphArea] = useState<string>('Jakarta');
+
+  // Inline editing state
+  const [editingRow, setEditingRow] = useState<number | null>(null);
+  const [editKode, setEditKode] = useState('');
+  const [editNama, setEditNama] = useState('');
+  const [editSatuan, setEditSatuan] = useState('');
+  const [editKategori, setEditKategori] = useState('');
+  const [editRph, setEditRph] = useState('');
+
   const showRph = true;
 
-  const loadData = async (forceFresh = false, retryOnMissing = true) => {
+  const isSuperAdmin = userRole === 'ALL' || (activeUsername || '').toLowerCase() === 'admin' || userRole === 'All Cabang' || userRole === 'HQ';
+  const isMP = (activeUsername || '').toLowerCase() === 'mp';
+  
+  // Can add a new product (only Super Admin or standard non-readonly write users can add)
+  const canAddProduct = !isReadOnly || isSuperAdmin;
+  
+  // Can edit everything in a product (only Super Admin or normal write-enabled users)
+  const canEditAll = !isReadOnly || isSuperAdmin;
+  
+  // MP can only edit the RPH column
+  const canEditRphOnly = isMP;
+  
+  // Can perform any edit action (either can edit all or edit RPH only)
+  const canEditAny = canEditAll || canEditRphOnly;
+
+  useEffect(() => {
+    if (area && area !== "All Cabang" && area !== "HQ") {
+      const mapped = area === "Jakarta A5" ? "Jakarta" : area;
+      setSelectedRphArea(mapped);
+    }
+  }, [area]);
+
+  const loadData = async (forceFresh = false) => {
     try {
       setLoading(true);
-      let rows: any[] = [];
-      try {
-        rows = await fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:E", forceFresh);
-      } catch (fetchErr: any) {
-        const errorMsg = String(fetchErr.message || '').toLowerCase();
-        const isMissingSheet = errorMsg.includes('not found') || errorMsg.includes('range') || errorMsg.includes('unparseable') || errorMsg.includes('cannot read');
-        
-        if (retryOnMissing && isMissingSheet) {
-          console.log("MASTER_PRODUK sheet not found, trying auto-init...");
-          try {
-            const { initializeERPSpreadsheet } = await import('../../lib/sheets');
-            await initializeERPSpreadsheet(spreadsheetId);
-            return loadData(forceFresh, false);
-          } catch (initErr: any) {
-            const initErrMsg = String(initErr.message || '').toLowerCase();
-            if (initErrMsg.includes('already exists') || initErrMsg.includes('ada') || initErrMsg.includes('exists')) {
-              console.log("Sheet already exists, continuing to load data.");
-              return loadData(forceFresh, false);
-            }
-            console.error("Auto-init from MasterProduk failed:", initErr);
-            throw fetchErr;
-          }
-        } else {
-          throw fetchErr;
-        }
-      }
-      setProducts(rows.filter((r: any[]) => r.length > 0 && r[0] && r[1] && r[0] !== '#N/A' && r[1] !== '#N/A').map((r: any[]) => {
-        const parsedVal = r[4] ? parseFloat(String(r[4]).replace(/,/g, '.')) : undefined;
-        return {
-          kode: String(r[0] || ''),
-          nama: String(r[1] || ''),
-          satuan: String(r[2] || ''),
-          kategori: String(r[3] || ''),
-          rph: (parsedVal !== undefined && !isNaN(parsedVal)) ? parsedVal : undefined
-        };
+      const list = await fetchCombinedProducts(forceFresh);
+      const mapped = list.map((p, idx) => ({
+        sheetRow: idx + 2, // Unique row ID in list
+        kode: p.kode,
+        nama: p.nama,
+        satuan: p.satuan,
+        kategori: p.isCustom ? 'Custom' : 'Standard',
+        rphMap: p.rphMap || {}
       }));
+      setProducts(mapped);
     } catch (err: any) {
       alert(`Gagal memuat produk: ${err.message}`);
     } finally {
@@ -74,14 +106,70 @@ export default function MasterProduk({ spreadsheetId, area }: { spreadsheetId: s
     if (!kode || !nama) return;
     setSubmitting(true);
     try {
-      await appendSheetRow(spreadsheetId, "'MASTER_PRODUK'!A:E", [
-        [kode, nama, satuan, kategori, rph]
-      ]);
+      const numericRph = parseFloat(rph) || 0;
+      const rphMap: Record<string, number> = {};
+      RPH_AREAS.forEach(areaName => {
+        rphMap[areaName.toUpperCase()] = 0;
+      });
+      rphMap[selectedRphArea.toUpperCase()] = numericRph;
+
+      await saveProductOverride(kode, {
+        kode,
+        nama,
+        satuan,
+        rphMap
+      });
+
       setFormOpen(false);
       setKode(''); setNama(''); setSatuan(''); setKategori(''); setRph('');
-      await loadData();
+      await loadData(true);
     } catch (err: any) {
       alert(`Gagal menyimpan produk: ${err.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const startEdit = (p: LocalProduct) => {
+    setEditingRow(p.sheetRow);
+    setEditKode(p.kode);
+    setEditNama(p.nama);
+    setEditSatuan(p.satuan);
+    setEditKategori(p.kategori);
+    
+    // Load existing RPH for selected area
+    const currentRphVal = p.rphMap[selectedRphArea.toUpperCase()] ?? 0;
+    setEditRph(String(currentRphVal));
+  };
+
+  const handleSaveEdit = async (sheetRow: number) => {
+    setSubmitting(true);
+    try {
+      const originalProduct = products.find(p => p.sheetRow === sheetRow);
+      if (!originalProduct) return;
+
+      const finalKode = originalProduct.kode;
+      const finalNama = canEditAll ? editNama : originalProduct.nama;
+      const finalSatuan = canEditAll ? editSatuan : originalProduct.satuan;
+      
+      const originalRphMap = originalProduct.rphMap || {};
+      const updatedRphMap = { ...originalRphMap };
+      
+      const numericRph = parseFloat(editRph);
+      updatedRphMap[selectedRphArea.toUpperCase()] = !isNaN(numericRph) ? numericRph : 0;
+
+      await saveProductOverride(finalKode, {
+        kode: finalKode,
+        nama: finalNama,
+        satuan: finalSatuan,
+        rphMap: updatedRphMap
+      });
+      
+      setEditingRow(null);
+      await loadData(true);
+      alert('Produk berhasil diperbarui!');
+    } catch (err: any) {
+      alert(`Gagal memperbarui produk: ${err.message}`);
     } finally {
       setSubmitting(false);
     }
@@ -92,7 +180,7 @@ export default function MasterProduk({ spreadsheetId, area }: { spreadsheetId: s
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search]);
+  }, [search, selectedRphArea]);
 
   const filtered = products.filter(p => 
     p.kode.toLowerCase().includes(search.toLowerCase()) || 
@@ -107,22 +195,24 @@ export default function MasterProduk({ spreadsheetId, area }: { spreadsheetId: s
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Master Produk</h2>
-          <p className="text-sm text-slate-500">Kelola daftar produk yang ada di sistem.</p>
+          <p className="text-sm text-slate-500">Kelola daftar produk yang disinkronisasi dari Google Sheets.</p>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => loadData(true)} className="px-4 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
             Refresh
           </button>
-          <button 
-            onClick={() => setFormOpen(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Tambah Produk
-          </button>
+          {canAddProduct && (
+            <button 
+              onClick={() => setFormOpen(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Tambah Produk
+            </button>
+          )}
         </div>
       </div>
 
-      {formOpen && (
+      {formOpen && canAddProduct && (
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-4">
           <h3 className="text-lg font-semibold mb-4">Tambah Produk Baru</h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -144,7 +234,7 @@ export default function MasterProduk({ spreadsheetId, area }: { spreadsheetId: s
             </div>
             {showRph && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">RPH (Rata-rata Pemakaian Harian)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">RPH ({selectedRphArea})</label>
                 <input type="number" step="any" value={rph} onChange={e => setRph(e.target.value)} className="w-full px-3 py-2 border rounded-md" placeholder="Contoh: 10.5" />
               </div>
             )}
@@ -159,10 +249,24 @@ export default function MasterProduk({ spreadsheetId, area }: { spreadsheetId: s
       )}
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-slate-100">
-           <div className="relative max-w-md">
+        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+           <div className="relative max-w-md w-full">
              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
              <input type="text" placeholder="Cari produk..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500" />
+           </div>
+           
+           {/* Dropdown to select RPH area */}
+           <div className="flex items-center gap-2">
+             <span className="text-xs font-semibold text-slate-500 whitespace-nowrap">Tampilkan RPH Area:</span>
+             <select 
+               value={selectedRphArea} 
+               onChange={e => setSelectedRphArea(e.target.value)}
+               className="border border-slate-200 rounded-md px-3 py-1.5 bg-white text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-550/20 focus:outline-none"
+             >
+               {RPH_AREAS.map(areaName => (
+                 <option key={areaName} value={areaName}>{areaName}</option>
+               ))}
+             </select>
            </div>
         </div>
         <div className="overflow-x-auto">
@@ -175,22 +279,110 @@ export default function MasterProduk({ spreadsheetId, area }: { spreadsheetId: s
                   <th className="px-5 py-4 font-medium">Kode</th>
                   <th className="px-5 py-4 font-medium">Nama Produk</th>
                   <th className="px-5 py-4 font-medium">Satuan</th>
-                  <th className="px-5 py-4 font-medium">Kategori</th>
-                  {showRph && <th className="px-5 py-4 font-medium">RPH</th>}
+                  <th className="px-5 py-4 font-medium">Tipe Data</th>
+                  {showRph && <th className="px-5 py-4 font-medium">RPH ({selectedRphArea})</th>}
+                  {canEditAny && <th className="px-5 py-4 font-medium text-center">Aksi</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {paginated.map((p, idx) => (
-                  <tr key={`${p.kode}-${idx}`} className="hover:bg-blue-50/40 transition-colors text-slate-700">
-                    <td className="px-5 py-4 font-mono text-xs text-slate-500">{p.kode}</td>
-                    <td className="px-5 py-4 font-medium text-slate-900">{p.nama}</td>
-                    <td className="px-5 py-4">{p.satuan || '-'}</td>
-                    <td className="px-5 py-4"><span className="inline-flex bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-xs font-medium">{p.kategori || 'Uncategorized'}</span></td>
-                    {showRph && <td className="px-5 py-4 font-medium tabular-nums">{(p.rph !== undefined && !isNaN(p.rph)) ? p.rph : '-'}</td>}
-                  </tr>
-                ))}
+                {paginated.map((p, idx) => {
+                  const isEditing = editingRow === p.sheetRow;
+                  const currentRphVal = p.rphMap[selectedRphArea.toUpperCase()] ?? 0;
+                  
+                  if (isEditing) {
+                    return (
+                      <tr key={`${p.kode}-${idx}`} className="bg-blue-50/20 text-slate-700">
+                        <td className="px-5 py-3 font-mono text-xs">
+                          <input 
+                            type="text" 
+                            disabled={true} // Kode is a unique key, edit not allowed
+                            value={editKode} 
+                            onChange={e => setEditKode(e.target.value)} 
+                            className="w-full px-2 py-1 text-xs border rounded focus:ring-1 focus:ring-blue-550 bg-slate-100 text-slate-400" 
+                          />
+                        </td>
+                        <td className="px-5 py-3">
+                          <input 
+                            type="text" 
+                            disabled={canEditRphOnly && !canEditAll} 
+                            value={editNama} 
+                            onChange={e => setEditNama(e.target.value)} 
+                            className="w-full px-2 py-1 text-xs border rounded focus:ring-1 focus:ring-blue-555 bg-white disabled:bg-slate-50 disabled:text-slate-400 font-medium" 
+                          />
+                        </td>
+                        <td className="px-5 py-3">
+                          <input 
+                            type="text" 
+                            disabled={canEditRphOnly && !canEditAll} 
+                            value={editSatuan} 
+                            onChange={e => setEditSatuan(e.target.value)} 
+                            className="w-full px-2 py-1 text-xs border rounded focus:ring-1 focus:ring-blue-555 bg-white disabled:bg-slate-50 disabled:text-slate-400" 
+                          />
+                        </td>
+                        <td className="px-5 py-3 font-mono text-xs">
+                          <span className="inline-flex bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs">{p.kategori}</span>
+                        </td>
+                        {showRph && (
+                          <td className="px-5 py-3">
+                            <input 
+                              type="number" 
+                              step="any" 
+                              value={editRph} 
+                              onChange={e => setEditRph(e.target.value)} 
+                              className="w-24 px-2 py-1 text-xs border rounded focus:ring-1 focus:ring-blue-555 bg-white font-medium" 
+                            />
+                          </td>
+                        )}
+                        <td className="px-5 py-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button 
+                              onClick={() => handleSaveEdit(p.sheetRow)} 
+                              disabled={submitting}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold transition"
+                            >
+                              Simpan
+                            </button>
+                            <button 
+                              onClick={() => setEditingRow(null)} 
+                              className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-xs font-semibold transition"
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={`${p.kode}-${idx}`} className="hover:bg-blue-50/40 transition-colors text-slate-700">
+                      <td className="px-5 py-4 font-mono text-xs text-slate-500">{p.kode}</td>
+                      <td className="px-5 py-4 font-medium text-slate-900">{p.nama}</td>
+                      <td className="px-5 py-4">{p.satuan || '-'}</td>
+                      <td className="px-5 py-4">
+                        <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-medium ${p.kategori === 'Custom' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
+                          {p.kategori}
+                        </span>
+                      </td>
+                      {showRph && (
+                        <td className="px-5 py-4 font-semibold text-blue-600 tabular-nums bg-blue-50/10">
+                          {currentRphVal > 0 ? currentRphVal : '-'}
+                        </td>
+                      )}
+                      {canEditAny && (
+                        <td className="px-5 py-4 text-center">
+                          <button 
+                            onClick={() => startEdit(p)} 
+                            className="px-3 py-1 bg-slate-100 hover:bg-blue-100 text-blue-600 hover:text-blue-700 rounded text-xs font-semibold transition"
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={showRph ? 5 : 4} className="p-12 text-center text-slate-500">Tidak ada data produk ditemukan.</td></tr>
+                  <tr><td colSpan={showRph ? (canEditAny ? 6 : 5) : (canEditAny ? 5 : 4)} className="p-12 text-center text-slate-500">Tidak ada data produk ditemukan.</td></tr>
                 )}
               </tbody>
             </table>

@@ -31,6 +31,74 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import ExecutiveDashboard from "../dashboard/ExecutiveDashboard";
 
+// Helper to normalize dates to YYYY-MM-DD
+function parseToIsoDate(dtStr: string): string {
+  if (!dtStr) return '';
+  // Remove time part if exists (e.g. "06-01-2026 14:30:00" -> "06-01-2026")
+  let cleaned = dtStr.trim();
+  if (cleaned.includes(' ')) {
+    cleaned = cleaned.split(' ')[0];
+  }
+  
+  // Excel Serial Date check (e.g. 45000)
+  const num = Number(cleaned);
+  if (!isNaN(num) && num > 10000) {
+    const dateObj = new Date(Math.round((num - 25569) * 86400 * 1000));
+    return dateObj.toISOString().split('T')[0];
+  }
+
+  // Try exact YYYY-MM-DD (don't match ISO strings with T like 2024-07-31T17:00:00.000Z to avoid timezone shifts)
+  if (!cleaned.includes('T')) {
+    const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (yyyymmdd) {
+      const y = yyyymmdd[1];
+      const m = yyyymmdd[2].padStart(2, '0');
+      const d = yyyymmdd[3].padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+  
+  // Try DD/MM/YYYY, MM/DD/YYYY, DD-MM-YYYY, MM-DD-YYYY
+  const parts = cleaned.includes('/') ? cleaned.split('/') : cleaned.split('-');
+  if (parts.length === 3) {
+    let p1 = parts[0].padStart(2, '0');
+    let p2 = parts[1].padStart(2, '0');
+    let y = parts[2].trim();
+    
+    // If the year is first (e.g. 2026-06-01), but somehow didn't match the regex
+    if (p1.length === 4) {
+       return `${p1}-${p2}-${y.padStart(2, '0')}`;
+    }
+
+    if (y.length === 2) {
+      y = '20' + y;
+    }
+    
+    // If p1 > 12, it must be DD/MM/YYYY
+    if (parseInt(p1) > 12) {
+      return `${y.padStart(4, '20')}-${p2}-${p1}`;
+    }
+    // If p2 > 12, it must be MM/DD/YYYY
+    if (parseInt(p2) > 12) {
+      return `${y.padStart(4, '20')}-${p1}-${p2}`;
+    }
+    // Default to DD/MM/YYYY for Indonesian locale
+    return `${y.padStart(4, '20')}-${p2}-${p1}`;
+  }
+
+  // Try standard Date parsing
+  const parsed = Date.parse(cleaned);
+  if (!isNaN(parsed)) {
+    const dObj = new Date(parsed);
+    const y = dObj.getFullYear();
+    const m = String(dObj.getMonth() + 1).padStart(2, '0');
+    const d = String(dObj.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  return cleaned;
+}
+
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -81,6 +149,8 @@ export default function StockOverview({
       qty: number;
       source: string;
       area?: string;
+      tanggal?: string;
+      uom?: string;
     }[]
   >([]);
   const [productsMap, setProductsMap] = useState<Map<string, string>>(
@@ -160,8 +230,14 @@ export default function StockOverview({
               }
 
               if (loc) {
-                if (sku) mtsMapLocal.set(`${sku}_${loc}`, lastQty);
-                if (name) mtsMapLocal.set(`${name}_${loc}`, lastQty);
+                if (sku) {
+                  mtsMapLocal.set(`${sku}_${loc}`, lastQty);
+                  mtsMapLocal.set(`${loc}_${sku}`, lastQty);
+                }
+                if (name) {
+                  mtsMapLocal.set(`${name}_${loc}`, lastQty);
+                  mtsMapLocal.set(`${loc}_${name}`, lastQty);
+                }
               }
             });
           }
@@ -185,6 +261,8 @@ export default function StockOverview({
         qty: number;
         source: string;
         area?: string;
+        tanggal?: string;
+        uom?: string;
       }[] = [];
 
       const processRows = (rows: any[], source: string, currentArea?: string) => {
@@ -197,11 +275,14 @@ export default function StockOverview({
           return tanggal !== '' && nama !== '' && kode !== '#N/A' && nama !== '#N/A' && tanggal !== '#N/A';
         });
         validRows.forEach((r: any[]) => {
+          const tanggalRaw = String(r[0] || '').trim();
+          const tanggal = parseToIsoDate(tanggalRaw);
           const pName = String(r[1] || "").trim();
           let pCode = String(r[9] || "").trim();
           const tipe = String(r[4] || "")
             .trim()
             .toUpperCase();
+          const uom = String(r[3] || '').trim();
 
           if (!pName && !pCode) return;
           if (!pCode) {
@@ -224,8 +305,10 @@ export default function StockOverview({
               pName,
               lCode: fromLocator || "UNKNOWN_L",
               qty,
+              uom,
               source,
               area: currentArea,
+              tanggal,
             });
             if (toLocator) {
               mappedRows.push({
@@ -234,8 +317,10 @@ export default function StockOverview({
                 pName,
                 lCode: toLocator,
                 qty,
+                uom,
                 source,
                 area: currentArea,
+                tanggal,
               });
             }
           } else {
@@ -245,8 +330,10 @@ export default function StockOverview({
               pName,
               lCode: fromLocator || toLocator || "UNKNOWN_L",
               qty,
+              uom,
               source,
               area: currentArea,
+              tanggal,
             });
           }
         });
@@ -440,11 +527,21 @@ export default function StockOverview({
 
   useEffect(() => {
     const stockMap = new Map<string, StockSummary>(); // Key: kodeProduk_whGroup
+    const selectedDate = (() => {
+      const now = new Date();
+      const offset = now.getTimezoneOffset();
+      const localNow = new Date(now.getTime() - offset * 60 * 1000);
+      return localNow.toISOString().split('T')[0];
+    })();
 
     allTransactions.forEach((t) => {
       if (selectedSource !== "ALL" && t.source !== selectedSource) return;
 
-      const { tipe, pCode, pName, lCode, qty, area: rowArea } = t;
+      const { tipe, pCode, pName, lCode, qty, area: rowArea, tanggal } = t;
+
+      const includeInCumulative = !tanggal || tanggal <= selectedDate;
+      if (!includeInCumulative) return;
+
       const key = `${rowArea}_${lCode}_${pCode}`;
       if (!stockMap.has(key)) {
         const lookupKey = lCode.trim();
@@ -499,6 +596,12 @@ export default function StockOverview({
         qtySistem = mtsMap.get(`${pNameUpper}_${locKey}`) || 0;
       } else if (mtsMap.has(`${pCodeUpper.replace(/\s+/g, '')}_${locKey}`)) {
         qtySistem = mtsMap.get(`${pCodeUpper.replace(/\s+/g, '')}_${locKey}`) || 0;
+      } else if (mtsMap.has(`${locKey}_${pCodeUpper}`)) {
+        qtySistem = mtsMap.get(`${locKey}_${pCodeUpper}`) || 0;
+      } else if (mtsMap.has(`${locKey}_${pNameUpper}`)) {
+        qtySistem = mtsMap.get(`${locKey}_${pNameUpper}`) || 0;
+      } else if (mtsMap.has(`${locKey}_${pCodeUpper.replace(/\s+/g, '')}`)) {
+        qtySistem = mtsMap.get(`${locKey}_${pCodeUpper.replace(/\s+/g, '')}`) || 0;
       } else if (mtsMap.has(`${key.toUpperCase().trim()}`)) {
         qtySistem = mtsMap.get(`${key.toUpperCase().trim()}`) || 0;
       }

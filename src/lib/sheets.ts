@@ -80,6 +80,185 @@ function doPost(e) {
  * 8. Click Deploy and copy the Web App URL.
  */
 
+import Papa from 'papaparse';
+import { db } from './firebase';
+import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
+
+export interface PublicProduct {
+  kode: string;
+  nama: string;
+  satuan: string;
+  rphMap: Record<string, number>;
+}
+
+export interface CombinedProduct {
+  kode: string;
+  nama: string;
+  satuan: string;
+  rphMap: Record<string, number>;
+  isCustom?: boolean;
+}
+
+let publicProductsCache: PublicProduct[] | null = null;
+let lastPublicFetch = 0;
+
+export async function fetchCombinedProducts(forceFresh = false): Promise<CombinedProduct[]> {
+  // 1. Fetch public Google Sheet products
+  const publicProducts = await fetchPublicMasterProduk(forceFresh).catch((err) => {
+    console.error("Failed to fetch public master products from sheet:", err);
+    return [] as PublicProduct[];
+  });
+
+  // 2. Fetch Firestore overrides
+  let overrides: CombinedProduct[] = [];
+  try {
+    const querySnapshot = await getDocs(collection(db, "master_produk_overrides"));
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      overrides.push({
+        kode: doc.id,
+        nama: data.nama || "",
+        satuan: data.satuan || "",
+        rphMap: data.rphMap || {},
+        isCustom: true
+      });
+    });
+  } catch (err) {
+    console.error("Failed to fetch products from firestore:", err);
+  }
+
+  // 3. Merge them
+  const mergedMap = new Map<string, CombinedProduct>();
+
+  // Add public products first
+  publicProducts.forEach(p => {
+    mergedMap.set(p.kode.toUpperCase().trim(), {
+      kode: p.kode,
+      nama: p.nama,
+      satuan: p.satuan,
+      rphMap: { ...p.rphMap }
+    });
+  });
+
+  // Overwrite with Firestore overrides or add new ones
+  overrides.forEach(ov => {
+    const key = ov.kode.toUpperCase().trim();
+    const existing = mergedMap.get(key);
+    if (existing) {
+      mergedMap.set(key, {
+        kode: existing.kode,
+        nama: ov.nama || existing.nama,
+        satuan: ov.satuan || existing.satuan,
+        rphMap: {
+          ...existing.rphMap,
+          ...ov.rphMap
+        }
+      });
+    } else {
+      mergedMap.set(key, ov);
+    }
+  });
+
+  return Array.from(mergedMap.values());
+}
+
+export async function saveProductOverride(kode: string, fields: Partial<CombinedProduct>): Promise<void> {
+  const docRef = doc(db, "master_produk_overrides", kode.toUpperCase().trim());
+  await setDoc(docRef, fields, { merge: true });
+}
+
+export async function fetchPublicMasterProduk(forceFresh = false): Promise<PublicProduct[]> {
+  if (!forceFresh && publicProductsCache && (Date.now() - lastPublicFetch < 60000)) {
+    return publicProductsCache;
+  }
+
+  const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?sheet=Master_Produk&output=csv&t=${Date.now()}`;
+  const res = await fetch(csvUrl);
+  if (!res.ok) {
+    throw new Error("Gagal mengambil data Master Produk dari Google Sheets.");
+  }
+  const csvText = await res.text();
+  const parsed = Papa.parse<any[]>(csvText, { skipEmptyLines: true });
+  const data = parsed.data || [];
+
+  if (data.length === 0) return [];
+
+  // Find header row containing "kode" or "nama"
+  let headerIndex = -1;
+  for (let i = 0; i < Math.min(10, data.length); i++) {
+    const rowStr = data[i].map(val => String(val).toLowerCase().trim());
+    if (rowStr.some(val => val.includes('kode') || val.includes('nama'))) {
+      headerIndex = i;
+      break;
+    }
+  }
+  if (headerIndex === -1) headerIndex = 0;
+
+  const headers = data[headerIndex].map((h: any) => String(h).trim());
+
+  // Helper to find column index (lazy search)
+  const findColIdxLazy = (keywords: string[]) => {
+    return headers.findIndex(h => 
+      keywords.some(kw => h.toLowerCase().includes(kw.toLowerCase()))
+    );
+  };
+
+  const idxKode = findColIdxLazy(['kode produk', 'kode_produk', 'kode', 'sku']);
+  const idxNama = findColIdxLazy(['nama produk', 'nama_produk', 'nama', 'description', 'name']);
+  const idxSatuan = findColIdxLazy(['satuan', 'uom', 'unit']);
+
+  // RPH column mappings
+  const rphCols: Record<string, number> = {
+    "JAKARTA": findColIdxLazy(['rph jkt', 'rph_jkt', 'jkt']),
+    "JAKARTA A5": findColIdxLazy(['rph jkt', 'rph_jkt', 'jkt']), // Fallback to JKT
+    "KARAWANG": findColIdxLazy(['rph krw', 'rph_krw', 'krw']),
+    "SEMARANG": findColIdxLazy(['rph smg', 'rph_smg', 'smg']),
+    "SURABAYA": findColIdxLazy(['rph sby', 'rph_sby', 'sby']),
+    "JEMBER": findColIdxLazy(['rph jmr', 'rph_jmr', 'jmr']),
+    "PALEMBANG": findColIdxLazy(['rph plg', 'rph_plg', 'plg']),
+    "MEDAN": findColIdxLazy(['rph mdn', 'rph_mdn', 'mdn']),
+    "PEKANBARU": findColIdxLazy(['rph pkb', 'rph_pkb', 'pkb']),
+    "PONTIANAK": findColIdxLazy(['rph ptk', 'rph_ptk', 'ptk']),
+    "BANJARMASIN": findColIdxLazy(['rph bjm', 'rph_bjm', 'bjm']),
+    "MAKASSAR": findColIdxLazy(['rph mks', 'rph_mks', 'mks']),
+  };
+
+  const productsList: PublicProduct[] = [];
+
+  for (let i = headerIndex + 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row || row.length === 0) continue;
+
+    const kode = idxKode !== -1 ? String(row[idxKode] || '').trim() : '';
+    const nama = idxNama !== -1 ? String(row[idxNama] || '').trim() : '';
+    const satuan = idxSatuan !== -1 ? String(row[idxSatuan] || '').trim() : '';
+
+    if (!kode || kode === '#N/A' || kode.toLowerCase() === 'kode produk') continue;
+
+    const rphMap: Record<string, number> = {};
+    Object.entries(rphCols).forEach(([areaName, colIdx]) => {
+      if (colIdx !== -1 && row[colIdx] !== undefined) {
+        const valStr = String(row[colIdx]).replace(/,/g, '.').trim();
+        const val = parseFloat(valStr);
+        rphMap[areaName] = !isNaN(val) ? val : 0;
+      } else {
+        rphMap[areaName] = 0;
+      }
+    });
+
+    productsList.push({
+      kode,
+      nama,
+      satuan,
+      rphMap
+    });
+  }
+
+  publicProductsCache = productsList;
+  lastPublicFetch = Date.now();
+  return productsList;
+}
+
 // Cache to store completed fetches
 interface CacheEntry {
   timestamp: number;
@@ -114,6 +293,10 @@ export function clearSheetCache() {
 }
 
 export async function fetchSheetData(gasUrl: string, range: string, forceFresh = false) {
+  if (!gasUrl || gasUrl === 'HQ' || !gasUrl.startsWith('http')) {
+    console.warn(`[fetchSheetData] Ignored fetch request for invalid gasUrl: "${gasUrl}"`);
+    return [];
+  }
   const cacheKey = `${gasUrl}||${range}`;
   const storageKey = `gsheet_cache_${cacheKey}`;
 

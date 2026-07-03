@@ -12,8 +12,8 @@ async function startServer() {
   app.post("/api/sheets", async (req, res) => {
     try {
       const { gasUrl, action, range, values } = req.body;
-      if (!gasUrl) {
-        return res.status(400).json({ error: "Missing gasUrl parameter" });
+      if (!gasUrl || gasUrl === "HQ" || !gasUrl.startsWith("http")) {
+        return res.status(400).json({ error: "Invalid or missing gasUrl parameter" });
       }
 
       if (action === 'get') {

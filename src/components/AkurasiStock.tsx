@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { fetchSheetData } from '../lib/sheets';
+import { fetchSheetData, fetchCombinedProducts } from '../lib/sheets';
 import { AREA_URLS } from '../App';
 import { Loader2, AlertTriangle, RefreshCw, BarChart3, ArrowDownToLine, CheckCircle2, CircleAlert, Percent, Box, MapPin } from 'lucide-react';
 import Papa from 'papaparse';
@@ -187,6 +187,23 @@ export default function AkurasiStock() {
       // 1. Fetch MTS Sheet Data (System Stock)
       const csvUrl = '/api/stock-summary';
       const mtsMap = new Map<string, number>();
+      const globalPMap = new Map<string, { nama: string; satuan: string }>();
+      try {
+        const combinedProds = await fetchCombinedProducts(isManual).catch(() => []);
+        combinedProds.forEach(p => {
+          const key = p.kode.toUpperCase().trim();
+          globalPMap.set(key, {
+            nama: p.nama,
+            satuan: p.satuan
+          });
+          globalPMap.set(p.kode, {
+            nama: p.nama,
+            satuan: p.satuan
+          });
+        });
+      } catch (err) {
+        console.error("Gagal memuat produk gabungan:", err);
+      }
 
       try {
         let textMts = '';
@@ -273,22 +290,15 @@ export default function AkurasiStock() {
       await Promise.all(
         urlEntries.map(async ([aName, aUrl]) => {
           try {
-            const [tn, tr, tm, ts, pr, lr] = await Promise.all([
+            const [tn, tr, tm, ts, lr] = await Promise.all([
               fetchSheetData(aUrl, "'INPUT'!A2:J", isManual).catch(() => []),
               fetchSheetData(aUrl, "'INPUT RM'!A2:J", isManual).catch(() => []),
               fetchSheetData(aUrl, "'INPUT MFG'!A2:J", isManual).catch(() => []),
               fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", isManual).catch(() => []),
-              fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:D", isManual).catch(() => []),
               fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", isManual).catch(() => [])
             ]);
 
-            const pMap = new Map<string, { nama: string; satuan: string }>();
-            pr.filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
-              pMap.set(String(r[0]).trim(), {
-                nama: String(r[1] || '').trim(),
-                satuan: String(r[2] || '').trim()
-              });
-            });
+            const pMap = globalPMap;
 
             const lMap = new Map<string, { nama: string; whType: string; area: string }>();
             lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {

@@ -15,7 +15,7 @@ import {
   ListFilter
 } from "lucide-react";
 import Papa from "papaparse";
-import { fetchSheetData } from "../lib/sheets";
+import { fetchSheetData, fetchCombinedProducts } from "../lib/sheets";
 import { AREA_URLS } from "../App";
 import * as XLSX from "xlsx";
 
@@ -83,6 +83,25 @@ export default function DoiMp({ spreadsheetId, area, activeUsername, userRole }:
     setError(null);
 
     const pMap = new Map<string, { nama: string; rph?: number }>();
+    try {
+      const combinedProds = await fetchCombinedProducts(isManual).catch(() => []);
+      combinedProds.forEach(p => {
+        const pCodeClean = p.kode.toUpperCase().trim();
+        pMap.set(pCodeClean, {
+          nama: p.nama,
+          rph: p.rphMap[(area || "Jakarta").toUpperCase().trim()] || 0
+        });
+        Object.entries(p.rphMap).forEach(([aName, val]) => {
+          const areaKey = `${aName.toUpperCase().trim()}||${pCodeClean}`;
+          pMap.set(areaKey, {
+            nama: p.nama,
+            rph: val as number
+          });
+        });
+      });
+    } catch (err) {
+      console.error("Gagal memuat produk gabungan:", err);
+    }
     const mappedRows: MappedTransaction[] = [];
 
     const processRows = (rows: any[], source: string, sourceAreaName: string) => {
@@ -166,36 +185,12 @@ export default function DoiMp({ spreadsheetId, area, activeUsername, userRole }:
         await Promise.all(
           urlEntries.map(async ([aName, aUrl]) => {
             try {
-              const [tn, tr, tm, ts, pr] = await Promise.all([
+              const [tn, tr, tm, ts] = await Promise.all([
                 fetchSheetData(aUrl, "'INPUT'!A2:J", isManual).catch(() => []),
                 fetchSheetData(aUrl, "'INPUT RM'!A2:J", isManual).catch(() => []),
                 fetchSheetData(aUrl, "'INPUT MFG'!A2:J", isManual).catch(() => []),
                 fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", isManual).catch(() => []),
-                fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:E", isManual).catch(() => []),
               ]);
-
-              // Merge products
-              pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
-                const parsedVal = r[4] ? parseFloat(String(r[4]).replace(/,/g, '.')) : undefined;
-                const key = String(r[0]).trim().toUpperCase();
-                const areaKey = `${aName.toUpperCase().trim()}||${key}`;
-                const existingArea = pMap.get(areaKey);
-                const existingGeneral = pMap.get(key);
-                const newRph = (parsedVal !== undefined && !isNaN(parsedVal)) ? parsedVal : undefined;
-                const mergedRph = newRph !== undefined ? newRph : existingArea?.rph;
-
-                pMap.set(areaKey, {
-                  nama: String(r[1] || "").trim() || existingArea?.nama || existingGeneral?.nama || "",
-                  rph: mergedRph
-                });
-
-                if (!pMap.has(key)) {
-                  pMap.set(key, {
-                    nama: String(r[1] || "").trim() || existingGeneral?.nama || "",
-                    rph: mergedRph
-                  });
-                }
-              });
 
               processRows(tn, "INPUT", aName);
               processRows(tr, "INPUT RM", aName);
@@ -207,33 +202,12 @@ export default function DoiMp({ spreadsheetId, area, activeUsername, userRole }:
           })
         );
       } else {
-        const [tn, tr, tm, ts, pr] = await Promise.all([
+        const [tn, tr, tm, ts] = await Promise.all([
           fetchSheetData(spreadsheetId, "'INPUT'!A2:J", isManual).catch(() => []),
           fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J", isManual).catch(() => []),
           fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J", isManual).catch(() => []),
           fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J", isManual).catch(() => []),
-          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:E", isManual).catch(() => []),
         ]);
-
-        pr.filter((r: any[]) => r.length > 0 && r[0]).forEach((r: any[]) => {
-          const parsedVal = r[4] ? parseFloat(String(r[4]).replace(/,/g, '.')) : undefined;
-          const key = String(r[0]).trim().toUpperCase();
-          const areaKey = `${area.toUpperCase().trim()}||${key}`;
-          const existingArea = pMap.get(areaKey);
-          const existingGeneral = pMap.get(key);
-          const newRph = (parsedVal !== undefined && !isNaN(parsedVal)) ? parsedVal : undefined;
-          const mergedRph = newRph !== undefined ? newRph : existingArea?.rph;
-
-          pMap.set(areaKey, {
-            nama: String(r[1] || "").trim() || existingArea?.nama || existingGeneral?.nama || "",
-            rph: mergedRph
-          });
-
-          pMap.set(key, {
-            nama: String(r[1] || "").trim() || existingGeneral?.nama || "",
-            rph: mergedRph
-          });
-        });
 
         processRows(tn, "INPUT", area);
         processRows(tr, "INPUT RM", area);

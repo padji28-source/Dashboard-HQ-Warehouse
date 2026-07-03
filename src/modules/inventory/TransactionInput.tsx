@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, type FormEvent } from 'react';
-import { fetchSheetData, appendSheetRow } from '../../lib/sheets';
+import { fetchSheetData, appendSheetRow, fetchCombinedProducts } from '../../lib/sheets';
 import type { Transaction, Product, Locator } from '../../shared/types';
 import { Loader2, Plus, Search, Package, MapPin, Calendar, FileText, ArrowDownRight, ArrowUpRight, CheckCircle2, Trash2, X } from 'lucide-react';
 
@@ -284,10 +284,12 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
       let lRows: any[] = [];
       
       try {
-        [pRows, lRows] = await Promise.all([
-          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:C", forceFresh), // Need Satuan (UOM)
+        const [combined, loadedLRows] = await Promise.all([
+          fetchCombinedProducts(forceFresh).catch(() => []),
           fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E", forceFresh)
         ]);
+        pRows = combined.map(p => [p.kode, p.nama, p.satuan]);
+        lRows = loadedLRows;
         txRows = await fetchSheetData(spreadsheetId, `'${sheetName}'!A2:J`, forceFresh).catch((err: any) => {
           const errMsg = String(err.message || '');
           if (errMsg.includes('Kisaran tidak ditemukan') || errMsg.includes('not found') || errMsg.includes('Range not found')) {

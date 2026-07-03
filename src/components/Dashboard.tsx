@@ -11,7 +11,6 @@ import AkurasiStock from './AkurasiStock';
 import Pengepokan from './Pengepokan';
 import CekStock from './CekStock';
 import DoiMp from './DoiMp';
-import ActiveUsersMonitor from './ActiveUsersMonitor';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AREAS } from '../App';
@@ -31,9 +30,14 @@ interface Props {
 }
 
 export default function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange, isReadOnly = false, activeUsername = '' }: Props) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'monitor' | 'doi_mp'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'doi_mp'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
+
+  const isSuperAdmin = userRole === 'ALL' || (activeUsername || '').toLowerCase() === 'admin';
+  const isHQ = userRole === 'HQ' || userRole === 'All Cabang' || (activeUsername || '').toLowerCase() === 'hq' || (activeUsername || '').toLowerCase() === 'admin_hq';
+  const isSuperAdminOrHq = isSuperAdmin || isHQ;
+  const isMP = (activeUsername || '').toLowerCase() === 'mp';
 
   const isAuthorizedForPencocokan = true; // Aktif untuk semua admin
   const safeActiveTab = activeTab === 'pencocokan' && !isAuthorizedForPencocokan ? 'stock' : activeTab;
@@ -54,8 +58,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
     ...(!isReadOnly && isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
     ...(!isReadOnly && area === 'All Cabang' ? [{ id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 }] : []),
     ...(isAuthorizedForPengepokan ? [{ id: 'pengepokan', label: 'Pengepokan', icon: Box }] : []),
-    ...(!isReadOnly ? [{ id: 'whatsapp', label: 'WhatsApp Bot', icon: MessageSquare }] : []),
-    ...(userRole === 'ALL' ? [{ id: 'monitor', label: 'Monitor Pengguna', icon: Eye }] : []),
+    ...(isSuperAdminOrHq ? [{ id: 'whatsapp', label: 'WhatsApp Bot', icon: MessageSquare }] : []),
   ] as const;
 
   const pergerakanTabs = [
@@ -66,10 +69,10 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
   ] as const;
 
   const masterTabs = [
-    ...(isReadOnly ? [] : [
+    ...((!isReadOnly || isSuperAdmin || isMP) ? [
       { id: 'produk', label: 'Master Produk', icon: Package },
       { id: 'locator', label: 'Master Locator', icon: MapPin },
-    ])
+    ] : [])
   ] as const;
 
   return (
@@ -323,19 +326,16 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
           </div>
           <div className={cn(safeActiveTab !== 'produk' && 'hidden')}>
             {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Master Produk" /> : (
-              <MasterProduk spreadsheetId={spreadsheetId} area={area} />
+              <MasterProduk spreadsheetId={spreadsheetId} area={area} isReadOnly={isReadOnly} activeUsername={activeUsername} userRole={userRole} />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'locator' && 'hidden')}>
             {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Master Locator" /> : (
-              <MasterLocator spreadsheetId={spreadsheetId} />
+              <MasterLocator spreadsheetId={spreadsheetId} isReadOnly={isReadOnly} activeUsername={activeUsername} userRole={userRole} />
             )}
           </div>
           <div className={cn(safeActiveTab !== 'whatsapp' && 'hidden')}>
             <WhatsAppConsole area={area} />
-          </div>
-          <div className={cn(safeActiveTab !== 'monitor' && 'hidden')}>
-            <ActiveUsersMonitor />
           </div>
         </div>
       </main>

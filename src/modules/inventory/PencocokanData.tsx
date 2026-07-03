@@ -400,9 +400,11 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
               if (loc) {
                 if (sku) {
                   mtsMap.set(`${loc}_${sku}`, lastQty);
+                  mtsMap.set(`${sku}_${loc}`, lastQty);
                 }
                 if (name) {
                   mtsMap.set(`${loc}_${name}`, lastQty);
+                  mtsMap.set(`${name}_${loc}`, lastQty);
                 }
               }
             });
@@ -677,6 +679,12 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         matchedLastQty = mtsLookupMap.get(`${locKey}_${productNameUpper}`) || 0;
       } else if (mtsLookupMap.has(`${locKey}_${productCodeUpper.replace(/\s+/g, '')}`)) {
         matchedLastQty = mtsLookupMap.get(`${locKey}_${productCodeUpper.replace(/\s+/g, '')}`) || 0;
+      } else if (mtsLookupMap.has(`${productCodeUpper}_${locKey}`)) {
+        matchedLastQty = mtsLookupMap.get(`${productCodeUpper}_${locKey}`) || 0;
+      } else if (mtsLookupMap.has(`${productNameUpper}_${locKey}`)) {
+        matchedLastQty = mtsLookupMap.get(`${productNameUpper}_${locKey}`) || 0;
+      } else if (mtsLookupMap.has(`${productCodeUpper.replace(/\s+/g, '')}_${locKey}`)) {
+        matchedLastQty = mtsLookupMap.get(`${productCodeUpper.replace(/\s+/g, '')}_${locKey}`) || 0;
       }
 
       const stokKemarin = Math.round(item.stokKemarin * 1000) / 1000;
