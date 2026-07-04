@@ -70,6 +70,8 @@ export default function MasterProduk({
   // Can perform any edit action (either can edit all or edit RPH only)
   const canEditAny = canEditAll || canEditRphOnly;
 
+  const canChangeRphArea = isSuperAdmin || isMP;
+
   useEffect(() => {
     if (area && area !== "All Cabang" && area !== "HQ") {
       const mapped = area === "Jakarta A5" ? "Jakarta" : area;
@@ -256,18 +258,27 @@ export default function MasterProduk({
            </div>
            
            {/* Dropdown to select RPH area */}
-           <div className="flex items-center gap-2">
-             <span className="text-xs font-semibold text-slate-500 whitespace-nowrap">Tampilkan RPH Area:</span>
-             <select 
-               value={selectedRphArea} 
-               onChange={e => setSelectedRphArea(e.target.value)}
-               className="border border-slate-200 rounded-md px-3 py-1.5 bg-white text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-550/20 focus:outline-none"
-             >
-               {RPH_AREAS.map(areaName => (
-                 <option key={areaName} value={areaName}>{areaName}</option>
-               ))}
-             </select>
-           </div>
+           {canChangeRphArea ? (
+             <div className="flex items-center gap-2">
+               <span className="text-xs font-semibold text-slate-500 whitespace-nowrap">Tampilkan RPH Area:</span>
+               <select 
+                 value={selectedRphArea} 
+                 onChange={e => setSelectedRphArea(e.target.value)}
+                 className="border border-slate-200 rounded-md px-3 py-1.5 bg-white text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-550/20 focus:outline-none"
+               >
+                 {RPH_AREAS.map(areaName => (
+                   <option key={areaName} value={areaName}>{areaName}</option>
+                 ))}
+               </select>
+             </div>
+           ) : (
+             <div className="flex items-center gap-2">
+               <span className="text-xs font-semibold text-slate-500 whitespace-nowrap">RPH Area:</span>
+               <span className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-md border border-blue-100 uppercase">
+                 {selectedRphArea}
+               </span>
+             </div>
+           )}
         </div>
         <div className="overflow-x-auto">
           {loading ? (

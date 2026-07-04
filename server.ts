@@ -20,7 +20,8 @@ async function startServer() {
         const getUrl = `${gasUrl}?action=get&range=${encodeURIComponent(range || '')}&t=${Date.now()}`;
         const response = await fetch(getUrl);
         if (!response.ok) {
-          throw new Error(`Google Sheets GET failed: HTTP ${response.status}`);
+          console.warn(`[Proxy Warning] Google Sheets GET returned HTTP ${response.status} for range: ${range}`);
+          return res.status(response.status).json({ error: `Google Sheets GET failed: HTTP ${response.status}` });
         }
         const text = await response.text();
         try {
@@ -42,18 +43,18 @@ async function startServer() {
       try {
         data = JSON.parse(text);
       } catch {
-        console.error("Non-JSON response from Apps Script POST:", text.slice(0, 200));
+        console.warn("Non-JSON response from Apps Script POST:", text.slice(0, 200));
         return res.status(502).json({ error: "Respon tidak valid dari server Google Sheets. Pastikan Google Apps Script di-deploy dengan pengaturan Who has access: Anyone." });
       }
 
       if (!response.ok || data.error) {
-        return res.status(400).json({ error: data.error || `Apps Script HTTP ${response.status}` });
+        return res.status(response.ok ? 400 : response.status).json({ error: data.error || `Apps Script HTTP ${response.status}` });
       }
 
       res.json(data);
     } catch (err: any) {
-      console.error("Error in /api/sheets proxy:", err);
-      res.status(500).json({ error: err.message || "Gagal menghubungi server Google Sheets" });
+      console.warn("Soft error in /api/sheets proxy:", err.message || err);
+      res.status(502).json({ error: err.message || "Gagal menghubungi server Google Sheets" });
     }
   });
 

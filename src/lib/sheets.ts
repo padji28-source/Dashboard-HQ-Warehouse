@@ -172,7 +172,7 @@ export async function fetchPublicMasterProduk(forceFresh = false): Promise<Publi
     return publicProductsCache;
   }
 
-  const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?sheet=Master_Produk&output=csv&t=${Date.now()}`;
+  const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=1657911583&single=true&output=csv&t=${Date.now()}`;
   const res = await fetch(csvUrl);
   if (!res.ok) {
     throw new Error("Gagal mengambil data Master Produk dari Google Sheets.");
