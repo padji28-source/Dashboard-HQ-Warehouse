@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo, useRef, type FormEvent } from 'react';
 import { fetchSheetData, appendSheetRow, fetchCombinedProducts } from '../../lib/sheets';
 import type { Transaction, Product, Locator } from '../../shared/types';
-import { Loader2, Plus, Search, Package, MapPin, Calendar, FileText, ArrowDownRight, ArrowUpRight, CheckCircle2, Trash2, X } from 'lucide-react';
+import { Loader2, Plus, Search, Package, MapPin, Calendar, FileText, ArrowDownRight, ArrowUpRight, CheckCircle2, Trash2, X, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface Props {
   spreadsheetId: string;
@@ -479,6 +480,29 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
     return norm.includes('AWAL') ? sum + t.kuantitas : sum;
   }, 0);
   const grandTotalQty = filtered.reduce((sum, t) => sum + t.kuantitas, 0);
+
+  const exportToExcel = () => {
+    if (filtered.length === 0) {
+      alert("Tidak ada data untuk diekspor");
+      return;
+    }
+    const dataToExport = filtered.map(t => ({
+      "Tanggal": t.tanggal,
+      "Kode Produk": t.kodeProduk,
+      "Nama Bahan": t.namaBahan,
+      "Kuantitas": t.kuantitas,
+      "UOM": t.uom,
+      "I/O/A": t.tipeIOA || t.tipe,
+      "Locator Asal": t.locator,
+      "Locator Tujuan": t.locatorTo || "-",
+      "No. Document": t.noDocument || "-",
+      "Keterangan": t.keterangan || "-"
+    }));
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Data Pergerakan");
+    XLSX.writeFile(wb, `Data_Pergerakan_${sheetName}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
 
   const locatorsWithStock = useMemo(() => {
     if (!formKodeProduk) return [];
@@ -1061,6 +1085,18 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
                    </option>
                  ))}
                </select>
+             </div>
+
+             <div className="ml-auto">
+               <button
+                 type="button"
+                 onClick={exportToExcel}
+                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-semibold shadow-sm"
+                 title="Ekspor data pergerakan ke Microsoft Excel (.xlsx)"
+               >
+                 <Download className="w-4 h-4" />
+                 Export Excel
+               </button>
              </div>
           </div>
         </div>

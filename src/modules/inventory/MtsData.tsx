@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Loader2, Search, FileSpreadsheet, RefreshCw, ChevronUp, ChevronDown, Info } from 'lucide-react';
+import { Loader2, Search, FileSpreadsheet, RefreshCw, ChevronUp, ChevronDown, Info, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -146,6 +147,24 @@ export default function MtsData() {
     return sortedRows.slice(start, start + pageSize);
   }, [sortedRows, currentPage, pageSize]);
 
+  const exportToExcel = () => {
+    if (sortedRows.length === 0 || headers.length === 0) {
+      alert("Tidak ada data untuk diekspor");
+      return;
+    }
+    const dataToExport = sortedRows.map(row => {
+      const obj: any = {};
+      headers.forEach((h, i) => {
+        obj[h] = row[i] || '';
+      });
+      return obj;
+    });
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "MTS Data");
+    XLSX.writeFile(wb, `Data_MTS_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   useEffect(() => {
     setCurrentPage(1);
   }, [search, pageSize]);
@@ -162,7 +181,16 @@ export default function MtsData() {
             Arsip pelacakan pengiriman & transfer material real-time dari multi-wilayah.
           </p>
         </div>
-        <div>
+        <div className="flex gap-2">
+          <button 
+            type="button"
+            onClick={exportToExcel} 
+            disabled={loading || sortedRows.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            Export Excel
+          </button>
           <button 
             type="button"
             onClick={loadData} 
