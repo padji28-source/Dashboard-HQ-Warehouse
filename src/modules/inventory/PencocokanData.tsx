@@ -332,14 +332,14 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     try {
       setLoading(true);
       
-      const csvUrl = '/api/stock-summary';
+      const csvUrl = `/api/stock-summary?t=${Date.now()}`;
       const mtsMap = new Map<string, number>();
       
       try {
         let textMts = '';
         let fetchedSuccess = false;
         try {
-          const resMts = await fetch(csvUrl);
+          const resMts = await fetch(csvUrl, { cache: 'no-store' });
           if (resMts.ok) {
             const contentType = resMts.headers.get('content-type') || '';
             if (contentType.includes('text/html')) {
@@ -352,8 +352,8 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           }
         } catch (apiErr) {
           console.warn('Backend proxy /api/mts failed, fetching directly from Google Sheets...', apiErr);
-          const directMtsUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv';
-          const directRes = await fetch(directMtsUrl);
+          const directMtsUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv&t=${Date.now()}`;
+          const directRes = await fetch(directMtsUrl, { cache: 'no-store' });
           if (directRes.ok) {
             textMts = await directRes.text();
             fetchedSuccess = true;
@@ -475,12 +475,12 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         await Promise.all(urlEntries.map(async ([aName, aUrl]) => {
           try {
             const [tn, tr, tm, ts, pr, lr] = await Promise.all([
-              fetchSheetData(aUrl, "'INPUT'!A2:J").catch(() => []),
-              fetchSheetData(aUrl, "'INPUT RM'!A2:J").catch(() => []),
-              fetchSheetData(aUrl, "'INPUT MFG'!A2:J").catch(() => []),
-              fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J").catch(() => []),
-              fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:D").catch(() => []),
-              fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E").catch(() => [])
+              fetchSheetData(aUrl, "'INPUT'!A2:J", true).catch(() => []),
+              fetchSheetData(aUrl, "'INPUT RM'!A2:J", true).catch(() => []),
+              fetchSheetData(aUrl, "'INPUT MFG'!A2:J", true).catch(() => []),
+              fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", true).catch(() => []),
+              fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:D", true).catch(() => []),
+              fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", true).catch(() => [])
             ]);
 
             pr.filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
@@ -518,12 +518,12 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         }));
       } else {
         const [tn, tr, tm, ts, pr, lr] = await Promise.all([
-          fetchSheetData(spreadsheetId, "'INPUT'!A2:J").catch(() => []),
-          fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J").catch(() => []),
-          fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J").catch(() => []),
-          fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J").catch(() => []),
-          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:D").catch(() => []),
-          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E").catch(() => [])
+          fetchSheetData(spreadsheetId, "'INPUT'!A2:J", true).catch(() => []),
+          fetchSheetData(spreadsheetId, "'INPUT RM'!A2:J", true).catch(() => []),
+          fetchSheetData(spreadsheetId, "'INPUT MFG'!A2:J", true).catch(() => []),
+          fetchSheetData(spreadsheetId, "'INPUT SUPPLIES'!A2:J", true).catch(() => []),
+          fetchSheetData(spreadsheetId, "'MASTER_PRODUK'!A2:D", true).catch(() => []),
+          fetchSheetData(spreadsheetId, "'MASTER_LOCATOR'!A2:E", true).catch(() => [])
         ]);
 
         pr.filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
@@ -606,7 +606,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           key: itemKey,
           whGroup: lCode,
           namaLocator: lData.nama,
-          kodeProduk: pCode === pName ? '' : pCode,
+          kodeProduk: pCode,
           namaProduk: pData.nama,
           uom: pData.satuan || uom || 'Pcs',
           stockSistem: 0,
@@ -1486,6 +1486,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                 <thead className="bg-slate-50/80 text-slate-600 border-b border-slate-200">
                   <tr>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Locator</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Kode Produk</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Nama Produk</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-slate-100/40 text-slate-700">Stok Rill (Tgl kemarin)</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-blue-50/30 text-blue-800">Mutasi Hari Ini IN</th>
@@ -1501,6 +1502,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                   <tr>
                     {(area === 'HQ' || spreadsheetId === 'HQ') && <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Area</th>}
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Locator</th>
+                    <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Kode Produk</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Nama Produk</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-slate-100/40 text-slate-700 font-medium">Stok Awal Periode</th>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider text-right bg-blue-50/30 text-blue-800">Mutasi Periode IN</th>
@@ -1517,7 +1519,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                 {displayedList.length === 0 ? (
                   <tr>
                     <td 
-                      colSpan={currentReconType === 'daily' ? 9 : ((area === 'HQ' || spreadsheetId === 'HQ') ? 10 : 9)} 
+                      colSpan={currentReconType === 'daily' ? 10 : ((area === 'HQ' || spreadsheetId === 'HQ') ? 11 : 10)} 
                       className="p-12 text-center text-slate-500 italic"
                     >
                       Tidak ada rekonsiliasi yang cocok dengan kriteria filter atau arsip kosong.
@@ -1540,13 +1542,17 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
                         <div className="text-xs text-slate-500 font-mono mt-0.5">{item.whGroup}</div>
                       </td>
 
+                      {/* Kode Produk */}
+                      <td className="px-5 py-4">
+                        <div className="text-sm text-slate-700 font-mono font-medium">{item.kodeProduk}</div>
+                      </td>
+
                       {/* Product */}
                       <td className="px-5 py-4">
                         <div className="font-medium text-slate-900 truncate max-w-xs" title={item.namaProduk}>
                           {item.namaProduk}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-slate-500 font-mono">{item.kodeProduk}</span>
                           {item.uom && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 uppercase">
                               {item.uom}

@@ -66,7 +66,8 @@ async function startServer() {
   app.get("/api/stock-summary", async (req, res) => {
     try {
       const now = Date.now();
-      if (cachedMts && now - cacheTime < 600000) {
+      const forceRefresh = !!req.query.t;
+      if (!forceRefresh && cachedMts && now - cacheTime < 600000) {
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         return res.send(cachedMts);
       }

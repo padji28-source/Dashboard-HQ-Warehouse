@@ -20,18 +20,18 @@ export default function MtsData() {
   const [sortColumn, setSortColumn] = useState<number | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  const csvUrl = '/api/stock-summary';
-
   const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
       
+      const csvUrl = `/api/stock-summary?t=${Date.now()}`;
+      
       let text = '';
       let fetchedSuccess = false;
       
       try {
-        const res = await fetch(csvUrl);
+        const res = await fetch(csvUrl, { cache: 'no-store' });
         if (res.ok) {
           const contentType = res.headers.get('content-type') || '';
           if (contentType.includes('text/html')) {
@@ -44,8 +44,8 @@ export default function MtsData() {
         }
       } catch (clientErr) {
         console.warn('Backend proxy /api/mts failed, fetching directly from Google Sheets published URL...', clientErr);
-        const directUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv';
-        const resDirect = await fetch(directUrl);
+        const directUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv&t=${Date.now()}`;
+        const resDirect = await fetch(directUrl, { cache: 'no-store' });
         if (resDirect.ok) {
           text = await resDirect.text();
           fetchedSuccess = true;
