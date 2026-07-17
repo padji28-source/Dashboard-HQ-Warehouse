@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { fetchAndParseCSV } from "../../lib/csvCache";
+import { useEffect, useState, useMemo, useRef , memo} from "react";
 import { fetchSheetData } from "../../lib/sheets";
 import { AREA_URLS } from "../../App";
 import type {
@@ -26,7 +27,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import Papa from 'papaparse';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import ExecutiveDashboard from "../dashboard/ExecutiveDashboard";
@@ -103,7 +103,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export default function StockOverview({
+function StockOverview({
   spreadsheetId,
   area,
   onNavigateToTab,
@@ -170,33 +170,7 @@ export default function StockOverview({
       const mtsMapLocal = new Map<string, number>();
 
       try {
-        let textMts = '';
-        let fetchedSuccess = false;
-        try {
-          const resMts = await fetch(csvUrl);
-          if (resMts.ok) {
-            const contentType = resMts.headers.get('content-type') || '';
-            if (contentType.includes('text/html')) {
-              throw new Error('API returned HTML page (static host route mismatch)');
-            }
-            textMts = await resMts.text();
-            fetchedSuccess = true;
-          } else {
-            throw new Error(`HTTP ${resMts.status}`);
-          }
-        } catch (apiErr) {
-          console.warn('Backend proxy /api/mts failed, fetching directly from Google Sheets...', apiErr);
-          const directMtsUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv';
-          const directRes = await fetch(directMtsUrl);
-          if (directRes.ok) {
-            textMts = await directRes.text();
-            fetchedSuccess = true;
-          }
-        }
-
-        if (fetchedSuccess && textMts) {
-          const parsedMts = Papa.parse<string[]>(textMts, { skipEmptyLines: true });
-          const dataMts = parsedMts.data || [];
+        const dataMts = await fetchAndParseCSV<string[]>('/api/stock-summary', false, 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv');
           
           if (dataMts.length > 0) {
             let headerIndex = 0;
@@ -241,7 +215,6 @@ export default function StockOverview({
               }
             });
           }
-        }
       } catch (err) {
         console.error('Failed to fetch MTS database:', err);
       }
@@ -828,3 +801,4 @@ export default function StockOverview({
     />
   );
 }
+export default memo(StockOverview);

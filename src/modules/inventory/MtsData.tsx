@@ -1,7 +1,6 @@
-import { useEffect, useState, useMemo } from 'react';
-import Papa from 'papaparse';
+import { fetchAndParseCSV } from "../../lib/csvCache";
+import { useEffect, useState, useMemo , memo, useRef} from "react";
 import { Loader2, Search, FileSpreadsheet, RefreshCw, ChevronUp, ChevronDown, Info, Download } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -9,7 +8,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export default function MtsData() {
+function MtsData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -27,39 +26,7 @@ export default function MtsData() {
       
       const csvUrl = `/api/stock-summary?t=${Date.now()}`;
       
-      let text = '';
-      let fetchedSuccess = false;
-      
-      try {
-        const res = await fetch(csvUrl, { cache: 'no-store' });
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('text/html')) {
-            throw new Error('Server returned HTML page (static host route mismatch)');
-          }
-          text = await res.text();
-          fetchedSuccess = true;
-        } else {
-          throw new Error(`HTTP ${res.status}`);
-        }
-      } catch (clientErr) {
-        console.warn('Backend proxy /api/mts failed, fetching directly from Google Sheets published URL...', clientErr);
-        const directUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv&t=${Date.now()}`;
-        const resDirect = await fetch(directUrl, { cache: 'no-store' });
-        if (resDirect.ok) {
-          text = await resDirect.text();
-          fetchedSuccess = true;
-        } else {
-          throw new Error(`Gagal mengunduh file dari server & Google Sheets: HTTP ${resDirect.status}`);
-        }
-      }
-      
-      if (!fetchedSuccess || !text) {
-        throw new Error('Data sheet kosong atau gagal diunduh.');
-      }
-
-      const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
-      const data = parsed.data;
+      const data = await fetchAndParseCSV<string[]>('/api/stock-summary', false, 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv');
 
       let headerIndex = 0;
       for (let i = 0; i < Math.min(10, data.length); i++) {
@@ -147,7 +114,8 @@ export default function MtsData() {
     return sortedRows.slice(start, start + pageSize);
   }, [sortedRows, currentPage, pageSize]);
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx");
     if (sortedRows.length === 0 || headers.length === 0) {
       alert("Tidak ada data untuk diekspor");
       return;
@@ -346,3 +314,5 @@ export default function MtsData() {
     </div>
   );
 }
+
+export default memo(MtsData);

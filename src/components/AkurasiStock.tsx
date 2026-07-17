@@ -1,9 +1,8 @@
-import { useEffect, useState, useMemo } from 'react';
+import { fetchAndParseCSV } from "../lib/csvCache";
+import { useEffect, useState, useMemo , memo} from "react";
 import { fetchSheetData, fetchCombinedProducts } from '../lib/sheets';
 import { AREA_URLS } from '../App';
-import { Loader2, AlertTriangle, RefreshCw, BarChart3, ArrowDownToLine, CheckCircle2, CircleAlert, Percent, Box, MapPin } from 'lucide-react';
-import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
+import { Loader2, AlertTriangle, RefreshCw, BarChart3, ArrowDownToLine, CheckCircle2, CircleAlert, Percent, Box, MapPin, Save, History, Trash2, Archive, X, CloudUpload } from 'lucide-react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -15,6 +14,8 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
+import { db } from '../lib/firebase';
+import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore';
 
 function cn(...classes: any[]) {
   return classes.filter(Boolean).join(' ');
@@ -48,6 +49,89 @@ interface CompiledStockItem {
   qtySistem: number;
   selisih: number;
   source: string;
+}
+
+// ==========================================
+// PERSISTENCE ENGINE: CLOUD & LOCAL STORAGE
+// ==========================================
+const ACCURACY_LOCAL_STORAGE_KEY = 'mms_saved_accuracy';
+
+function getLocalSavedAccuracy(): any[] {
+  try {
+    const raw = localStorage.getItem(ACCURACY_LOCAL_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.error('Failed to parse local saved accuracy:', e);
+    return [];
+  }
+}
+
+function saveLocalAccuracy(record: any) {
+  try {
+    const records = getLocalSavedAccuracy();
+    records.unshift(record);
+    localStorage.setItem(ACCURACY_LOCAL_STORAGE_KEY, JSON.stringify(records));
+  } catch (e: any) {
+    console.error('Failed to save accuracy locally:', e);
+    throw new Error('Gagal menyimpan ke penyimpanan lokal.');
+  }
+}
+
+function deleteLocalAccuracy(id: string) {
+  try {
+    const records = getLocalSavedAccuracy();
+    const updated = records.filter(r => r.id !== id);
+    localStorage.setItem(ACCURACY_LOCAL_STORAGE_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed to delete local accuracy:', e);
+  }
+}
+
+async function saveAccuracyToFirestore(record: any) {
+  try {
+    const colRef = collection(db, 'saved_accuracy');
+    const addPromise = addDoc(colRef, record);
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Koneksi timeout. Gagal mengunggah ke cloud (mungkin offline).')), 5000);
+    });
+    await Promise.race([addPromise, timeoutPromise]);
+    return true;
+  } catch (e: any) {
+    console.warn('Failed to save accuracy to Firestore:', e);
+    return false;
+  }
+}
+
+async function loadAccuracyFromFirestore(): Promise<any[]> {
+  try {
+    const colRef = collection(db, 'saved_accuracy');
+    const snapshot = await getDocs(colRef);
+    const results: any[] = [];
+    snapshot.forEach(docSnap => {
+      results.push({
+        fireId: docSnap.id,
+        ...docSnap.data()
+      });
+    });
+    return results;
+  } catch (e) {
+    console.error('Failed to load accuracy from Firestore:', e);
+    return [];
+  }
+}
+
+async function deleteAccuracyFromFirestore(fireId: string) {
+  try {
+    const deletePromise = deleteDoc(doc(db, 'saved_accuracy', fireId));
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Koneksi timeout.')), 5000);
+    });
+    await Promise.race([deletePromise, timeoutPromise]);
+    return true;
+  } catch (e: any) {
+    console.warn('Failed to delete accuracy from Firestore:', e);
+    return false;
+  }
 }
 
 function parseToIsoDate(dtStr: string): string {
@@ -150,7 +234,7 @@ function formatToDDMMYYYY(dateStr: string): string {
   return dateStr;
 }
 
-export default function AkurasiStock() {
+function AkurasiStock() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
@@ -179,6 +263,54 @@ export default function AkurasiStock() {
   const [tableSearch, setTableSearch] = useState('');
   const [selectedAreaFilter, setSelectedAreaFilter] = useState('ALL');
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
+  // Saved Sesi / Snapshot states
+  const [savedAccessions, setSavedAccessions] = useState<any[]>([]);
+  const [activeSnapshot, setActiveSnapshot] = useState<any | null>(null);
+  const [isSavingAcc, setIsSavingAcc] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [sessionNameInput, setSessionNameInput] = useState('');
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Reset pagination when filter/search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tableSearch, selectedAreaFilter, selectedSourceFilter, activeSnapshot]);
+
+  // Fetch saved sessions
+  const loadSavedAccessions = async () => {
+    try {
+      setLoadingHistory(true);
+      const fsSessions = await loadAccuracyFromFirestore();
+      const localSessions = getLocalSavedAccuracy();
+      
+      const combined = [...fsSessions, ...localSessions];
+      const uniqueMap = new Map<string, any>();
+      combined.forEach(s => {
+        if (!uniqueMap.has(s.id)) {
+          uniqueMap.set(s.id, s);
+        } else {
+          const existing = uniqueMap.get(s.id);
+          uniqueMap.set(s.id, { ...existing, ...s });
+        }
+      });
+      
+      const sorted = Array.from(uniqueMap.values()).sort((a, b) => b.timestamp - a.timestamp);
+      setSavedAccessions(sorted);
+    } catch (e) {
+      console.error('Error loading accuracy history:', e);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSavedAccessions();
+  }, []);
+
   const loadData = async (isManual = false) => {
     try {
       setLoading(true);
@@ -206,35 +338,7 @@ export default function AkurasiStock() {
       }
 
       try {
-        let textMts = '';
-        let fetchedSuccess = false;
-        try {
-          const resMts = await fetch(csvUrl);
-          if (resMts.ok) {
-            const contentType = resMts.headers.get('content-type') || '';
-            if (contentType.includes('text/html')) {
-              throw new Error('API returned HTML page (static host route mismatch)');
-            }
-            textMts = await resMts.text();
-            fetchedSuccess = true;
-          } else {
-            throw new Error(`HTTP ${resMts.status}`);
-          }
-        } catch (apiErr) {
-          console.warn('Backend proxy /api/mts failed style or failed route, fetching directly from Google Sheets...', apiErr);
-          const directMtsUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv';
-          const directRes = await fetch(directMtsUrl);
-          if (directRes.ok) {
-            textMts = await directRes.text();
-            fetchedSuccess = true;
-          } else {
-            console.error('Failed to fetch MTS directly from Google Sheets as well:', directRes.status);
-          }
-        }
-
-        if (fetchedSuccess && textMts) {
-          const parsedMts = Papa.parse<string[]>(textMts, { skipEmptyLines: true });
-          const dataMts = parsedMts.data || [];
+        const dataMts = await fetchAndParseCSV<string[]>('/api/stock-summary', false, 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv');
           
           if (dataMts.length > 0) {
             let headerIndex = 0;
@@ -277,7 +381,6 @@ export default function AkurasiStock() {
               }
             });
           }
-        }
       } catch (err) {
         console.error('Failed to pre-fetch MTS in Akurasi Stock:', err);
       }
@@ -469,25 +572,35 @@ export default function AkurasiStock() {
   }, [reconType, selectedDate, selectedStartDate, selectedEndDate]);
 
   // Derived states
+  const displayedStockItems = useMemo(() => {
+    if (activeSnapshot) {
+      return activeSnapshot.allStockItems || [];
+    }
+    return allStockItems;
+  }, [allStockItems, activeSnapshot]);
+
   const categoryCounts = useMemo(() => {
     const counts = {
-      ALL: allStockItems.length,
-      INPUT: allStockItems.filter(i => i.source === 'INPUT').length,
-      'INPUT RM': allStockItems.filter(i => i.source === 'INPUT RM').length,
-      'INPUT MFG': allStockItems.filter(i => i.source === 'INPUT MFG').length,
-      'INPUT SUPPLIES': allStockItems.filter(i => i.source === 'INPUT SUPPLIES').length,
+      ALL: displayedStockItems.length,
+      INPUT: displayedStockItems.filter(i => i.source === 'INPUT').length,
+      'INPUT RM': displayedStockItems.filter(i => i.source === 'INPUT RM').length,
+      'INPUT MFG': displayedStockItems.filter(i => i.source === 'INPUT MFG').length,
+      'INPUT SUPPLIES': displayedStockItems.filter(i => i.source === 'INPUT SUPPLIES').length,
     };
     return counts;
-  }, [allStockItems]);
+  }, [displayedStockItems]);
 
   const filteredStockItems = useMemo(() => {
     if (selectedSourceFilter === 'ALL') {
-      return allStockItems;
+      return displayedStockItems;
     }
-    return allStockItems.filter(item => item.source === selectedSourceFilter);
-  }, [allStockItems, selectedSourceFilter]);
+    return displayedStockItems.filter(item => item.source === selectedSourceFilter);
+  }, [displayedStockItems, selectedSourceFilter]);
 
   const allAreaSummary = useMemo(() => {
+    if (activeSnapshot) {
+      return activeSnapshot.areaSummary || [];
+    }
     const order = Object.keys(AREA_URLS);
     const areaGroups = new Map<string, { totalSku: number; totalSelisih: number }>();
     
@@ -525,9 +638,15 @@ export default function AkurasiStock() {
 
     summaryList.sort((a, b) => order.indexOf(a.area) - order.indexOf(b.area));
     return summaryList;
-  }, [filteredStockItems]);
+  }, [filteredStockItems, activeSnapshot]);
 
   const allDiscrepancies = useMemo(() => {
+    if (activeSnapshot) {
+      return (activeSnapshot.discrepancyList || []).filter((item: any) => {
+        if (selectedSourceFilter === 'ALL') return true;
+        return item.source === selectedSourceFilter;
+      });
+    }
     return filteredStockItems
       .filter(item => Math.abs(item.selisih) >= 0.001)
       .map(item => ({
@@ -540,9 +659,10 @@ export default function AkurasiStock() {
         selisih: item.selisih,
         source: item.source
       }));
-  }, [filteredStockItems]);
+  }, [filteredStockItems, activeSnapshot, selectedSourceFilter]);
 
-  const exportDiscrepanciesToExcel = () => {
+  const exportDiscrepanciesToExcel = async () => {
+    const XLSX = await import("xlsx");
     try {
       const dataToExport = filteredTableData.map(item => ({
         'Area / Cabang': item.area,
@@ -587,6 +707,15 @@ export default function AkurasiStock() {
     });
   }, [allDiscrepancies, selectedAreaFilter, tableSearch]);
 
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredTableData.length / pageSize);
+  }, [filteredTableData, pageSize]);
+
+  const paginatedTableData = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredTableData.slice(startIndex, startIndex + pageSize);
+  }, [filteredTableData, currentPage, pageSize]);
+
   const totalSKUCount = useMemo(() => allAreaSummary.reduce((sum, item) => sum + item.totalSku, 0), [allAreaSummary]);
   const totalDiscrepanciesCount = useMemo(() => allAreaSummary.reduce((sum, item) => sum + item.totalSelisih, 0), [allAreaSummary]);
   const averageAccuracyPercent = useMemo(() => {
@@ -595,8 +724,101 @@ export default function AkurasiStock() {
       : 100;
   }, [totalSKUCount, totalDiscrepanciesCount]);
 
+  const handleSaveAccuracySession = async (customName: string) => {
+    try {
+      setIsSavingAcc(true);
+      setErrorMsg(null);
+
+      const recordId = `acc_${reconType}_${Date.now()}`;
+      const periodLabel = reconType === 'daily'
+        ? formatToDDMMYYYY(selectedDate)
+        : `${formatToDDMMYYYY(selectedStartDate)} s_d ${formatToDDMMYYYY(selectedEndDate)}`;
+
+      const sessionName = customName.trim() || `Akurasi Stock (${reconType === 'daily' ? 'Harian' : 'Bulanan'}) - ${periodLabel}`;
+
+      const payload = {
+        id: recordId,
+        name: sessionName,
+        reconType,
+        date: reconType === 'daily' ? selectedDate : `${selectedStartDate}_to_${selectedEndDate}`,
+        timestamp: Date.now(),
+        totalSku: totalSKUCount,
+        totalSelisih: totalDiscrepanciesCount,
+        accuracyPercent: averageAccuracyPercent,
+        areaSummary: allAreaSummary,
+        discrepancyList: allDiscrepancies,
+        allStockItems: allStockItems
+      };
+
+      const cloudOk = await saveAccuracyToFirestore(payload);
+      saveLocalAccuracy(payload);
+
+      if (cloudOk) {
+        alert(`Sesi akurasi "${sessionName}" berhasil disimpan ke Cloud & Lokal!`);
+      } else {
+        alert(`Sesi akurasi "${sessionName}" berhasil disimpan ke penyimpanan Lokal (gagal terhubung ke Cloud).`);
+      }
+
+      setShowSaveModal(false);
+      setSessionNameInput('');
+      await loadSavedAccessions();
+    } catch (err: any) {
+      console.error(err);
+      alert('Gagal menyimpan sesi akurasi: ' + err.message);
+    } finally {
+      setIsSavingAcc(false);
+    }
+  };
+
+  const handleDeleteSession = async (session: any) => {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus arsip "${session.name}"?`)) {
+      return;
+    }
+
+    try {
+      if (session.fireId) {
+        await deleteAccuracyFromFirestore(session.fireId);
+      }
+      deleteLocalAccuracy(session.id);
+      alert('Sesi berhasil dihapus!');
+      
+      if (activeSnapshot?.id === session.id) {
+        setActiveSnapshot(null);
+      }
+      
+      await loadSavedAccessions();
+    } catch (err: any) {
+      alert('Gagal menghapus sesi: ' + err.message);
+    }
+  };
+
   return (
     <div className="w-full space-y-6">
+      {/* Active Snapshot Warning Banner */}
+      {activeSnapshot && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-100 rounded-lg text-amber-700">
+              <History className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm font-bold">
+                Menampilkan Snapshot Arsip: <span className="underline">{activeSnapshot.name}</span>
+              </p>
+              <p className="text-xs text-amber-600 font-medium">
+                Arsip disimpan pada {new Date(activeSnapshot.timestamp).toLocaleString('id-ID')} ({activeSnapshot.reconType === 'daily' ? 'Harian' : 'Bulanan'})
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setActiveSnapshot(null)}
+            className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs transition duration-200"
+          >
+            Kembali ke Data Real-time
+          </button>
+        </div>
+      )}
+
       {/* Header section */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -608,14 +830,15 @@ export default function AkurasiStock() {
             Analisis akurasi real-time SKU fisik vs sistem MTS di seluruh cabang ditarik dari riwayat mutasi.
           </p>
         </div>
-
+ 
         {/* Date Filter & Control UI */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
             <button
               onClick={() => setReconType('daily')}
+              disabled={activeSnapshot !== null}
               className={cn(
-                "px-3 py-1 text-xs font-bold rounded-md transition-all duration-200",
+                "px-3 py-1 text-xs font-bold rounded-md transition-all duration-200 disabled:opacity-50",
                 reconType === 'daily' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-900"
               )}
             >
@@ -623,15 +846,16 @@ export default function AkurasiStock() {
             </button>
             <button
               onClick={() => setReconType('monthly')}
+              disabled={activeSnapshot !== null}
               className={cn(
-                "px-3 py-1 text-xs font-bold rounded-md transition-all duration-200",
+                "px-3 py-1 text-xs font-bold rounded-md transition-all duration-200 disabled:opacity-50",
                 reconType === 'monthly' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-900"
               )}
             >
               Bulanan
             </button>
           </div>
-
+ 
           {reconType === 'daily' ? (
             <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
               <span className="text-[10px] uppercase tracking-wide font-bold text-slate-400">Tanggal:</span>
@@ -639,7 +863,8 @@ export default function AkurasiStock() {
                 type="date"
                 value={selectedDate}
                 onChange={e => setSelectedDate(e.target.value)}
-                className="text-xs sm:text-sm font-bold text-slate-800 focus:outline-none"
+                disabled={activeSnapshot !== null}
+                className="text-xs sm:text-sm font-bold text-slate-800 focus:outline-none bg-transparent disabled:opacity-50"
               />
             </div>
           ) : (
@@ -649,22 +874,42 @@ export default function AkurasiStock() {
                 type="date"
                 value={selectedStartDate}
                 onChange={e => setSelectedStartDate(e.target.value)}
-                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[110px]"
+                disabled={activeSnapshot !== null}
+                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[110px] disabled:opacity-50"
               />
               <span className="text-xs text-slate-400 font-bold">-</span>
               <input
                 type="date"
                 value={selectedEndDate}
                 onChange={e => setSelectedEndDate(e.target.value)}
-                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[110px]"
+                disabled={activeSnapshot !== null}
+                className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent max-w-[110px] disabled:opacity-50"
               />
             </div>
           )}
+ 
+          <button
+            onClick={() => {
+              const defaultName = `Akurasi Stock (${reconType === 'daily' ? 'Harian' : 'Bulanan'}) - ${
+                reconType === 'daily' 
+                  ? formatToDDMMYYYY(selectedDate) 
+                  : `${formatToDDMMYYYY(selectedStartDate)} s/d ${formatToDDMMYYYY(selectedEndDate)}`
+              }`;
+              setSessionNameInput(defaultName);
+              setShowSaveModal(true);
+            }}
+            title="Simpan Sesi Akurasi Harian / Bulanan"
+            disabled={loading || activeSnapshot !== null}
+            className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 border border-emerald-700 text-white font-bold text-xs rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" />
+            Simpan Sesi
+          </button>
 
           <button
             onClick={() => loadData(true)}
             title="Reload Data"
-            disabled={loading}
+            disabled={loading || activeSnapshot !== null}
             className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
@@ -917,7 +1162,8 @@ export default function AkurasiStock() {
                 <p className="text-slate-400 text-xs mt-1">Sesuai dengan kriteria filter area dan pencarian saat ini.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="space-y-4">
+                <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-250 select-none text-slate-700 font-bold text-[11px] uppercase tracking-wider">
@@ -931,7 +1177,7 @@ export default function AkurasiStock() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium text-xs text-slate-600">
-                    {filteredTableData.map((item, idx) => {
+                    {paginatedTableData.map((item, idx) => {
                       const isOverStock = item.selisih > 0;
                       return (
                         <tr key={idx} className="hover:bg-slate-50/50 transition">
@@ -953,10 +1199,273 @@ export default function AkurasiStock() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-4 px-2 select-none mt-4">
+                <div className="text-xs text-slate-500 font-bold">
+                  Menampilkan <span className="text-slate-800">{Math.min(filteredTableData.length, (currentPage - 1) * pageSize + 1)}</span> - <span className="text-slate-800">{Math.min(filteredTableData.length, currentPage * pageSize)}</span> dari <span className="text-slate-800">{filteredTableData.length}</span> baris
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-4">
+                  {/* Page Size Selector */}
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <span>Tampilkan:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-700 font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    >
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                      <option value={200}>200</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-extrabold text-slate-700 disabled:opacity-40 hover:bg-slate-50 active:bg-slate-100 transition duration-200"
+                      title="Halaman Pertama"
+                    >
+                      &laquo; First
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3.5 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-black text-slate-700 disabled:opacity-40 hover:bg-slate-50 active:bg-slate-100 transition duration-200"
+                    >
+                      Sebelumnya
+                    </button>
+                    <span className="text-xs text-slate-500 font-black min-w-[100px] text-center bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                      {currentPage} / {totalPages || 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages || totalPages === 0}
+                      className="px-3.5 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-black text-slate-700 disabled:opacity-40 hover:bg-slate-50 active:bg-slate-100 transition duration-200"
+                    >
+                      Berikutnya
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages || totalPages === 0}
+                      className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-xs font-extrabold text-slate-700 disabled:opacity-40 hover:bg-slate-50 active:bg-slate-100 transition duration-200"
+                      title="Halaman Terakhir"
+                    >
+                      Last &raquo;
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
             )}
           </div>
         </>
       )}
+
+      {/* HISTORI DATA AKURASI TERKUNCI */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+              <Archive className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Arsip & Riwayat Akurasi Stock</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Daftar snapshot akurasi harian dan bulanan yang telah disimpan.</p>
+            </div>
+          </div>
+          <button
+            onClick={loadSavedAccessions}
+            disabled={loadingHistory}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 transition duration-200 disabled:opacity-50"
+          >
+            <RefreshCw className={cn("w-3 h-3", loadingHistory && "animate-spin")} />
+            Segarkan
+          </button>
+        </div>
+
+        {loadingHistory ? (
+          <div className="py-8 flex justify-center items-center gap-2 text-slate-400">
+            <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+            <span className="text-sm font-medium text-slate-500">Memuat riwayat arsip...</span>
+          </div>
+        ) : savedAccessions.length === 0 ? (
+          <div className="py-10 text-center text-slate-400 text-sm italic">
+            Belum ada arsip akurasi stock yang disimpan. Gunakan tombol "Simpan Sesi" di kanan atas untuk menyimpan metrik hari ini.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {savedAccessions.map((session) => {
+              const isActive = activeSnapshot?.id === session.id;
+              const savedDate = new Date(session.timestamp).toLocaleString('id-ID', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              });
+              
+              return (
+                <div 
+                  key={session.id} 
+                  className={cn(
+                    "border rounded-xl p-4 flex flex-col justify-between gap-3 transition-all duration-200",
+                    isActive 
+                      ? "border-amber-400 bg-amber-50/20 shadow-sm" 
+                      : "border-slate-200 hover:border-slate-300 hover:shadow-sm"
+                  )}
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="font-bold text-slate-900 text-sm line-clamp-1" title={session.name}>
+                        {session.name}
+                      </h4>
+                      <span className={cn(
+                        "text-[10px] uppercase font-black px-2 py-0.5 rounded-full tracking-wider border shrink-0",
+                        session.reconType === 'daily' 
+                          ? "bg-blue-50 border-blue-200 text-blue-600" 
+                          : "bg-purple-50 border-purple-200 text-purple-600"
+                      )}>
+                        {session.reconType === 'daily' ? 'Harian' : 'Bulanan'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
+                      <History className="w-3.5 h-3.5" />
+                      Disimpan: {savedDate}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 mt-2">
+                      <div className="text-center">
+                        <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Akurasi</div>
+                        <div className={cn(
+                          "text-sm font-black mt-0.5",
+                          session.accuracyPercent >= 95 ? "text-emerald-600" : session.accuracyPercent >= 85 ? "text-amber-500" : "text-rose-500"
+                        )}>
+                          {session.accuracyPercent}%
+                        </div>
+                      </div>
+                      <div className="text-center border-x border-slate-200/60">
+                        <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Total SKU</div>
+                        <div className="text-sm font-bold text-slate-800 mt-0.5 font-mono">
+                          {session.totalSku}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Selisih</div>
+                        <div className="text-sm font-bold text-rose-500 mt-0.5 font-mono">
+                          {session.totalSelisih}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+                    <button
+                      onClick={() => handleDeleteSession(session)}
+                      title="Hapus Arsip"
+                      className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    {isActive ? (
+                      <button
+                        onClick={() => setActiveSnapshot(null)}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition"
+                      >
+                        Keluar Snapshot
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setActiveSnapshot(session);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition"
+                      >
+                        Tampilkan Snapshot
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* SAVE MODAL DIALOG */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xl w-full max-w-lg space-y-4 text-left my-8">
+            <div className="flex items-center gap-3 text-emerald-800 border-b border-slate-100 pb-3">
+              <div className="p-2.5 bg-emerald-100 rounded-full text-emerald-700">
+                <CloudUpload className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-extrabold text-slate-950">Simpan Sesi Akurasi Stock</h3>
+                <p className="text-xs text-slate-500">
+                  Simpan data snapshot akurasi stock untuk melacak performa harian/bulanan.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Nama Sesi Penyimpanan
+              </label>
+              <input 
+                type="text" 
+                value={sessionNameInput}
+                onChange={e => setSessionNameInput(e.target.value)}
+                placeholder="Masukkan deskripsi nama arsip..."
+                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 outline-none sm:text-sm"
+              />
+              <p className="text-[11px] text-slate-400">
+                Saran nama default otomatis mendeteksi periode tanggal yang sedang aktif.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold rounded-lg text-xs transition duration-150"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => handleSaveAccuracySession(sessionNameInput)}
+                disabled={isSavingAcc}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition duration-150"
+              >
+                {isSavingAcc ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Simpan Sesi
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+export default memo(AkurasiStock);

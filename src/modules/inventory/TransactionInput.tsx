@@ -1,8 +1,7 @@
-import { useEffect, useState, useMemo, useRef, type FormEvent } from 'react';
+import { useEffect, useState, useMemo, useRef, type FormEvent , memo} from "react";
 import { fetchSheetData, appendSheetRow, fetchCombinedProducts } from '../../lib/sheets';
 import type { Transaction, Product, Locator } from '../../shared/types';
 import { Loader2, Plus, Search, Package, MapPin, Calendar, FileText, ArrowDownRight, ArrowUpRight, CheckCircle2, Trash2, X, Download } from 'lucide-react';
-import * as XLSX from 'xlsx';
 
 interface Props {
   spreadsheetId: string;
@@ -88,7 +87,7 @@ export const displayTanggalIndonesian = (dtStr: string): string => {
   return dtStr; // Return as is if fully unrecognized
 };
 
-export default function TransactionInput({ spreadsheetId, sheetName, title, description, isReadOnly = false }: Props) {
+function TransactionInput({ spreadsheetId, sheetName, title, description, isReadOnly = false }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locators, setLocators] = useState<Locator[]>([]);
@@ -481,7 +480,8 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
   }, 0);
   const grandTotalQty = filtered.reduce((sum, t) => sum + t.kuantitas, 0);
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx");
     if (filtered.length === 0) {
       alert("Tidak ada data untuk diekspor");
       return;
@@ -546,6 +546,8 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
         product.nama.toLowerCase().includes(q)
       );
     });
+
+
 
   return (
     <div className="space-y-6">
@@ -875,18 +877,21 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
               
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-white border-b border-slate-200 text-slate-600 uppercase font-semibold">
-                    <tr>
-                      <th className="px-4 py-3">No</th>
-                      <th className="px-4 py-3">Kode Produk</th>
-                      <th className="px-4 py-3">Nama Produk / Bahan</th>
-                      <th className="px-4 py-3 text-right">Kuantitas</th>
-                      <th className="px-4 py-3">UOM</th>
-                      <th className="px-4 py-3">Locator (Asal)</th>
-                      {formTipe === 'TRANSFER' && <th className="px-4 py-3">Locator Tujuan</th>}
-                      <th className="px-4 py-3 text-center">Aksi</th>
-                    </tr>
-                  </thead>
+                  <thead className="bg-slate-50 sticky top-0 z-10" style={{ width: "100%" }}>
+                  <tr className="divide-x divide-slate-200/50" style={{ display: "flex", width: "100%" }}>
+                    <th className="px-3 py-3.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-16 bg-white flex items-center justify-center">#</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Type</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Tanggal</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[2] flex items-center">Kode Produk</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[3] flex items-center">Nama Bahan</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">UOM</th>
+                    <th className="px-4 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center justify-end">Qty</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Loc Asal</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Loc Tujuan</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">No. Doc</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[2] flex items-center">Keterangan</th>
+                  </tr>
+                </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700 bg-white">
                     {itemsList.length === 0 ? (
                       <tr>
@@ -1109,20 +1114,21 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
             </div>
           ) : (<>
             <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                <tr>
-                  <th className="px-5 py-3.5 font-semibold text-xs tracking-wider uppercase">Tanggal</th>
-                  <th className="px-5 py-3.5 font-semibold text-xs tracking-wider uppercase">Nama Bahan</th>
-                  <th className="px-5 py-3.5 font-semibold text-xs tracking-wider uppercase text-right">Qty</th>
-                  <th className="px-5 py-3.5 font-semibold text-xs tracking-wider uppercase">UOM</th>
-                  <th className="px-5 py-3.5 font-semibold text-xs tracking-wider uppercase">I/O/A</th>
-                  <th className="px-5 py-3.5 font-semibold text-xs tracking-wider uppercase">Locator</th>
-                  <th className="px-5 py-3.5 font-semibold text-xs tracking-wider uppercase">Locator To</th>
-                  <th className="px-5 py-3.5 font-semibold text-xs tracking-wider uppercase">No. Document</th>
-                  <th className="px-5 py-3.5 font-semibold text-xs tracking-wider uppercase">Keterangan</th>
-                  <th className="px-5 py-3.5 font-semibold text-xs tracking-wider uppercase">Kode</th>
-                </tr>
-              </thead>
+              <thead className="bg-slate-50 sticky top-0 z-10" style={{ width: "100%" }}>
+                  <tr className="divide-x divide-slate-200/50" style={{ display: "flex", width: "100%" }}>
+                    <th className="px-3 py-3.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-16 bg-white flex items-center justify-center">#</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Type</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Tanggal</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[2] flex items-center">Kode Produk</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[3] flex items-center">Nama Bahan</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">UOM</th>
+                    <th className="px-4 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center justify-end">Qty</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Loc Asal</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Loc Tujuan</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">No. Doc</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[2] flex items-center">Keterangan</th>
+                  </tr>
+                </thead>
               <tbody className="divide-y divide-slate-100">
                 {paginated.map((t, idx) => {
                   return (
@@ -1274,3 +1280,5 @@ export default function TransactionInput({ spreadsheetId, sheetName, title, desc
     </div>
   );
 }
+
+export default memo(TransactionInput);

@@ -1,11 +1,10 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { fetchAndParseCSV } from "../../lib/csvCache";
+import { useEffect, useState, useMemo, useRef , memo} from "react";
 import { fetchSheetData } from '../../lib/sheets';
 import { AREA_URLS } from '../../App';
 import { Loader2, Search, Scale, CheckCircle2, AlertTriangle, RefreshCw, Undo, Lock, History, FileSpreadsheet, Info, Calendar, Trash2, Check, X } from 'lucide-react';
-import Papa from 'papaparse';
 import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import * as XLSX from 'xlsx';
 
 // Custom tailwind utility class helper if required
 function cn(...classes: any[]) {
@@ -146,10 +145,23 @@ async function deleteFromFirestore(fireId: string) {
 // Helper to normalize dates to YYYY-MM-DD
 function parseToIsoDate(dtStr: string): string {
   if (!dtStr) return '';
-  // Remove time part if exists (e.g. "06-01-2026 14:30:00" -> "06-01-2026")
   let cleaned = dtStr.trim();
-  if (cleaned.includes(' ')) {
-    cleaned = cleaned.split(' ')[0];
+  
+  if (cleaned.includes('T')) {
+    const d = new Date(cleaned);
+    if (!isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+  }
+
+  if (cleaned.includes(' ') && (cleaned.includes('-') || cleaned.includes('/'))) {
+    const parts = cleaned.split(' ');
+    if ((parts[0].includes('-') || parts[0].includes('/')) && parts.length > 1 && parts[1].includes(':')) {
+      cleaned = parts[0];
+    }
   }
   
   // Excel Serial Date check (e.g. 45000)
@@ -159,29 +171,27 @@ function parseToIsoDate(dtStr: string): string {
     return dateObj.toISOString().split('T')[0];
   }
 
-  // Try exact YYYY-MM-DD (don't match ISO strings with T like 2024-07-31T17:00:00.000Z to avoid timezone shifts)
-  if (!cleaned.includes('T')) {
-    const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if (yyyymmdd) {
-      const y = yyyymmdd[1];
-      const m = yyyymmdd[2].padStart(2, '0');
-      const d = yyyymmdd[3].padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
+  // Try exact YYYY-MM-DD
+  const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (yyyymmdd) {
+    const y = yyyymmdd[1];
+    const m = yyyymmdd[2].padStart(2, '0');
+    const d = yyyymmdd[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
   
   // Try DD/MM/YYYY, MM/DD/YYYY, DD-MM-YYYY, MM-DD-YYYY
   const parts = cleaned.includes('/') ? cleaned.split('/') : cleaned.split('-');
   if (parts.length === 3) {
-    let p1 = parts[0].padStart(2, '0');
-    let p2 = parts[1].padStart(2, '0');
+    let p1 = parts[0].trim().padStart(2, '0');
+    let p2 = parts[1].trim().padStart(2, '0');
     let y = parts[2].trim();
+    if (y.includes(' ')) y = y.split(' ')[0];
     
     // If the year is first (e.g. 2026-06-01), but somehow didn't match the regex
-    if (p1.length === 4) {
+    if (p1.length === 4) { 
        return `${p1}-${p2}-${y.padStart(2, '0')}`;
     }
-
     if (y.length === 2) {
       y = '20' + y;
     }
@@ -194,8 +204,8 @@ function parseToIsoDate(dtStr: string): string {
     if (parseInt(p2) > 12) {
       return `${y.padStart(4, '20')}-${p1}-${p2}`;
     }
-    // Default to DD/MM/YYYY for Indonesian locale
-    return `${y.padStart(4, '20')}-${p2}-${p1}`;
+    // Match TransactionInput: Default to MM/DD/YYYY
+    return `${y.padStart(4, '20')}-${p1}-${p2}`;
   }
 
   // Try standard Date parsing
@@ -230,7 +240,7 @@ interface ReconciliationItem {
   source: string;
 }
 
-export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: string }) {
+function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: string }) {
   const [loading, setLoading] = useState(true);
   const [allTransactions, setAllTransactions] = useState<any[]>([]);
   const [productsMap, setProductsMap] = useState<Map<string, { nama: string; satuan: string }>>(new Map());
@@ -336,35 +346,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
       const mtsMap = new Map<string, number>();
       
       try {
-        let textMts = '';
-        let fetchedSuccess = false;
-        try {
-          const resMts = await fetch(csvUrl, { cache: 'no-store' });
-          if (resMts.ok) {
-            const contentType = resMts.headers.get('content-type') || '';
-            if (contentType.includes('text/html')) {
-              throw new Error('API returned HTML page (static host route mismatch)');
-            }
-            textMts = await resMts.text();
-            fetchedSuccess = true;
-          } else {
-            throw new Error(`HTTP ${resMts.status}`);
-          }
-        } catch (apiErr) {
-          console.warn('Backend proxy /api/mts failed, fetching directly from Google Sheets...', apiErr);
-          const directMtsUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv&t=${Date.now()}`;
-          const directRes = await fetch(directMtsUrl, { cache: 'no-store' });
-          if (directRes.ok) {
-            textMts = await directRes.text();
-            fetchedSuccess = true;
-          } else {
-            console.error('Failed to fetch MTS directly from Google Sheets as well:', directRes.status);
-          }
-        }
-
-        if (fetchedSuccess && textMts) {
-          const parsedMts = Papa.parse<string[]>(textMts, { skipEmptyLines: true });
-          const dataMts = parsedMts.data || [];
+        const dataMts = await fetchAndParseCSV<string[]>('/api/stock-summary', false, 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv');
           
           if (dataMts.length > 0) {
             let headerIndex = 0;
@@ -409,13 +391,13 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
               }
             });
           }
-        }
       } catch (err) {
         console.error('Failed to pre-fetch MTS database in reconciliation page:', err);
       }
       setMtsLookupMap(mtsMap);
 
       const pMap = new Map<string, { nama: string; satuan: string }>();
+      const reversePMap = new Map<string, string>();
       const lMap = new Map<string, { nama: string; whType: string; area: string }>();
       const mappedRows: { tipe: string; pCode: string; pName: string; lCode: string; qty: number; uom: string; source: string; area: string; tanggal: string }[] = [];
 
@@ -432,12 +414,12 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           const tanggal = parseToIsoDate(tanggalRaw);
           const pName = String(r[1] || '').trim();
           let pCode = String(r[9] || '').trim();
-          const tipe = String(r[4] || '').trim().toUpperCase();
+          const tipe = String(r[4] || '').replace(/\s+/g, '').toUpperCase();
           const uom = String(r[3] || '').trim();
           
           if (!pName && !pCode) return;
           if (!pCode) {
-            pCode = pName;
+            pCode = reversePMap.get(pName.toUpperCase()) || pName;
           }
 
           const qtyStr = String(r[2] || '0').replace(',', '.');
@@ -450,7 +432,9 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
           if (!fromLocator && !toLocator) fromLocator = 'UNKNOWN_L';
 
           if (tipe === 'TRANSFER' || tipe === 'TF') {
-            mappedRows.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || toLocator || 'UNKNOWN_L', qty, uom, source, area: currentArea, tanggal });
+            if (fromLocator) {
+              mappedRows.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator, qty, uom, source, area: currentArea, tanggal });
+            }
             if (toLocator) {
               mappedRows.push({ tipe: 'IN', pCode, pName, lCode: toLocator, qty, uom, source, area: currentArea, tanggal });
             }
@@ -484,10 +468,13 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
             ]);
 
             pr.filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
-              pMap.set(String(r[0]).trim(), {
-                nama: String(r[1] || '').trim(),
+              const kode = String(r[0]).trim();
+              const nama = String(r[1] || '').trim();
+              pMap.set(kode, {
+                nama: nama,
                 satuan: String(r[2] || '').trim()
               });
+              if (nama) reversePMap.set(nama.toUpperCase(), kode);
             });
 
             lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
@@ -527,10 +514,13 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
         ]);
 
         pr.filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
-          pMap.set(String(r[0]).trim(), {
-            nama: String(r[1] || '').trim(),
+          const kode = String(r[0]).trim();
+          const nama = String(r[1] || '').trim();
+          pMap.set(kode, {
+            nama: nama,
             satuan: String(r[2] || '').trim()
           });
+          if (nama) reversePMap.set(nama.toUpperCase(), kode);
         });
 
         lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
@@ -578,7 +568,7 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
 
     allTransactions.forEach(t => {
       const { tipe, pCode, pName, lCode, qty, uom, area: rowArea, tanggal, source } = t;
-      const itemKey = `${rowArea}_${lCode}_${pCode}`;
+      const itemKey = `${rowArea}_${lCode.toUpperCase()}_${pCode.toUpperCase()}`;
 
       let includeInCumulative = false;
       let includeInYesterday = false;
@@ -1046,7 +1036,8 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     setSelectedLocator('ALL');
   }, [selectedAreaFilter]);
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
+    const XLSX = await import("xlsx");
     if (displayedList.length === 0) {
       alert('Tidak ada data untuk diekspor!');
       return;
@@ -2013,3 +2004,5 @@ export default function PencocokanData({ spreadsheetId, area }: { spreadsheetId:
     </div>
   );
 }
+
+export default memo(PencocokanData);

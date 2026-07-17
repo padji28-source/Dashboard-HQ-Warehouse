@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from "react";
-import Papa from "papaparse";
+import { fetchAndParseCSV } from "../lib/csvCache";
+import { useEffect, useState, useMemo, useRef, useCallback , memo} from "react";
 import { fetchSheetData, fetchCombinedProducts } from "../lib/sheets";
 import { AREA_URLS } from "../App";
 import type { StockSummary } from "../types";
@@ -47,7 +47,7 @@ interface MappedTransaction {
   area: string;
 }
 
-export default function CekStock({ spreadsheetId, area }: Props) {
+function CekStock({ spreadsheetId, area }: Props) {
   const [allTransactions, setAllTransactions] = useState<MappedTransaction[]>([]);
   const [productsMap, setProductsMap] = useState<Map<string, { nama: string, rph?: number }>>(new Map());
   const [locatorsMap, setLocatorsMap] = useState<Map<string, { nama: string; whType: string; area: string }>>(new Map());
@@ -263,16 +263,7 @@ export default function CekStock({ spreadsheetId, area }: Props) {
       // Fetch and Parse Pengepokan Sheet Data for Move Qty metrics
       const penMap = new Map<string, number>();
       try {
-        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=32687697&single=true&output=csv&hl=id';
-        const res = await fetch(csvUrl, {
-          headers: {
-            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
-          }
-        });
-        if (res.ok) {
-          const csvText = await res.text();
-          const parsed = Papa.parse<any[]>(csvText, { skipEmptyLines: true });
-          const data = parsed.data || [];
+        const data = await fetchAndParseCSV<any[]>('https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=32687697&single=true&output=csv&hl=id');
           if (data.length > 0) {
             let headerIndex = -1;
             for (let i = 0; i < Math.min(10, data.length); i++) {
@@ -336,7 +327,6 @@ export default function CekStock({ spreadsheetId, area }: Props) {
               }
             }
           }
-        }
       } catch (e) {
         console.error("Error loading Pengepokan Move Qty in CekStock:", e);
       }
@@ -1273,3 +1263,5 @@ export default function CekStock({ spreadsheetId, area }: Props) {
     </div>
   );
 }
+
+export default memo(CekStock);

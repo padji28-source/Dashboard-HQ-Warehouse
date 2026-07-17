@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { fetchAndParseCSV } from "../lib/csvCache";
+import { useEffect, useState, useMemo, useCallback , memo} from "react";
 import { 
   Loader2, 
   AlertTriangle, 
@@ -14,10 +15,8 @@ import {
   MapPin,
   ListFilter
 } from "lucide-react";
-import Papa from "papaparse";
 import { fetchSheetData, fetchCombinedProducts } from "../lib/sheets";
 import { AREA_URLS } from "../App";
-import * as XLSX from "xlsx";
 
 interface Props {
   spreadsheetId: string;
@@ -48,7 +47,7 @@ interface DoiMpRow {
   hasPidLocator: boolean;
 }
 
-export default function DoiMp({ spreadsheetId, area, activeUsername, userRole }: Props) {
+function DoiMp({ spreadsheetId, area, activeUsername, userRole }: Props) {
   const [allTransactions, setAllTransactions] = useState<MappedTransaction[]>([]);
   const [productsMap, setProductsMap] = useState<Map<string, { nama: string; rph?: number }>>(new Map());
   const [pengepokanMap, setPengepokanMap] = useState<Map<string, number>>(new Map());
@@ -218,12 +217,7 @@ export default function DoiMp({ spreadsheetId, area, activeUsername, userRole }:
       // Fetch Pengepokan Move Qty
       const penMap = new Map<string, number>();
       try {
-        const pokUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=32687697&single=true&output=csv&hl=id';
-        const pokRes = await fetch(pokUrl);
-        if (pokRes.ok) {
-          const csvText = await pokRes.text();
-          const parsedPok = Papa.parse<any[]>(csvText, { skipEmptyLines: true });
-          const pokData = parsedPok.data || [];
+        const pokData = await fetchAndParseCSV<any[]>('https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=32687697&single=true&output=csv&hl=id');
           if (pokData.length > 0) {
             let headerIdx = 0;
             for (let i = 0; i < Math.min(10, pokData.length); i++) {
@@ -254,7 +248,6 @@ export default function DoiMp({ spreadsheetId, area, activeUsername, userRole }:
                 }
               }
             }
-          }
         }
       } catch (e) {
         console.error("Error loading Pengepokan Move Qty in DoiMp:", e);
@@ -457,7 +450,8 @@ export default function DoiMp({ spreadsheetId, area, activeUsername, userRole }:
   }, [search, selectedArea, selectedSource, selectedDoiStatus]);
 
   // Export to Excel handler
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx");
     try {
       const dataToExport = filteredAndAnalyzedData.map((s) => {
         const rph = s.rph;
@@ -971,3 +965,5 @@ export default function DoiMp({ spreadsheetId, area, activeUsername, userRole }:
     </div>
   );
 }
+
+export default memo(DoiMp);

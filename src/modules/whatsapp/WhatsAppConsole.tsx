@@ -1,3 +1,4 @@
+import { memo } from "react";
 import React, { useState, useEffect, useRef, type FormEvent } from 'react';
 import { Bot, Send, MessageSquare, ShieldAlert, History, AlertTriangle, ArrowRight, HelpCircle, CheckCheck, Landmark, Loader2 } from 'lucide-react';
 import { CONFIG } from '../../config';
@@ -13,7 +14,7 @@ interface WhatsAppConsoleProps {
   area: string;
 }
 
-export default function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppConsoleProps) {
+function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppConsoleProps) {
   const [stockSummary, setStockSummary] = useState<StockSummary[]>(initialStockSummary || []);
   const [loading, setLoading] = useState(!initialStockSummary || initialStockSummary.length === 0);
   const [messages, setMessages] = useState<Array<{
@@ -533,3 +534,5 @@ export default function WhatsAppConsole({ stockSummary: initialStockSummary, are
     </div>
   );
 }
+
+export default memo(WhatsAppConsole);

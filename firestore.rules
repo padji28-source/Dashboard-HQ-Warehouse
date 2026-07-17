@@ -5,6 +5,10 @@ service cloud.firestore {
     match /saved_reconciliations/{id} {
       allow read, write: if true;
     }
+
+    match /saved_accuracy/{id} {
+      allow read, write: if true;
+    }
     
     // Default fallback deny
     match /{document=**} {

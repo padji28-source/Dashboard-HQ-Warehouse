@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, memo } from 'react';
 import { fetchSheetData, appendSheetRow, updateSheetRow } from '../../lib/sheets';
 import { Loader2, Plus, Search } from 'lucide-react';
 
@@ -11,7 +11,7 @@ interface LocalLocator {
   area: string;
 }
 
-export default function MasterLocator({ 
+function MasterLocator({ 
   spreadsheetId, 
   isReadOnly = false, 
   activeUsername = '', 
@@ -367,3 +367,5 @@ export default function MasterLocator({
     </div>
   );
 }
+
+export default memo(MasterLocator);

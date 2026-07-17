@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, memo } from 'react';
 import { fetchCombinedProducts, saveProductOverride, CombinedProduct } from '../../lib/sheets';
 import { Loader2, Plus, Search } from 'lucide-react';
 
@@ -16,7 +16,7 @@ const RPH_AREAS = [
   "Medan", "Pekanbaru", "Pontianak", "Banjarmasin", "Makassar"
 ];
 
-export default function MasterProduk({ 
+function MasterProduk({ 
   spreadsheetId, 
   area, 
   isReadOnly = false, 
@@ -437,3 +437,5 @@ export default function MasterProduk({
     </div>
   );
 }
+
+export default memo(MasterProduk);

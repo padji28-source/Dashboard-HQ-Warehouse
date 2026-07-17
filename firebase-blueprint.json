@@ -40,12 +40,68 @@
         }
       },
       "required": ["id", "name", "type", "date", "timestamp", "items"]
+    },
+    "SavedAccuracy": {
+      "title": "Saved Accuracy",
+      "description": "A saved historical record of daily stock accuracy across all areas",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the saved accuracy record"
+        },
+        "name": {
+          "type": "string",
+          "description": "A custom label/name for the saved accuracy session"
+        },
+        "reconType": {
+          "type": "string",
+          "description": "Reconciliation type (daily or monthly)"
+        },
+        "date": {
+          "type": "string",
+          "description": "The date or period of this accuracy check"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Unix millisecond timestamp when saved"
+        },
+        "totalSku": {
+          "type": "number",
+          "description": "Total SKU count across all areas"
+        },
+        "totalSelisih": {
+          "type": "number",
+          "description": "Total discrepant SKU count across all areas"
+        },
+        "accuracyPercent": {
+          "type": "number",
+          "description": "Overall accuracy percentage"
+        },
+        "areaSummary": {
+          "type": "array",
+          "description": "Summary per area (AccuracySummary[])"
+        },
+        "discrepancyList": {
+          "type": "array",
+          "description": "Detailed list of discrepant items (DiscrepancyItem[])"
+        },
+        "allStockItems": {
+          "type": "array",
+          "description": "Full list of compiled stock items for category filtering"
+        }
+      },
+      "required": ["id", "name", "reconType", "date", "timestamp", "totalSku", "totalSelisih", "accuracyPercent", "areaSummary", "discrepancyList", "allStockItems"]
     }
   },
   "firestore": {
     "saved_reconciliations/{reconciliationId}": {
       "schema": "SavedReconciliation",
       "description": "Collection storing historical locked stock reconciliation records"
+    },
+    "saved_accuracy/{accuracyId}": {
+      "schema": "SavedAccuracy",
+      "description": "Collection storing historical daily/monthly stock accuracy metrics records"
     }
   }
 }

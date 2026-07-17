@@ -1,19 +1,20 @@
-import { useState } from 'react';
-import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye, TrendingUp } from 'lucide-react';
-import MasterProduk from './MasterProduk';
-import MasterLocator from './MasterLocator';
-import TransactionInput from './TransactionInput';
-import StockOverview from './StockOverview';
-import PencocokanData from './PencocokanData';
-import MtsData from './MtsData';
-import WhatsAppConsole from '../modules/whatsapp/WhatsAppConsole';
-import AkurasiStock from './AkurasiStock';
-import Pengepokan from './Pengepokan';
-import CekStock from './CekStock';
-import DoiMp from './DoiMp';
+import { useState, lazy, Suspense, memo } from 'react';
+import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye, TrendingUp, Loader2 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AREAS } from '../App';
+
+const MasterProduk = lazy(() => import('./MasterProduk'));
+const MasterLocator = lazy(() => import('./MasterLocator'));
+const TransactionInput = lazy(() => import('./TransactionInput'));
+const StockOverview = lazy(() => import('./StockOverview'));
+const PencocokanData = lazy(() => import('./PencocokanData'));
+const MtsData = lazy(() => import('./MtsData'));
+const WhatsAppConsole = lazy(() => import('../modules/whatsapp/WhatsAppConsole'));
+const AkurasiStock = lazy(() => import('./AkurasiStock'));
+const Pengepokan = lazy(() => import('./Pengepokan'));
+const CekStock = lazy(() => import('./CekStock'));
+const DoiMp = lazy(() => import('./DoiMp'));
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -29,9 +30,11 @@ interface Props {
   activeUsername?: string;
 }
 
-export default function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange, isReadOnly = false, activeUsername = '' }: Props) {
+const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange, isReadOnly = false, activeUsername = '' }: Props) {
   const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'doi_mp'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['stock']));
+  const handleTabChange = (tab: any) => { setActiveTab(tab); setVisitedTabs(prev => new Set(prev).add(tab)); };
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
 
   const isSuperAdmin = userRole === 'ALL' || (activeUsername || '').toLowerCase() === 'admin';
@@ -162,7 +165,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
             {mainTabs.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id as any); setSidebarOpen(false); }}
+                onClick={() => { handleTabChange(tab.id as any); }}
                 className={cn(
                   "w-full flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg transition-all duration-200",
                   safeActiveTab === tab.id 
@@ -178,7 +181,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
             {((area === 'HQ' || area === 'All Cabang') && !isReadOnly) ? (
               <div className="mt-4 pt-4 border-t border-slate-800">
                 <button
-                  onClick={() => { setActiveTab('mts'); setSidebarOpen(false); }}
+                  onClick={() => { handleTabChange('mts'); }}
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg transition-all duration-200",
                     safeActiveTab === 'mts' 
@@ -208,7 +211,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
                     {pergerakanTabs.map(tab => (
                       <button
                         key={tab.id}
-                        onClick={() => { setActiveTab(tab.id as any); setSidebarOpen(false); }}
+                        onClick={() => { handleTabChange(tab.id as any); }}
                         className={cn(
                           "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
                           safeActiveTab === tab.id 
@@ -231,7 +234,7 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
                 {masterTabs.map(tab => (
                   <button
                     key={tab.id}
-                    onClick={() => { setActiveTab(tab.id as any); setSidebarOpen(false); }}
+                    onClick={() => { handleTabChange(tab.id as any); }}
                     className={cn(
                       "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
                       safeActiveTab === tab.id 
@@ -284,62 +287,118 @@ export default function Dashboard({ spreadsheetId, area, onLogout, userRole = ''
       <main className="flex-1 w-full max-w-full min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         <div className="w-full">
           <div className={cn(safeActiveTab !== 'stock' && 'hidden')}>
-            <StockOverview spreadsheetId={spreadsheetId} area={area} onNavigateToTab={setActiveTab as any} />
+            {visitedTabs.has('stock') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                <StockOverview spreadsheetId={spreadsheetId} area={area} onNavigateToTab={handleTabChange as any} />
+              </Suspense>
+            )}
           </div>
           <div className={cn(safeActiveTab !== 'cek_stock' && 'hidden')}>
-            <CekStock spreadsheetId={spreadsheetId} area={area} />
+            {visitedTabs.has('cek_stock') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                <CekStock spreadsheetId={spreadsheetId} area={area} />
+              </Suspense>
+            )}
           </div>
           <div className={cn(safeActiveTab !== 'doi_mp' && 'hidden')}>
-            <DoiMp spreadsheetId={spreadsheetId} area={area} activeUsername={activeUsername} userRole={userRole} />
+            {visitedTabs.has('doi_mp') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                <DoiMp spreadsheetId={spreadsheetId} area={area} activeUsername={activeUsername} userRole={userRole} />
+              </Suspense>
+            )}
           </div>
           <div className={cn(safeActiveTab !== 'pencocokan' && 'hidden')}>
-            <PencocokanData spreadsheetId={spreadsheetId} area={area} />
+            {visitedTabs.has('pencocokan') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                <PencocokanData spreadsheetId={spreadsheetId} area={area} />
+              </Suspense>
+            )}
           </div>
           <div className={cn(safeActiveTab !== 'akurasi' && 'hidden')}>
-            <AkurasiStock />
+            {visitedTabs.has('akurasi') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                <AkurasiStock />
+              </Suspense>
+            )}
           </div>
           <div className={cn(safeActiveTab !== 'pengepokan' && 'hidden')}>
-            <Pengepokan />
+            {visitedTabs.has('pengepokan') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                <Pengepokan />
+              </Suspense>
+            )}
           </div>
           <div className={cn(safeActiveTab !== 'mts' && 'hidden')}>
-            <MtsData />
+            {visitedTabs.has('mts') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                <MtsData />
+              </Suspense>
+            )}
           </div>
           <div className={cn(safeActiveTab !== 'input' && 'hidden')}>
-            {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Accessories" /> : (
+            {visitedTabs.has('input') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Accessories" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
+            )}
+              </Suspense>
             )}
           </div>
           <div className={cn(safeActiveTab !== 'input_rm' && 'hidden')}>
-            {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Raw Material" /> : (
+            {visitedTabs.has('input_rm') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Raw Material" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
+            )}
+              </Suspense>
             )}
           </div>
           <div className={cn(safeActiveTab !== 'input_mfg' && 'hidden')}>
-            {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Manufacturing" /> : (
+            {visitedTabs.has('input_mfg') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Manufacturing" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
+            )}
+              </Suspense>
             )}
           </div>
           <div className={cn(safeActiveTab !== 'input_supplies' && 'hidden')}>
-            {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Supplies & GA" /> : (
+            {visitedTabs.has('input_supplies') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Supplies & GA" /> : (
               <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
+            )}
+              </Suspense>
             )}
           </div>
           <div className={cn(safeActiveTab !== 'produk' && 'hidden')}>
-            <MasterProduk spreadsheetId={spreadsheetId} area={area} isReadOnly={isReadOnly} activeUsername={activeUsername} userRole={userRole} />
+            {visitedTabs.has('produk') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                <MasterProduk spreadsheetId={spreadsheetId} area={area} isReadOnly={isReadOnly} activeUsername={activeUsername} userRole={userRole} />
+              </Suspense>
+            )}
           </div>
           <div className={cn(safeActiveTab !== 'locator' && 'hidden')}>
-            {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Master Locator" /> : (
+            {visitedTabs.has('locator') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Master Locator" /> : (
               <MasterLocator spreadsheetId={spreadsheetId} isReadOnly={isReadOnly} activeUsername={activeUsername} userRole={userRole} />
+            )}
+              </Suspense>
             )}
           </div>
           <div className={cn(safeActiveTab !== 'whatsapp' && 'hidden')}>
-            <WhatsAppConsole area={area} />
+            {visitedTabs.has('whatsapp') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                <WhatsAppConsole area={area} />
+              </Suspense>
+            )}
           </div>
         </div>
       </main>
     </div>
   );
-}
+});
 
 function HQReadOnlyPlaceholder({ title }: { title: string }) {
   return (
@@ -355,4 +414,6 @@ function HQReadOnlyPlaceholder({ title }: { title: string }) {
     </div>
   );
 }
+
+export default Dashboard;
 

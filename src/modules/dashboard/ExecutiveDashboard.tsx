@@ -1,9 +1,87 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, memo, ComponentType } from 'react';
 import type { StockSummary } from '../../shared/types';
 import { CONFIG } from '../../config';
 import { cn, formatNumber } from '../../shared/utils';
 import { Calendar, Package, MapPin, Layers, TrendingUp, TrendingDown, AlertTriangle, RefreshCw, FileText, Bot, Clock, ShieldAlert } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+
+interface DashboardCardProps {
+  title: string;
+  value: string | number;
+  icon: ComponentType<{ className?: string }>;
+  iconBgClass?: string;
+  hoverBorderClass?: string;
+  onClick?: () => void;
+  onClickLabel?: string;
+  footerText?: string;
+  className?: string;
+}
+
+const DashboardCard = memo(function DashboardCard({
+  title,
+  value,
+  icon: Icon,
+  iconBgClass = "bg-blue-50 text-blue-600",
+  hoverBorderClass = "hover:border-blue-200",
+  onClick,
+  onClickLabel,
+  footerText,
+  className
+}: DashboardCardProps) {
+  return (
+    <div className={cn("bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between transition-colors group", hoverBorderClass, className)}>
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{title}</p>
+          <h3 className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{value}</h3>
+        </div>
+        <div className={cn("p-2.5 rounded-xl group-hover:scale-110 transition-transform", iconBgClass)}>
+          <Icon className="w-5 h-5" />
+        </div>
+      </div>
+      {onClick && onClickLabel ? (
+        <button onClick={onClick} className="text-left text-xs font-bold mt-3 flex items-center gap-1 text-slate-600 hover:text-slate-900 transition-colors">
+          {onClickLabel} &rarr;
+        </button>
+      ) : footerText ? (
+        <span className="text-xs font-medium text-slate-500 mt-3">
+          {footerText}
+        </span>
+      ) : (
+        <div className="mt-3 h-4" />
+      )}
+    </div>
+  );
+});
+
+interface StockDistributionChartProps {
+  chartData: any[];
+}
+
+const StockDistributionChart = memo(function StockDistributionChart({ chartData }: StockDistributionChartProps) {
+  return (
+    <div className="h-80 w-full">
+      {chartData.length > 0 ? (
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+            <Tooltip 
+              contentStyle={{ borderRadius: '12px', borderColor: '#e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              labelStyle={{ fontWeight: 'bold', color: '#0f172a' }}
+            />
+            <Bar dataKey="stock" fill="#3b82f6" name="Stok Rill" radius={[6, 6, 0, 0]} barSize={24} />
+          </BarChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="h-full flex items-center justify-center text-slate-400 italic text-sm">
+          Tidak ada data stok rill positif untuk disajikan dalam grafik.
+        </div>
+      )}
+    </div>
+  );
+});
 
 interface ExecutiveDashboardProps {
   stockSummary: StockSummary[];
@@ -14,7 +92,7 @@ interface ExecutiveDashboardProps {
   onNavigateToTab: (tabId: string) => void;
 }
 
-export default function ExecutiveDashboard({
+const ExecutiveDashboard = memo(function ExecutiveDashboard({
   stockSummary,
   allTransactions,
   area,
@@ -23,7 +101,7 @@ export default function ExecutiveDashboard({
   onNavigateToTab
 }: ExecutiveDashboardProps) {
 
-  // 1. Calculate aggregated summary metrics
+  // Calculate aggregated summary metrics
   const stats = useMemo(() => {
     // Total unique SKUs/combinations (matching PencocokanData)
     const uniqueProducts = stockSummary.length;
@@ -46,8 +124,6 @@ export default function ExecutiveDashboard({
     const discrepancyItems = stockSummary.filter(item => Math.abs(item.selisih || 0) >= 0.001);
 
     // Stale/unmoved products: Active products that have no transactions today
-    // Let's count items with transactions <= 0 or very old. Since allTransactions is active,
-    // let's count products in productsMap that have stock but zero transactions in this period
     const unmovedItems = stockSummary.filter(item => item.totalIn === 0 && item.totalOut === 0);
 
     return {
@@ -57,7 +133,7 @@ export default function ExecutiveDashboard({
       totalIn,
       totalOut,
       lowStockCount: discrepancyItems.length,
-      lowStockList: discrepancyItems, // show all items instead of slice(0, 5)
+      lowStockList: discrepancyItems,
       unmovedCount: unmovedItems.length
     };
   }, [stockSummary]);
@@ -73,7 +149,7 @@ export default function ExecutiveDashboard({
     return withTrans.sort((a, b) => b.totalTrans - a.totalTrans).slice(0, 3);
   }, [stockSummary]);
 
-  // 2. Extract recent activities for Today or current period
+  // Extract recent activities for Today or current period
   const recentActivities = useMemo(() => {
     return allTransactions
       .slice(0, 8) // Show top 8 recent transactions
@@ -89,7 +165,7 @@ export default function ExecutiveDashboard({
       }));
   }, [allTransactions]);
 
-  // 3. Top Stock Distribution Chart data
+  // Top Stock Distribution Chart data
   const chartData = useMemo(() => {
     return stockSummary
       .filter(item => item.stock > 0)
@@ -128,78 +204,48 @@ export default function ExecutiveDashboard({
       {/* Main KPI Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI: Total Produk */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between hover:border-blue-200 transition-colors group">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total SKU / Kombinasi</p>
-              <h3 className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{formatNumber(stats.uniqueProducts)}</h3>
-            </div>
-            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl group-hover:scale-110 transition-transform">
-              <Package className="w-5 h-5" />
-            </div>
-          </div>
-          <button onClick={() => onNavigateToTab('produk')} className="text-left text-xs font-bold text-blue-600 hover:text-blue-700 mt-3 flex items-center gap-1">
-            Lihat daftar produk &rarr;
-          </button>
-        </div>
+        <DashboardCard
+          title="Total SKU / Kombinasi"
+          value={formatNumber(stats.uniqueProducts)}
+          icon={Package}
+          iconBgClass="bg-blue-50 text-blue-600"
+          hoverBorderClass="hover:border-blue-200"
+          onClick={() => onNavigateToTab('produk')}
+          onClickLabel="Lihat daftar produk"
+        />
 
         {/* KPI: Total Locator */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between hover:border-indigo-200 transition-colors group">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Locator</p>
-              <h3 className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{formatNumber(stats.uniqueLocators)}</h3>
-            </div>
-            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl group-hover:scale-110 transition-transform">
-              <MapPin className="w-5 h-5" />
-            </div>
-          </div>
-          <button onClick={() => onNavigateToTab('locator')} className="text-left text-xs font-bold text-indigo-600 hover:text-indigo-700 mt-3 flex items-center gap-1">
-            Petakan tata ruang &rarr;
-          </button>
-        </div>
+        <DashboardCard
+          title="Total Locator"
+          value={formatNumber(stats.uniqueLocators)}
+          icon={MapPin}
+          iconBgClass="bg-indigo-50 text-indigo-600"
+          hoverBorderClass="hover:border-indigo-200"
+          onClick={() => onNavigateToTab('locator')}
+          onClickLabel="Petakan tata ruang"
+        />
 
         {/* KPI: Total Stok */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between hover:border-emerald-200 transition-colors group">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Stok Akumulatif {area === 'ALL' ? 'Semua Area' : area}</p>
-              <h3 className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{formatNumber(stats.totalStock)}</h3>
-            </div>
-            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl group-hover:scale-110 transition-transform">
-              <Layers className="w-5 h-5" />
-            </div>
-          </div>
-          <button onClick={() => onNavigateToTab('stock')} className="text-left text-xs font-bold text-emerald-600 hover:text-emerald-700 mt-3 flex items-center gap-1">
-            Lihat rincian saldo &rarr;
-          </button>
-        </div>
+        <DashboardCard
+          title={`Stok Akumulatif ${area === 'ALL' ? 'Semua Area' : area}`}
+          value={formatNumber(stats.totalStock)}
+          icon={Layers}
+          iconBgClass="bg-emerald-50 text-emerald-650"
+          hoverBorderClass="hover:border-emerald-200"
+          onClick={() => onNavigateToTab('stock')}
+          onClickLabel="Lihat rincian saldo"
+        />
 
         {/* KPI: Stok Minimum Alert */}
-        <div className={cn(
-          "p-5 rounded-2xl border shadow-sm flex flex-col justify-between transition-colors group",
-          stats.lowStockCount > 0 
-            ? "bg-rose-50 border-rose-100 text-rose-950 hover:bg-rose-100/50" 
-            : "bg-white border-slate-200 hover:border-emerald-100"
-        )}>
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Selisih Stock {area === 'ALL' ? 'Semua Area' : area}</p>
-              <h3 className={cn("text-2xl font-black mt-1 tracking-tight", stats.lowStockCount > 0 ? "text-rose-600" : "text-emerald-600")}>
-                {stats.lowStockCount > 0 ? `${stats.lowStockCount} Selisih` : "0 Selisih"}
-              </h3>
-            </div>
-            <div className={cn(
-              "p-2.5 rounded-xl group-hover:scale-110 transition-transform",
-              stats.lowStockCount > 0 ? "bg-rose-100 text-rose-650 animate-pulse" : "bg-emerald-50 text-emerald-600"
-            )}>
-              <ShieldAlert className="w-5 h-5" />
-            </div>
-          </div>
-          <span className="text-xs font-medium text-slate-500 mt-3">
-            {stats.lowStockCount > 0 ? `Terdapat perbedaan qty fisik vs sistem` : `Fisik & Sistem telah selaras`}
-          </span>
-        </div>
+        <DashboardCard
+          title={`Selisih Stock ${area === 'ALL' ? 'Semua Area' : area}`}
+          value={stats.lowStockCount > 0 ? `${stats.lowStockCount} Selisih` : "0 Selisih"}
+          icon={ShieldAlert}
+          iconBgClass={stats.lowStockCount > 0 ? "bg-rose-100 text-rose-650 animate-pulse" : "bg-emerald-50 text-emerald-600"}
+          hoverBorderClass={stats.lowStockCount > 0 ? "hover:border-rose-300" : "hover:border-emerald-100"}
+          className={stats.lowStockCount > 0 ? "bg-rose-50 border-rose-100 text-rose-950" : ""}
+          footerText={stats.lowStockCount > 0 ? "Terdapat perbedaan qty fisik vs sistem" : "Fisik & Sistem telah selaras"}
+        />
       </div>
 
       {/* Primary Row: Chart & Activity Feed */}
@@ -213,26 +259,7 @@ export default function ExecutiveDashboard({
             </div>
           </div>
 
-          <div className="h-80 w-full">
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '12px', borderColor: '#e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    labelStyle={{ fontWeight: 'bold', color: '#0f172a' }}
-                  />
-                  <Bar dataKey="stock" fill="#3b82f6" name="Stok Rill" radius={[6, 6, 0, 0]} barSize={24} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-slate-400 italic text-sm">
-                Tidak ada data stok rill positif untuk disajikan dalam grafik.
-              </div>
-            )}
-          </div>
+          <StockDistributionChart chartData={chartData} />
         </div>
 
         {/* Recent Transactions Stream Feed */}
@@ -391,4 +418,6 @@ export default function ExecutiveDashboard({
       </div>
     </div>
   );
-}
+});
+
+export default ExecutiveDashboard;

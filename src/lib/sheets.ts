@@ -1,3 +1,4 @@
+import { fetchAndParseCSV } from "./csvCache";
 /**
  * GOOGLE APPS SCRIPT CODE TO DEPLOY:
  * 
@@ -80,7 +81,6 @@ function doPost(e) {
  * 8. Click Deploy and copy the Web App URL.
  */
 
-import Papa from 'papaparse';
 import { db } from './firebase';
 import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
 
@@ -173,13 +173,7 @@ export async function fetchPublicMasterProduk(forceFresh = false): Promise<Publi
   }
 
   const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=1657911583&single=true&output=csv&t=${Date.now()}`;
-  const res = await fetch(csvUrl);
-  if (!res.ok) {
-    throw new Error("Gagal mengambil data Master Produk dari Google Sheets.");
-  }
-  const csvText = await res.text();
-  const parsed = Papa.parse<any[]>(csvText, { skipEmptyLines: true });
-  const data = parsed.data || [];
+  const data = await fetchAndParseCSV<any[]>(csvUrl, forceFresh);
 
   if (data.length === 0) return [];
 
