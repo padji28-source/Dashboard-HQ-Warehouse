@@ -1,7 +1,7 @@
 import { useMemo, memo, ComponentType } from 'react';
 import type { StockSummary } from '../../shared/types';
 import { cn, formatNumber } from '../../shared/utils';
-import { Package, MapPin, Layers, TrendingUp, TrendingDown, AlertTriangle, RefreshCw, Clock, ShieldAlert, ChevronRight, Activity } from 'lucide-react';
+import { Package, MapPin, Layers, TrendingUp, TrendingDown, AlertCircle, RefreshCw, Clock, ShieldAlert, ChevronRight, Activity } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'motion/react';
 
@@ -384,7 +384,7 @@ const ExecutiveDashboard = memo(function ExecutiveDashboard({
                 <div key={index} className="flex items-center justify-between p-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-2xl transition-all group">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 shadow-sm flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                      <AlertTriangle className="w-5 h-5 text-rose-500" />
+                      <AlertCircle className="w-5 h-5 text-rose-500" />
                     </div>
                     <div>
                       <p className="text-sm font-black text-slate-800 leading-tight">{item.namaProduk}</p>
@@ -402,7 +402,7 @@ const ExecutiveDashboard = memo(function ExecutiveDashboard({
             ) : (
               <div className="flex flex-col items-center justify-center py-12 space-y-4">
                 <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center shadow-inner">
-                  <AlertTriangle className="w-8 h-8 text-emerald-400 opacity-30" />
+                  <AlertCircle className="w-8 h-8 text-emerald-400 opacity-30" />
                 </div>
                 <p className="text-xs font-black text-slate-300 uppercase tracking-widest italic">All inventory in sync</p>
               </div>

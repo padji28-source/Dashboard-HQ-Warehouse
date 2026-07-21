@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import Dashboard from './components/Dashboard';
-import { Loader2, ShieldCheck, Lock, User, MapPin, Eye, EyeOff, Info, HelpCircle, ChevronDown, ChevronUp, ArrowRight, AlertTriangle } from 'lucide-react';
+import { Loader2, ShieldCheck as ShieldCheckIcon, Lock as LockIcon, User as UserIcon, MapPin as MapPinIcon, Eye as EyeIcon, EyeOff as EyeOffIcon, Info as InfoIcon, HelpCircle as HelpCircleIcon, ChevronDown, ChevronUp, ArrowRight, AlertCircle as AlertCircleIcon } from 'lucide-react';
 import { db } from './lib/firebase';
 import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
@@ -197,7 +197,7 @@ export default function App() {
                 transition={{ delay: 0.2, duration: 0.5 }}
                 className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-500/20"
               >
-                <ShieldCheck className="w-8 h-8" />
+                <ShieldCheckIcon className="w-8 h-8" />
               </motion.div>
               <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-2 leading-tight">
                 WH Dashboard
@@ -216,7 +216,7 @@ export default function App() {
                     exit={{ opacity: 0, height: 0 }}
                     className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-800 text-xs font-bold flex items-center gap-3"
                   >
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <AlertCircleIcon className="w-4 h-4 shrink-0" />
                     <span>{loginError}</span>
                   </motion.div>
                 )}
@@ -227,7 +227,7 @@ export default function App() {
                   Username
                 </label>
                 <div className="relative group">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-blue-600" />
+                  <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-blue-600" />
                   <input 
                     type="text" 
                     placeholder="Enter username"
@@ -244,7 +244,7 @@ export default function App() {
                   Password
                 </label>
                 <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-blue-600" />
+                  <LockIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-blue-600" />
                   <input 
                     type={showPassword ? "text" : "password"} 
                     placeholder="••••••••"
@@ -258,7 +258,7 @@ export default function App() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 transition-colors"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -279,7 +279,7 @@ export default function App() {
                 onClick={() => setShowHelp(!showHelp)}
                 className="flex items-center gap-2 mx-auto text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors"
               >
-                <HelpCircle className="w-4 h-4" />
+                <HelpCircleIcon className="w-4 h-4" />
                 <span>{showHelp ? "Hide" : "Show"} Access Guide</span>
                 {showHelp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               </button>

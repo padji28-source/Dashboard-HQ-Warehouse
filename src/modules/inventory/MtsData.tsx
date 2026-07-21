@@ -24,10 +24,15 @@ function MtsData() {
       setLoading(true);
       setError(null);
       
-      const csvUrl = `/api/stock-summary?t=${Date.now()}`;
+      const gid = "263347272"; // Default Jakarta for general view
+      const proxyUrl = `/api/stock-summary?gid=${gid}`;
+      const fallbackUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=${gid}&single=true&output=csv`;
       
-      const data = await fetchAndParseCSV<string[]>('/api/stock-summary', false, 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv');
+      const data = await fetchAndParseCSV<string[]>(proxyUrl, false, fallbackUrl);
 
+      if (!data || data.length === 0) {
+        throw new Error("Data MTS kosong atau tidak dapat diakses.");
+      }
       let headerIndex = 0;
       for (let i = 0; i < Math.min(10, data.length); i++) {
         const nonEmpCount = data[i].filter(val => String(val).trim().length > 0).length;
@@ -84,7 +89,7 @@ function MtsData() {
     if (!search) return rows;
     const q = search.toLowerCase();
     return rows.filter(row => 
-      row.some(cell => String(cell).toLowerCase().includes(q))
+      row.some(cell => String(cell || '').toLowerCase().includes(q))
     );
   }, [rows, search]);
 

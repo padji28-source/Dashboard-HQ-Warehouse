@@ -54,7 +54,19 @@ function StockOverview({
   const loadMtsData = async () => {
     const mtsMapLocal = new Map<string, number>();
     try {
-        const dataMts = await fetchAndParseCSV<string[]>('/api/stock-summary', false, 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv');
+        const gidMap: Record<string, string> = {
+          'JAKARTA': '263347272',
+          'BANDUNG': '1113036495',
+          'SEMARANG': '1046187680',
+          'SURABAYA': '632551509'
+        };
+        const currentArea = (area || 'JAKARTA').toUpperCase();
+        const gid = gidMap[currentArea] || '263347272';
+        
+        const proxyUrl = `/api/stock-summary?gid=${gid}`;
+        const fallbackUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=${gid}&single=true&output=csv`;
+
+        const dataMts = await fetchAndParseCSV<string[]>(proxyUrl, false, fallbackUrl);
           
           if (dataMts.length > 0) {
             let headerIndex = 0;
@@ -109,7 +121,7 @@ function StockOverview({
   };
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
+    let intervalId: any;
     if (autoRefresh) {
       intervalId = setInterval(() => {
         refreshData(false);

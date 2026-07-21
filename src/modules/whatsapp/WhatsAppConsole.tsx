@@ -1,6 +1,6 @@
 import { memo } from "react";
 import React, { useState, useEffect, useRef, type FormEvent } from 'react';
-import { Bot, Send, MessageSquare, ShieldAlert, History, AlertTriangle, ArrowRight, HelpCircle, CheckCheck, Landmark, Loader2 } from 'lucide-react';
+import { Bot, Send, MessageSquare, ShieldAlert, History as HistoryIcon, AlertCircle, ArrowRight, HelpCircle, CheckCheck, Landmark, Loader2 } from 'lucide-react';
 import { CONFIG } from '../../config';
 import { cn, formatDate } from '../../shared/utils';
 import type { StockSummary } from '../../shared/types';

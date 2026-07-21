@@ -2,7 +2,7 @@ import { fetchAndParseCSV } from "../lib/csvCache";
 import { useEffect, useState, useMemo , memo} from "react";
 import { fetchSheetData, fetchCombinedProducts } from '../lib/sheets';
 import { AREA_URLS } from '../App';
-import { Loader2, AlertTriangle, RefreshCw, BarChart3, ArrowDownToLine, CheckCircle2, CircleAlert, Percent, Box, MapPin, Save, History, Trash2, Archive, X, CloudUpload } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, BarChart3, ArrowDownToLine, CheckCircle2, CircleAlert as CircleAlertIcon, Percent, Box, MapPin, Save, History as HistoryIcon, Trash2, Archive, X, CloudUpload } from 'lucide-react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -700,9 +700,9 @@ function AkurasiStock() {
     return allDiscrepancies.filter(item => {
       const matchArea = selectedAreaFilter === 'ALL' || item.area === selectedAreaFilter;
       const matchSearch = !tableSearch || 
-        item.namaBahan.toLowerCase().includes(tableSearch.toLowerCase()) ||
-        item.locator.toLowerCase().includes(tableSearch.toLowerCase()) ||
-        item.area.toLowerCase().includes(tableSearch.toLowerCase());
+        String(item.namaBahan || '').toLowerCase().includes(tableSearch.toLowerCase()) ||
+        String(item.locator || '').toLowerCase().includes(tableSearch.toLowerCase()) ||
+        String(item.area || '').toLowerCase().includes(tableSearch.toLowerCase());
       return matchArea && matchSearch;
     });
   }, [allDiscrepancies, selectedAreaFilter, tableSearch]);
@@ -799,7 +799,7 @@ function AkurasiStock() {
         <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm animate-fade-in">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-amber-100 rounded-lg text-amber-700">
-              <History className="w-5 h-5" />
+              <HistoryIcon className="w-5 h-5" />
             </div>
             <div>
               <p className="text-sm font-bold">
@@ -982,7 +982,7 @@ function AkurasiStock() {
             <span className="text-[10px] font-medium text-slate-400 mt-1 block">Memerlukan penyesuaian</span>
           </div>
           <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-xl flex items-center justify-center">
-            <AlertTriangle className="w-6 h-6" />
+            <AlertCircle className="w-6 h-6" />
           </div>
         </div>
       </div>
@@ -995,7 +995,7 @@ function AkurasiStock() {
         </div>
       ) : errorMsg ? (
         <div className="bg-rose-50 border border-rose-100 rounded-2xl p-6 text-center text-rose-800">
-          <CircleAlert className="w-10 h-10 mx-auto mb-3" />
+          <CircleAlertIcon className="w-10 h-10 mx-auto mb-3" />
           <p className="font-semibold">{errorMsg}</p>
           <button onClick={loadData} className="mt-3 px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-lg text-xs transition duration-200">
             Coba Lagi
@@ -1117,7 +1117,7 @@ function AkurasiStock() {
             <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-rose-500" />
+                  <AlertCircle className="w-5 h-5 text-rose-500" />
                   Rincian Penemuan SKU Selisih (Seluruh Cabang)
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">Ditemukan {allDiscrepancies.length} item dengan ketidaksesuaian jumlah stok fisik terhadap sistem utama.</p>
@@ -1341,7 +1341,7 @@ function AkurasiStock() {
                     </div>
 
                     <div className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
-                      <History className="w-3.5 h-3.5" />
+                      <HistoryIcon className="w-3.5 h-3.5" />
                       Disimpan: {savedDate}
                     </div>
 

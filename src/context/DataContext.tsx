@@ -13,6 +13,8 @@ interface Transaction {
   tanggal: string;
   source: string;
   uom: string;
+  noDocument?: string;
+  keterangan?: string;
 }
 
 interface DataContextType {
@@ -54,7 +56,7 @@ export function DataProvider({ children, spreadsheetId, area }: { children: Reac
       });
 
       const fetchArea = async (aName: string, aUrl: string) => {
-        const sheets = ["'INPUT'!A2:J", "'INPUT RM'!A2:J", "'INPUT MFG'!A2:J", "'INPUT SUPPLIES'!A2:J"];
+        const sheets = ["'INPUT'!A2:L", "'INPUT RM'!A2:L", "'INPUT MFG'!A2:L", "'INPUT SUPPLIES'!A2:L"];
         const names = ["INPUT", "INPUT RM", "INPUT MFG", "INPUT SUPPLIES"];
         
         const results = await Promise.all([
@@ -75,22 +77,24 @@ export function DataProvider({ children, spreadsheetId, area }: { children: Reac
           rows.forEach((r: any[]) => {
             if (!r[0] || !r[1] || r[1] === '#N/A') return;
             const pName = String(r[1] || '').trim();
-            let pCode = String(r[9] || '').trim();
+            let pCode = String(r[9] || r[10] || '').trim();
             if (!pCode || pCode === '#N/A') pCode = pName;
             
             const qty = parseFloat(String(r[2] || '0').replace(',', '.')) || 0;
             const tipe = String(r[4] || '').trim().toUpperCase();
             const tDate = String(r[0] || '').trim();
             const uom = String(r[3] || '').trim();
+            const noDoc = String(r[7] || '').trim();
+            const ket = String(r[8] || '').trim();
 
             if (tipe === 'TRANSFER' || tipe === 'TF') {
               const fromL = String(r[5] || '').trim();
               const toL = String(r[6] || '').trim();
-              if (fromL) allTx.push({ tipe: 'OUT', pCode, pName, lCode: fromL, qty, area: aName, tanggal: tDate, source: names[i], uom, toLocator: toL });
-              if (toL) allTx.push({ tipe: 'IN', pCode, pName, lCode: toL, qty, area: aName, tanggal: tDate, source: names[i], uom });
+              if (fromL) allTx.push({ tipe: 'OUT', pCode, pName, lCode: fromL, qty, area: aName, tanggal: tDate, source: names[i], uom, toLocator: toL, noDocument: noDoc, keterangan: ket });
+              if (toL) allTx.push({ tipe: 'IN', pCode, pName, lCode: toL, qty, area: aName, tanggal: tDate, source: names[i], uom, noDocument: noDoc, keterangan: ket });
             } else {
               const lCode = String(r[5] || r[6] || '').trim();
-              if (lCode) allTx.push({ tipe: tipe || 'IN', pCode, pName, lCode, qty, area: aName, tanggal: tDate, source: names[i], uom });
+              if (lCode) allTx.push({ tipe: tipe || 'IN', pCode, pName, lCode, qty, area: aName, tanggal: tDate, source: names[i], uom, noDocument: noDoc, keterangan: ket });
             }
           });
         }

@@ -1,16 +1,16 @@
 import { useState, lazy, Suspense, memo } from 'react';
-import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye, TrendingUp, Loader2 } from 'lucide-react';
+import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box as BoxIcon, Beaker as BeakerIcon, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye, TrendingUp, Loader2 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AREAS } from '../App';
 import { motion, AnimatePresence } from 'motion/react';
 
-const MasterProduk = lazy(() => import('./MasterProduk'));
-const MasterLocator = lazy(() => import('./MasterLocator'));
-const TransactionInput = lazy(() => import('./TransactionInput'));
-const StockOverview = lazy(() => import('./StockOverview'));
-const PencocokanData = lazy(() => import('./PencocokanData'));
-const MtsData = lazy(() => import('./MtsData'));
+const MasterProduk = lazy(() => import('../modules/products/MasterProduk'));
+const MasterLocator = lazy(() => import('../modules/locator/MasterLocator'));
+const TransactionInput = lazy(() => import('../modules/inventory/TransactionInput'));
+const StockOverview = lazy(() => import('../modules/inventory/StockOverview'));
+const PencocokanData = lazy(() => import('../modules/inventory/PencocokanData'));
+const MtsData = lazy(() => import('../modules/inventory/MtsData'));
 const WhatsAppConsole = lazy(() => import('../modules/whatsapp/WhatsAppConsole'));
 const AkurasiStock = lazy(() => import('./AkurasiStock'));
 const Pengepokan = lazy(() => import('./Pengepokan'));
@@ -63,14 +63,14 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
     ...(isAuthorizedForDoiMp ? [{ id: 'doi_mp', label: 'DOI MP', icon: TrendingUp }] : []),
     ...(!isReadOnly && isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
     ...(!isReadOnly && area === 'All Cabang' ? [{ id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 }] : []),
-    ...(isAuthorizedForPengepokan ? [{ id: 'pengepokan', label: 'Pengepokan', icon: Box }] : []),
+    ...(isAuthorizedForPengepokan ? [{ id: 'pengepokan', label: 'Pengepokan', icon: BoxIcon }] : []),
     ...(isSuperAdminOrHq ? [{ id: 'whatsapp', label: 'WhatsApp Bot', icon: MessageSquare }] : []),
   ] as const;
 
   const pergerakanTabs = [
     { id: 'input', label: 'Accessories', icon: ArrowRightLeft },
-    { id: 'input_rm', label: 'Raw Material', icon: Beaker },
-    { id: 'input_mfg', label: 'Manufacturing', icon: Box },
+    { id: 'input_rm', label: 'Raw Material', icon: BeakerIcon },
+    { id: 'input_mfg', label: 'Manufacturing', icon: BoxIcon },
     { id: 'input_supplies', label: 'Supplies & GA', icon: Package },
   ] as const;
 
@@ -126,7 +126,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
               </button>
               <div className="flex items-center gap-2">
                 <div className="w-9 h-9 bg-linear-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
-                   <Box className="w-5 h-5 text-white" />
+                   <BoxIcon className="w-5 h-5 text-white" />
                 </div>
                 <div className="hidden sm:block">
                   <h1 className="font-extrabold text-lg text-slate-900 tracking-tight leading-none">All Cabang WH</h1>
@@ -197,7 +197,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
         <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800 shrink-0 bg-slate-950/50">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-linear-to-tr from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
-               <Box className="w-5 h-5 text-white" />
+               <BoxIcon className="w-5 h-5 text-white" />
             </div>
              <span className="font-black text-base text-white tracking-tight uppercase">WH Dashboard</span>
           </div>
