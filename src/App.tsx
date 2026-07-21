@@ -1,9 +1,8 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import Dashboard from './components/Dashboard';
-import { Loader2, ShieldCheck as ShieldCheckIcon, Lock as LockIcon, User as UserIcon, MapPin as MapPinIcon, Eye as EyeIcon, EyeOff as EyeOffIcon, Info as InfoIcon, HelpCircle as HelpCircleIcon, ChevronDown, ChevronUp, ArrowRight, AlertCircle as AlertCircleIcon } from 'lucide-react';
+import { Loader2, ShieldCheck, Lock, User, MapPin, Eye, EyeOff, Info, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { db } from './lib/firebase';
 import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { motion, AnimatePresence } from 'motion/react';
 
 export const AREAS = [
   "All Cabang", "Jakarta", "Jakarta A5", "Karawang", "Semarang", "Surabaya", "Jember", 
@@ -36,6 +35,9 @@ export interface AdminAccount {
 
 export const ADMIN_ACCOUNTS: AdminAccount[] = [
   { username: 'admin', password: 'admin123', allowedArea: 'ALL', label: 'Super Admin (Semua Area)' },
+  { username: 'admina5', password: 'admina5123', allowedArea: 'ALL', label: 'Admin A5' },
+  { username: 'petugasa5', password: 'petugasa5123', allowedArea: 'ALL', label: 'Petugas A5' },
+  { username: 'helper', password: 'helper123', allowedArea: 'ALL', label: 'Helper' },
   { username: 'hq', password: 'hq123', allowedArea: 'All Cabang', label: 'Admin All Cabang (Pusat)' },
   { username: 'admin_hq', password: 'hq123', allowedArea: 'All Cabang', label: 'Admin All Cabang' },
   { username: 'mp', password: 'mp123', allowedArea: 'All Cabang', label: 'Material Planning (MP)', readonly: true },
@@ -178,146 +180,113 @@ export default function App() {
   // App Auth Flow (System level)
   if (!appAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        {/* Abstract Background Elements */}
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/10 rounded-full blur-[120px]" />
-        
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="max-w-md w-full relative z-10"
-        >
-          <div className="bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] border border-white/20 overflow-hidden p-8 sm:p-12">
-            <div className="text-center mb-10">
-              <motion.div 
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.2, duration: 0.5 }}
-                className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-500/20"
-              >
-                <ShieldCheckIcon className="w-8 h-8" />
-              </motion.div>
-              <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-2 leading-tight">
-                WH Dashboard
-              </h1>
-              <p className="text-slate-500 text-sm font-medium">
-                Warehouse Management System Multi-Area
-              </p>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden p-6 sm:p-8">
+          <div className="text-center mb-6">
+            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mx-auto mb-3 shadow-inner">
+              <ShieldCheck className="w-7 h-7" />
             </div>
-            
-            <form onSubmit={handleAppLogin} className="space-y-6">
-              <AnimatePresence mode="wait">
-                {loginError && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-800 text-xs font-bold flex items-center gap-3"
-                  >
-                    <AlertCircleIcon className="w-4 h-4 shrink-0" />
-                    <span>{loginError}</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 ml-1">
-                  Username
-                </label>
-                <div className="relative group">
-                  <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-blue-600" />
-                  <input 
-                    type="text" 
-                    placeholder="Enter username"
-                    value={appUsername}
-                    onChange={e => setAppUsername(e.target.value)}
-                    required
-                    className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold text-slate-900 placeholder:text-slate-300"
-                  />
-                </div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 mb-1">Dashboard All Cabang WH</h1>
+            <p className="text-slate-500 text-sm">Warehouse Management System Multi-Area</p>
+          </div>
+          
+          <form onSubmit={handleAppLogin} className="space-y-4">
+            {loginError && (
+              <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg text-rose-800 text-xs font-medium">
+                ⚠️ {loginError}
               </div>
+            )}
 
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 ml-1">
-                  Password
-                </label>
-                <div className="relative group">
-                  <LockIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-blue-600" />
-                  <input 
-                    type={showPassword ? "text" : "password"} 
-                    placeholder="••••••••"
-                    value={appPassword}
-                    onChange={e => setAppPassword(e.target.value)}
-                    required
-                    className="w-full pl-11 pr-12 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold text-slate-900 placeholder:text-slate-300 tracking-widest"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showPassword ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
-                  </button>
-                </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+                <User className="w-3.5 h-3.5 text-slate-400" />
+                Username
+              </label>
+              <input 
+                type="text" 
+                placeholder="Contoh: jakarta atau admin"
+                value={appUsername}
+                onChange={e => setAppUsername(e.target.value)}
+                required
+                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
+                Password
+              </label>
+              <div className="relative">
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  placeholder="Ketik password..."
+                  value={appPassword}
+                  onChange={e => setAppPassword(e.target.value)}
+                  required
+                  className="w-full pl-3.5 pr-10 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 font-medium font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 outline-none"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
+            </div>
 
-              <motion.button 
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                type="submit"
-                className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 active:bg-slate-950 transition-all shadow-[0_12px_24px_-8px_rgba(0,0,0,0.3)] text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2"
-              >
-                Sign In <ArrowRight className="w-4 h-4" />
-              </motion.button>
-            </form>
+            <button 
+              type="submit"
+              className="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-lg hover:bg-slate-800 active:bg-slate-950 transition-colors shadow-sm text-sm"
+            >
+              Sign In
+            </button>
+          </form>
 
-            <div className="mt-10 pt-8 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setShowHelp(!showHelp)}
-                className="flex items-center gap-2 mx-auto text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors"
-              >
-                <HelpCircleIcon className="w-4 h-4" />
-                <span>{showHelp ? "Hide" : "Show"} Access Guide</span>
-                {showHelp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
+          {/* Collapsible Helper Panel for easy testing & guidance */}
+          <div className="mt-6 pt-5 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowHelp(!showHelp)}
+              className="flex items-center gap-1.5 mx-auto text-xs text-blue-600 font-semibold hover:text-blue-700 focus:outline-none select-none transition-colors"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>{showHelp ? "Sembunyikan" : "Tampilkan"} Panduan Kredensial Admin</span>
+              {showHelp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
 
-              <AnimatePresence>
-                {showHelp && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="mt-6 bg-slate-50 rounded-2xl p-5 border border-slate-100 max-h-56 overflow-y-auto space-y-4 shadow-inner"
-                  >
-                    <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                      Registered Admin Accounts
-                    </div>
-                    <div className="space-y-3">
+            {showHelp && (
+              <div className="mt-4 bg-slate-50 border border-slate-150 rounded-lg p-3 text-xs max-h-48 overflow-y-auto space-y-2">
+                <div className="sticky top-0 bg-slate-50 pb-1 border-b border-slate-200 mb-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Akun Akses Terdaftar
+                </div>
+                <div className="space-y-1.5 font-medium text-slate-600">
+                  <div>
+                    <p className="text-slate-800 font-bold">Role Baru (Sesuai Tugas):</p>
+                    <ul className="ml-2 space-y-1 mb-2 list-disc list-inside text-[11px]">
+                      <li><strong>Admin A5</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">admina5</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">admina5123</code></li>
+                      <li><strong>Petugas A5</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">petugasa5</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">petugasa5123</code></li>
+                      <li><strong>Helper</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">helper</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">helper123</code></li>
+                    </ul>
+                    <p className="text-slate-800 font-bold">Admin Area Spesifik:</p>
+                    <p className="text-[10px] text-slate-400 ml-2 mb-1">Masing-masing admin dikunci ke areanya & tidak bisa mengakses area lain.</p>
+                    <ul className="ml-2 space-y-1 list-disc list-inside">
                       {AREAS.filter(ar => ar !== 'All Cabang').map(ar => {
                         const pass = ar.toLowerCase() === 'makassar' ? 'makassar111' : `${ar.toLowerCase()}123`;
                         return (
-                          <div key={ar} className="flex items-center justify-between gap-4 pb-2 border-b border-slate-100 last:border-0">
-                            <span className="text-[11px] font-bold text-slate-700">{ar}</span>
-                            <div className="flex gap-2">
-                              <code className="bg-white px-2 py-0.5 rounded text-[10px] font-black text-blue-600 border border-slate-100">{ar.toLowerCase()}</code>
-                              <code className="bg-white px-2 py-0.5 rounded text-[10px] font-black text-slate-400 border border-slate-100">{pass}</code>
-                            </div>
-                          </div>
+                          <li key={ar} className="text-[11px]">
+                            <strong>{ar}</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">{ar.toLowerCase()}</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">{pass}</code>
+                          </li>
                         );
                       })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <p className="mt-8 text-center text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] opacity-50">
-            Internal Operations System • v2.0
-          </p>
-        </motion.div>
+        </div>
       </div>
     );
   }

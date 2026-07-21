@@ -58,57 +58,49 @@ async function startServer() {
     }
   });
 
-  // Cache for CSV data per GID
-  const csvCache = new Map<string, { data: string, timestamp: number }>();
+  // Cache MTS data in memory for 10 minutes (600,000 ms)
+  let cachedMts: string | null = null;
+  let cacheTime = 0;
 
-  // API Route to proxy the MTS CSV (supports GID)
+  // API Route to proxy the MTS CSV
   app.get("/api/stock-summary", async (req, res) => {
     try {
-      const gid = (req.query.gid as string) || "263347272";
-      const forceRefresh = !!req.query.t;
       const now = Date.now();
-      
-      const cached = csvCache.get(gid);
-      if (!forceRefresh && cached && now - cached.timestamp < 600000) {
+      const forceRefresh = !!req.query.t;
+      if (!forceRefresh && cachedMts && now - cacheTime < 600000) {
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        return res.send(cached.data);
+        return res.send(cachedMts);
       }
 
-      console.log(`Fetching fresh CSV from Google Sheets (GID: ${gid})...`);
-      const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=${gid}&single=true&output=csv&hl=id`;
-      console.log(`CSV URL: ${csvUrl}`);
-      
+      console.log("Fetching fresh MTS CSV from Google Sheets...");
+      // Use hl=id to force Indonesian locale (DD/MM/YYYY) consistently regardless of server location
+      const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv&hl=id';
       const response = await fetch(csvUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
           "Accept": "text/csv,application/csv,text/plain,*/*",
           "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
-        },
-        redirect: 'follow'
+        }
       });
-
       if (!response.ok) {
-        console.error(`Google Sheets responded with ${response.status}: ${response.statusText}`);
         throw new Error(`Failed to fetch from Google Sheets: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.text();
-      console.log(`Successfully fetched CSV (${data.length} bytes)`);
-      csvCache.set(gid, { data, timestamp: now });
+      cachedMts = data;
+      cacheTime = now;
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.send(data);
     } catch (err: any) {
-      console.error("Error in /api/stock-summary proxy:", err);
-      
-      const gid = (req.query.gid as string) || "263347272";
-      const cached = csvCache.get(gid);
-      if (cached) {
-        console.log(`Serving expired cached CSV for GID ${gid} as fallback`);
+      console.error("Error in /api/mts proxy:", err);
+      // Fallback to expired cache if we have one
+      if (cachedMts) {
+        console.log("Serving expired cached MTS CSV as fallback");
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        return res.send(cached.data);
+        return res.send(cachedMts);
       }
-      res.status(500).json({ error: err.message || "Failed to fetch CSV" });
+      res.status(500).json({ error: err.message || "Failed to fetch MTS CSV" });
     }
   });
 

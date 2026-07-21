@@ -41,4 +41,5 @@ export interface StockSummary {
   selisih?: number;
   rph?: number;
   source?: string;
+  uom?: string;
 }

@@ -172,11 +172,8 @@ export async function fetchPublicMasterProduk(forceFresh = false): Promise<Publi
     return publicProductsCache;
   }
 
-  const gid = "1657911583";
-  const proxyUrl = `/api/stock-summary?gid=${gid}`;
-  const fallbackUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=${gid}&single=true&output=csv`;
-  
-  const data = await fetchAndParseCSV<any[]>(proxyUrl, forceFresh, fallbackUrl);
+  const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=1657911583&single=true&output=csv&t=${Date.now()}`;
+  const data = await fetchAndParseCSV<any[]>(csvUrl, forceFresh);
 
   if (data.length === 0) return [];
 
@@ -289,30 +286,6 @@ export function clearSheetCache() {
   }
 }
 
-// Concurrency control for fetchSheetData
-const CONCURRENCY_LIMIT = 3;
-let activeRequests = 0;
-const requestQueue: (() => void)[] = [];
-
-async function acquireLock() {
-  if (activeRequests < CONCURRENCY_LIMIT) {
-    activeRequests++;
-    return;
-  }
-  return new Promise<void>(resolve => {
-    requestQueue.push(resolve);
-  });
-}
-
-function releaseLock() {
-  activeRequests--;
-  if (requestQueue.length > 0) {
-    activeRequests++;
-    const next = requestQueue.shift()!;
-    next();
-  }
-}
-
 export async function fetchSheetData(gasUrl: string, range: string, forceFresh = false) {
   if (!gasUrl || gasUrl === 'HQ' || !gasUrl.startsWith('http')) {
     console.warn(`[fetchSheetData] Ignored fetch request for invalid gasUrl: "${gasUrl}"`);
@@ -326,10 +299,10 @@ export async function fetchSheetData(gasUrl: string, range: string, forceFresh =
     const cached = fetchCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
       console.log(`[Memory Cache Hit] Returning cached data for range: ${range}`);
-      return JSON.parse(JSON.stringify(cached.data)); 
+      return JSON.parse(JSON.stringify(cached.data)); // Return deep copy to prevent mutation
     }
 
-    // 2. Check sessionStorage Cache
+    // 2. Check sessionStorage Cache (if not forcing fresh)
     try {
       if (typeof window !== "undefined" && window.sessionStorage) {
         const stored = window.sessionStorage.getItem(storageKey);
@@ -337,6 +310,7 @@ export async function fetchSheetData(gasUrl: string, range: string, forceFresh =
           const parsed: CacheEntry = JSON.parse(stored);
           if (Date.now() - parsed.timestamp < CACHE_TTL) {
             console.log(`[Session Cache Hit] Returning cached data for range: ${range}`);
+            // Warm up in-memory cache
             fetchCache.set(cacheKey, parsed);
             return JSON.parse(JSON.stringify(parsed.data));
           }
@@ -347,7 +321,7 @@ export async function fetchSheetData(gasUrl: string, range: string, forceFresh =
     }
   }
 
-  // 3. Check if a request for this exact key is already in flight (Coalescing)
+  // 3. Check if a request for this exact key is already in flight (Coalescing / promise deduplication)
   if (inFlightRequests.has(cacheKey)) {
     console.log(`[Request Coalesced] Awaiting in-flight request for range: ${range}`);
     const inFlightPromise = inFlightRequests.get(cacheKey)!;
@@ -355,69 +329,68 @@ export async function fetchSheetData(gasUrl: string, range: string, forceFresh =
     return JSON.parse(JSON.stringify(data));
   }
 
-  // 4. Define the actual fetch operation (with automatic retries and concurrency control)
+  // 4. Define the actual fetch operation (with automatic retries)
   const fetchPromise = (async () => {
-    await acquireLock();
-    try {
-      let attempts = 0;
-      const maxAttempts = 3;
-      const baseDelay = 1000;
+    let attempts = 0;
+    const maxAttempts = 3;
+    const baseDelay = 1000; // 1 second base delay for backoff
 
-      while (attempts < maxAttempts) {
+    while (attempts < maxAttempts) {
+      try {
+        const url = `${gasUrl}?action=get&range=${encodeURIComponent(range)}&t=${Date.now()}`;
+        let data;
         try {
-          const url = `${gasUrl}?action=get&range=${encodeURIComponent(range)}&t=${Date.now()}`;
-          let data;
-          try {
-            const res = await fetch(url, { cache: 'no-store' });
-            if (!res.ok) {
-              throw new Error(`HTTP error! status: ${res.status}`);
-            }
-            data = await res.json();
-          } catch (fetchErr: any) {
-            if (typeof window !== 'undefined') {
-              const proxyRes = await fetch('/api/sheets', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ gasUrl, action: 'get', range })
-              });
-              if (!proxyRes.ok) throw fetchErr;
-              data = await proxyRes.json();
-            } else {
-              throw fetchErr;
-            }
+          const res = await fetch(url, { cache: 'no-store' });
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
           }
-
-          if (data && data.error) {
-            throw new Error(data.error);
+          data = await res.json();
+        } catch (fetchErr: any) {
+          if (typeof window !== 'undefined') {
+            const proxyRes = await fetch('/api/sheets', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ gasUrl, action: 'get', range })
+            });
+            if (!proxyRes.ok) throw fetchErr;
+            data = await proxyRes.json();
+          } else {
+            throw fetchErr;
           }
-
-          const values = data.values || [];
-          const cacheEntry: CacheEntry = { timestamp: Date.now(), data: values };
-          fetchCache.set(cacheKey, cacheEntry);
-
-          try {
-            if (typeof window !== "undefined" && window.sessionStorage) {
-              window.sessionStorage.setItem(storageKey, JSON.stringify(cacheEntry));
-            }
-          } catch (e) {
-            console.warn("sessionStorage save failed:", e);
-          }
-
-          return values;
-        } catch (error: any) {
-          attempts++;
-          console.warn(`[Fetch Effort ${attempts}/${maxAttempts}] for ${range} failed: ${error.message}`);
-          if (attempts >= maxAttempts) {
-            throw error;
-          }
-          const delay = baseDelay * Math.pow(2, attempts - 1) * (0.5 + Math.random());
-          await new Promise(resolve => setTimeout(resolve, delay));
         }
+
+        if (data && data.error) {
+          throw new Error(data.error);
+        }
+
+        const values = data.values || [];
+        
+        // Populate in-memory cache
+        const cacheEntry: CacheEntry = { timestamp: Date.now(), data: values };
+        fetchCache.set(cacheKey, cacheEntry);
+
+        // Populate sessionStorage cache
+        try {
+          if (typeof window !== "undefined" && window.sessionStorage) {
+            window.sessionStorage.setItem(storageKey, JSON.stringify(cacheEntry));
+          }
+        } catch (e) {
+          console.warn("sessionStorage save failed:", e);
+        }
+
+        return values;
+      } catch (error: any) {
+        attempts++;
+        console.warn(`[Fetch Effort ${attempts}/${maxAttempts}] for ${range} failed: ${error.message}`);
+        if (attempts >= maxAttempts) {
+          throw error;
+        }
+        // Exponential backoff delay with jitter
+        const delay = baseDelay * Math.pow(2, attempts - 1) * (0.5 + Math.random());
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-      return [];
-    } finally {
-      releaseLock();
     }
+    return [];
   })();
 
   // 5. Save to inFlightRequests map
@@ -427,6 +400,7 @@ export async function fetchSheetData(gasUrl: string, range: string, forceFresh =
     const data = await fetchPromise;
     return JSON.parse(JSON.stringify(data));
   } finally {
+    // 6. Always clean up in-flight request once it's done
     inFlightRequests.delete(cacheKey);
   }
 }

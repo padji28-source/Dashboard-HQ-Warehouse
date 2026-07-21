@@ -1,9 +1,9 @@
-import { useMemo, memo, ComponentType } from 'react';
+import { useMemo, useState, memo, ComponentType } from 'react';
 import type { StockSummary } from '../../shared/types';
+import { CONFIG } from '../../config';
 import { cn, formatNumber } from '../../shared/utils';
-import { Package, MapPin, Layers, TrendingUp, TrendingDown, AlertCircle, RefreshCw, Clock, ShieldAlert, ChevronRight, Activity } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { motion } from 'motion/react';
+import { Calendar, Package, MapPin, Layers, TrendingUp, TrendingDown, AlertTriangle, RefreshCw, FileText, Bot, Clock, ShieldAlert } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface DashboardCardProps {
   title: string;
@@ -15,7 +15,6 @@ interface DashboardCardProps {
   onClickLabel?: string;
   footerText?: string;
   className?: string;
-  delay?: number;
 }
 
 const DashboardCard = memo(function DashboardCard({
@@ -27,48 +26,31 @@ const DashboardCard = memo(function DashboardCard({
   onClick,
   onClickLabel,
   footerText,
-  className,
-  delay = 0
+  className
 }: DashboardCardProps) {
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay }}
-      className={cn(
-        "bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between transition-all duration-300 group hover:shadow-md", 
-        hoverBorderClass, 
-        className
-      )}
-    >
+    <div className={cn("bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between transition-colors group", hoverBorderClass, className)}>
       <div className="flex justify-between items-start">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{title}</p>
-          <h3 className="text-3xl font-black text-slate-900 tracking-tighter">{value}</h3>
+        <div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{title}</p>
+          <h3 className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{value}</h3>
         </div>
-        <div className={cn("p-3 rounded-2xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm", iconBgClass)}>
-          <Icon className="w-6 h-6" />
+        <div className={cn("p-2.5 rounded-xl group-hover:scale-110 transition-transform", iconBgClass)}>
+          <Icon className="w-5 h-5" />
         </div>
       </div>
-      
-      <div className="mt-6 flex items-center justify-between">
-        {onClick && onClickLabel ? (
-          <button 
-            onClick={onClick} 
-            className="text-[11px] font-bold flex items-center gap-1.5 text-slate-500 hover:text-blue-600 transition-colors group/btn"
-          >
-            {onClickLabel}
-            <ChevronRight className="w-3 h-3 group-hover/btn:translate-x-0.5 transition-transform" />
-          </button>
-        ) : footerText ? (
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-            {footerText}
-          </span>
-        ) : (
-          <div className="h-4" />
-        )}
-      </div>
-    </motion.div>
+      {onClick && onClickLabel ? (
+        <button onClick={onClick} className="text-left text-xs font-bold mt-3 flex items-center gap-1 text-slate-600 hover:text-slate-900 transition-colors">
+          {onClickLabel} &rarr;
+        </button>
+      ) : footerText ? (
+        <span className="text-xs font-medium text-slate-500 mt-3">
+          {footerText}
+        </span>
+      ) : (
+        <div className="mt-3 h-4" />
+      )}
+    </div>
   );
 });
 
@@ -78,47 +60,18 @@ interface StockDistributionChartProps {
 
 const StockDistributionChart = memo(function StockDistributionChart({ chartData }: StockDistributionChartProps) {
   return (
-    <div className="h-[320px] w-full mt-4">
+    <div className="h-80 w-full">
       {chartData.length > 0 ? (
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 20, right: 10, left: -20, bottom: 20 }}>
-            <defs>
-              <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
-                <stop offset="100%" stopColor="#2563eb" stopOpacity={0.8} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-            <XAxis 
-              dataKey="name" 
-              tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }} 
-              axisLine={false} 
-              tickLine={false}
-              dy={10}
-            />
-            <YAxis 
-              tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }} 
-              axisLine={false} 
-              tickLine={false} 
-            />
+          <BarChart data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
             <Tooltip 
-              cursor={{ fill: '#f8fafc' }}
-              contentStyle={{ 
-                borderRadius: '16px', 
-                border: 'none', 
-                boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                padding: '12px 16px'
-              }}
-              labelStyle={{ fontWeight: 800, color: '#0f172a', marginBottom: '4px', fontSize: '12px' }}
-              itemStyle={{ fontWeight: 600, fontSize: '12px' }}
+              contentStyle={{ borderRadius: '12px', borderColor: '#e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              labelStyle={{ fontWeight: 'bold', color: '#0f172a' }}
             />
-            <Bar 
-              dataKey="stock" 
-              fill="url(#barGradient)" 
-              name="Stok Rill" 
-              radius={[8, 8, 0, 0]} 
-              barSize={32} 
-            />
+            <Bar dataKey="stock" fill="#3b82f6" name="Stok Rill" radius={[6, 6, 0, 0]} barSize={24} />
           </BarChart>
         </ResponsiveContainer>
       ) : (
@@ -148,10 +101,15 @@ const ExecutiveDashboard = memo(function ExecutiveDashboard({
   onNavigateToTab
 }: ExecutiveDashboardProps) {
 
+  // Calculate aggregated summary metrics
   const stats = useMemo(() => {
+    // Total unique SKUs/combinations (matching PencocokanData)
     const uniqueProducts = stockSummary.length;
+    
+    // Total locator groups
     const uniqueLocators = new Set(stockSummary.map(s => s.whGroup)).size;
     
+    // Cumulative stock
     let totalStock = 0;
     let totalIn = 0;
     let totalOut = 0;
@@ -162,7 +120,10 @@ const ExecutiveDashboard = memo(function ExecutiveDashboard({
       totalOut += item.totalOut;
     });
 
+    // Products with discrepancies (Selisih)
     const discrepancyItems = stockSummary.filter(item => Math.abs(item.selisih || 0) >= 0.001);
+
+    // Stale/unmoved products: Active products that have no transactions today
     const unmovedItems = stockSummary.filter(item => item.totalIn === 0 && item.totalOut === 0);
 
     return {
@@ -179,302 +140,281 @@ const ExecutiveDashboard = memo(function ExecutiveDashboard({
 
   const topTransactionProducts = useMemo(() => {
     if (stockSummary.length === 0) return [];
+    
     const withTrans = stockSummary.map(item => ({
       ...item,
       totalTrans: item.totalIn + item.totalOut
     })).filter(item => item.totalTrans > 0);
+
     return withTrans.sort((a, b) => b.totalTrans - a.totalTrans).slice(0, 3);
   }, [stockSummary]);
 
+  // Extract recent activities for Today or current period
   const recentActivities = useMemo(() => {
     return allTransactions
-      .slice(0, 8)
+      .slice(0, 8) // Show top 8 recent transactions
       .map((t, idx) => ({
         id: idx,
-        pName: t.pName,
-        lCode: t.lCode,
+        kodeProduk: t.pCode,
+        namaProduk: t.pName,
+        locator: t.lCode,
         qty: t.qty,
         tipe: t.tipe || 'IN',
         source: t.source || 'INPUT',
-        tanggal: t.tanggal || 'Hari Ini'
+        timestamp: t.tanggal || 'Hari Ini'
       }));
   }, [allTransactions]);
 
+  // Top Stock Distribution Chart data
   const chartData = useMemo(() => {
     return stockSummary
       .filter(item => item.stock > 0)
       .sort((a, b) => b.stock - a.stock)
       .slice(0, 10)
       .map(item => ({
-        name: item.namaProduk.length > 12 ? item.namaProduk.substring(0, 12) + '..' : item.namaProduk,
-        stock: item.stock
+        name: item.namaProduk.length > 15 ? item.namaProduk.substring(0, 15) + '...' : item.namaProduk,
+        stock: item.stock,
+        in: item.totalIn,
+        out: item.totalOut
       }));
   }, [stockSummary]);
 
   return (
-    <div className="space-y-8 pb-12">
-      {/* Header Section */}
-      <motion.div 
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="flex flex-col md:flex-row md:items-end justify-between gap-6"
-      >
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em]">Live Overview</span>
-          </div>
-          <h2 className="text-4xl font-black text-slate-900 tracking-tighter">Executive Dashboard</h2>
-          <p className="text-sm text-slate-500 font-medium">
-            Monitor logistik area <span className="text-slate-900 font-bold">{area}</span> secara presisi dan real-time.
+    <div className="space-y-6">
+      {/* Upper Title Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+          <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Executive Dashboard</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Status logistik dan pergudangan area <span className="font-bold text-blue-600">{area}</span> secara real-time.
           </p>
         </div>
-        
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="group px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-2xl flex items-center gap-2.5 transition-all shadow-xl shadow-slate-900/10 disabled:opacity-50 active:scale-95"
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50 shadow-sm"
           >
-            <RefreshCw className={cn("w-4 h-4 transition-transform group-hover:rotate-180 duration-500", loading && "animate-spin")} />
-            SYNCHRONIZE DATA
+            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+            Sync Real-Time
           </button>
         </div>
-      </motion.div>
+      </div>
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Main KPI Cards Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI: Total Produk */}
         <DashboardCard
-          title="Total Produk SKU"
+          title="Total SKU / Kombinasi"
           value={formatNumber(stats.uniqueProducts)}
           icon={Package}
           iconBgClass="bg-blue-50 text-blue-600"
-          hoverBorderClass="hover:border-blue-400"
+          hoverBorderClass="hover:border-blue-200"
           onClick={() => onNavigateToTab('produk')}
-          onClickLabel="Kelola Katalog"
-          delay={0.1}
+          onClickLabel="Lihat daftar produk"
         />
+
+        {/* KPI: Total Locator */}
         <DashboardCard
-          title="Area & Locator"
+          title="Total Locator"
           value={formatNumber(stats.uniqueLocators)}
           icon={MapPin}
           iconBgClass="bg-indigo-50 text-indigo-600"
-          hoverBorderClass="hover:border-indigo-400"
+          hoverBorderClass="hover:border-indigo-200"
           onClick={() => onNavigateToTab('locator')}
-          onClickLabel="Lihat Pemetaan"
-          delay={0.2}
+          onClickLabel="Petakan tata ruang"
         />
+
+        {/* KPI: Total Stok */}
         <DashboardCard
-          title="Saldo Akumulatif"
+          title={`Stok Akumulatif ${area === 'ALL' ? 'Semua Area' : area}`}
           value={formatNumber(stats.totalStock)}
           icon={Layers}
-          iconBgClass="bg-emerald-50 text-emerald-600"
-          hoverBorderClass="hover:border-emerald-400"
+          iconBgClass="bg-emerald-50 text-emerald-650"
+          hoverBorderClass="hover:border-emerald-200"
           onClick={() => onNavigateToTab('stock')}
-          onClickLabel="Rincian Saldo"
-          delay={0.3}
+          onClickLabel="Lihat rincian saldo"
         />
+
+        {/* KPI: Stok Minimum Alert */}
         <DashboardCard
-          title="Discrepancy Alert"
-          value={stats.lowStockCount}
+          title={`Selisih Stock ${area === 'ALL' ? 'Semua Area' : area}`}
+          value={stats.lowStockCount > 0 ? `${stats.lowStockCount} Selisih` : "0 Selisih"}
           icon={ShieldAlert}
-          iconBgClass={stats.lowStockCount > 0 ? "bg-rose-50 text-rose-600" : "bg-slate-50 text-slate-400"}
-          hoverBorderClass={stats.lowStockCount > 0 ? "hover:border-rose-400" : "hover:border-slate-300"}
-          className={stats.lowStockCount > 0 ? "bg-rose-50/30 ring-1 ring-rose-100" : ""}
-          footerText={stats.lowStockCount > 0 ? "Butuh Rekonsiliasi" : "Data Akurat"}
-          delay={0.4}
+          iconBgClass={stats.lowStockCount > 0 ? "bg-rose-100 text-rose-650 animate-pulse" : "bg-emerald-50 text-emerald-600"}
+          hoverBorderClass={stats.lowStockCount > 0 ? "hover:border-rose-300" : "hover:border-emerald-100"}
+          className={stats.lowStockCount > 0 ? "bg-rose-50 border-rose-100 text-rose-950" : ""}
+          footerText={stats.lowStockCount > 0 ? "Terdapat perbedaan qty fisik vs sistem" : "Fisik & Sistem telah selaras"}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Analytics Section */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-6"
-        >
-          <div className="flex justify-between items-start">
-            <div className="space-y-1">
-              <h4 className="text-xl font-black text-slate-900 tracking-tight">Sebaran Saldo Produk</h4>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Kuantitas Terbanyak (Top 10)</p>
-            </div>
-            <div className="p-2 bg-slate-50 rounded-xl">
-              <Activity className="w-5 h-5 text-slate-400" />
+      {/* Primary Row: Chart & Activity Feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Chart Column (2 cols size span) */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2 space-y-4">
+          <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+            <div>
+              <h4 className="font-extrabold text-slate-900 text-base">Top 10 Sebaran Saldo Produk</h4>
+              <p className="text-xs text-slate-500 mt-0.5">Produk dengan kuantitas stok rill terbanyak saat ini</p>
             </div>
           </div>
+
           <StockDistributionChart chartData={chartData} />
-        </motion.div>
+        </div>
 
-        {/* Activity Feed */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col"
-        >
-          <div className="flex items-center justify-between mb-8">
-            <div className="space-y-1">
-              <h4 className="text-xl font-black text-slate-900 tracking-tight">Alur Barang</h4>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Aktivitas Terkini</p>
-            </div>
-            <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-sm">
-              <RefreshCw className={cn("w-5 h-5", loading && "animate-spin")} />
-            </div>
+        {/* Recent Transactions Stream Feed */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+          <div className="border-b border-slate-100 pb-3 mb-4">
+            <h4 className="font-extrabold text-slate-900 text-base">Aktivitas & Alur Barang</h4>
+            <p className="text-xs text-slate-500 mt-0.5">Transaksi inventaris terbaru di cabang</p>
           </div>
 
-          <div className="flex-1 space-y-6 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
-            {recentActivities.length > 0 ? (
-              recentActivities.map((act, i) => (
-                <div key={act.id} className="group flex gap-4 items-start relative pb-6 last:pb-0">
-                  {i !== recentActivities.length - 1 && (
-                    <div className="absolute left-4 top-10 bottom-0 w-px bg-slate-100" />
-                  )}
+          <div className="flex-1 overflow-y-auto max-h-80 pr-1 space-y-3">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-48 text-slate-400">
+                <RefreshCw className="w-6 h-6 animate-spin mb-2 text-slate-300" />
+                <span className="text-xs">Menyinkronkan feed aktivitas...</span>
+              </div>
+            ) : recentActivities.length > 0 ? (
+              recentActivities.map((act) => (
+                <div key={act.id} className="flex gap-3 text-xs items-start border-b border-slate-50 pb-2.5 last:border-0 last:pb-0">
                   <div className={cn(
-                    "w-8 h-8 rounded-xl shrink-0 flex items-center justify-center z-10 transition-transform group-hover:scale-110",
-                    act.tipe === 'OUT' ? "bg-rose-50 text-rose-600 shadow-rose-100" : "bg-emerald-50 text-emerald-600 shadow-emerald-100"
+                    "p-1.5 rounded-lg shrink-0 mt-0.5",
+                    act.tipe === 'OUT' ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"
                   )}>
-                    {act.tipe === 'OUT' ? <TrendingDown className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />}
+                    {act.tipe === 'OUT' ? <TrendingDown className="w-3.5 h-3.5" /> : <TrendingUp className="w-3.5 h-3.5" />}
                   </div>
-                  <div className="flex-1 min-w-0 pt-0.5">
-                    <p className="text-sm font-black text-slate-900 truncate tracking-tight">{act.pName}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md uppercase tracking-wider">{act.lCode}</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Qty: {act.qty}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-800 leading-tight truncate">
+                      {act.namaProduk}
+                    </p>
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                      <span className="font-semibold text-slate-500 bg-slate-100 px-1 rounded">{act.locator}</span>
+                      <span>&bull;</span>
+                      <span>Qty: <strong>{act.qty}</strong></span>
+                      <span>&bull;</span>
+                      <span className="truncate">{act.source}</span>
                     </div>
                   </div>
-                  <div className="text-[10px] font-bold text-slate-300 uppercase tracking-tighter pt-1 shrink-0">
-                    {act.tanggal}
+                  <div className="text-right text-[10px] text-slate-400 leading-none shrink-0 pt-0.5 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-slate-300" />
+                    {act.timestamp}
                   </div>
                 </div>
               ))
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12 space-y-3">
-                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-slate-200" />
-                </div>
-                <p className="text-xs font-bold uppercase tracking-widest italic">No recent activity</p>
+              <div className="flex items-center justify-center h-48 text-slate-400 italic text-xs">
+                Belum ada rekaman transaksi di log pergerakan.
               </div>
             )}
           </div>
-        </motion.div>
+        </div>
       </div>
 
-      {/* Discrepancy & Focus Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
-          className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col"
-        >
-          <div className="flex items-center justify-between mb-8">
-            <div className="space-y-1">
-              <h4 className="text-xl font-black text-slate-900 tracking-tight">Focus Discrepancy</h4>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Butuh Rekonsiliasi Fisik</p>
+      {/* Secondary Row: Discrepancy & Top Transaction Status */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Discrepancy (Selisih) Section */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+          <div className="border-b border-slate-100 pb-3 mb-4 flex justify-between items-center">
+            <div>
+              <h4 className="font-extrabold text-slate-900 text-base">Selisih Stock {area !== 'ALL' ? area : ''}</h4>
+              <p className="text-xs text-slate-500 mt-0.5">Produk dengan selisih kuantitas fisik dan sistem</p>
             </div>
-            <div className="px-3 py-1 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-black uppercase tracking-widest">
-              Action Required
-            </div>
+            <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-black rounded-full select-none shrink-0 ml-2">
+              Beda Qty
+            </span>
           </div>
 
-          <div className="space-y-4 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar">
+          <div className="space-y-2.5 overflow-y-auto pr-1 flex-1">
             {stats.lowStockList.length > 0 ? (
               stats.lowStockList.map((item, index) => (
-                <div key={index} className="flex items-center justify-between p-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-2xl transition-all group">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 shadow-sm flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                      <AlertCircle className="w-5 h-5 text-rose-500" />
+                <div key={index} className="flex items-center justify-between p-3 bg-red-50/50 hover:bg-red-50 border border-red-100/50 rounded-xl transition-all">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                      <AlertTriangle className="w-4 h-4" />
                     </div>
                     <div>
-                      <p className="text-sm font-black text-slate-800 leading-tight">{item.namaProduk}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Locator: <span className="text-slate-600">{item.whGroup}</span></p>
+                      <p className="text-xs font-extrabold text-slate-800 leading-none">{item.namaProduk}</p>
+                      <p className="text-[10px] text-slate-400 mt-1">Locator: <span className="font-bold text-slate-600 bg-white border border-slate-150 px-1 rounded">{item.whGroup}</span></p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={cn("text-lg font-black leading-none tracking-tighter", (item.selisih || 0) > 0 ? "text-blue-600" : "text-rose-600")}>
+                    <p className={cn("text-sm font-black leading-none", (item.selisih || 0) > 0 ? "text-blue-600" : "text-rose-600")}>
                       {(item.selisih || 0) > 0 ? `+${item.selisih}` : item.selisih}
                     </p>
-                    <p className="text-[9px] font-black text-slate-300 uppercase mt-1 tracking-tighter">Variance Qty</p>
+                    <p className="text-[9px] text-slate-400 mt-1 uppercase font-bold">Qty Selisih</p>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="flex flex-col items-center justify-center py-12 space-y-4">
-                <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center shadow-inner">
-                  <AlertCircle className="w-8 h-8 text-emerald-400 opacity-30" />
-                </div>
-                <p className="text-xs font-black text-slate-300 uppercase tracking-widest italic">All inventory in sync</p>
+              <div className="flex items-center justify-center h-28 text-slate-400 text-xs italic">
+                Seluruh produk telah selaras dengan sistem.
               </div>
             )}
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
-          className="bg-linear-to-br from-slate-900 via-slate-800 to-blue-900 text-white p-8 rounded-[2rem] shadow-2xl border border-white/5 flex flex-col justify-between overflow-hidden relative"
-        >
-          {/* Subtle Background Elements */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[100px] rounded-full -mr-32 -mt-32" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-500/10 blur-[80px] rounded-full -ml-24 -mb-24" />
-
-          <div className="relative z-10 space-y-6">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/10">
-                <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
-                High Velocity
+        {/* Top Transaction Details */}
+        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-6 rounded-2xl shadow-md border border-slate-800 flex flex-col justify-between">
+          <div className="space-y-3">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-2 bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-xs font-bold border border-blue-500/30">
+                <TrendingUp className="w-3.5 h-3.5" />
+                Transaksi Terbanyak
               </div>
-              <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                Real-Time Perputaran
-              </div>
+              <span className="text-[10px] text-slate-350 bg-white/10 px-2 py-0.5 rounded-full font-mono uppercase">
+                Perputaran Barang
+              </span>
             </div>
 
-            <div className="space-y-2">
-              <h4 className="text-2xl font-black tracking-tighter">Perputaran Tercepat</h4>
-              <p className="text-sm text-slate-400 font-medium leading-relaxed">
-                Produk dengan intensitas mutasi tertinggi di area {area}.
-              </p>
-            </div>
+            <h4 className="text-lg font-black tracking-tight pt-1">Aktivitas Tertinggi</h4>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Produk dengan frekuensi keluar/masuk (mutasi) paling tinggi saat ini, menunjukkan perputaran stok paling aktif di area {area}.
+            </p>
 
-            <div className="space-y-3 pt-2">
+            <div className="space-y-2 mt-2">
               {topTransactionProducts.length > 0 ? (
                 topTransactionProducts.map((product, idx) => (
-                  <div key={idx} className="bg-white/5 backdrop-blur-sm rounded-2xl p-4 border border-white/10 hover:bg-white/10 transition-colors group">
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="min-w-0">
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-1">Product Name</span>
-                        <span className="font-black text-white leading-tight truncate block group-hover:text-blue-300 transition-colors">{product.namaProduk}</span>
+                  <div key={idx} className="bg-black/20 rounded-xl p-3 text-xs border border-white/5 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Nama Produk</span>
+                        <span className="font-bold text-white leading-tight">{product.namaProduk}</span>
                       </div>
-                      <div className="text-right shrink-0">
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-1">Activity</span>
-                        <span className="font-black text-emerald-400 text-lg leading-none tracking-tighter">{formatNumber(product.totalTrans)}</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/10">
+                      <div>
+                        <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Locator</span>
+                        <span className="font-bold text-blue-300">{product.whGroup}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Total Mutasi</span>
+                        <span className="font-bold text-emerald-400">{formatNumber(product.totalTrans)} Unit</span>
                       </div>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="bg-white/5 rounded-2xl p-8 text-center border border-white/5">
-                  <p className="text-xs font-black text-slate-600 uppercase tracking-widest">Insufficent Data</p>
+                <div className="bg-black/20 rounded-xl p-4 text-xs border border-white/5 text-slate-400 text-center italic mt-2">
+                  Belum ada data transaksi yang cukup.
                 </div>
               )}
             </div>
           </div>
 
-          <div className="relative z-10 pt-8 mt-6 border-t border-white/5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Live Syncing</span>
+          <div className="pt-4 border-t border-white/10 mt-4 flex items-center justify-between gap-4">
+            <div className="text-[10px] text-slate-350">
+              Periode Real-Time
             </div>
             <button
               onClick={() => onNavigateToTab('cek_stock')}
-              className="px-6 py-2 bg-white text-slate-900 text-xs font-black rounded-xl hover:bg-blue-50 active:scale-95 transition-all shadow-xl shadow-white/5"
+              className="px-3.5 py-1.5 bg-blue-500 hover:bg-blue-400 active:bg-blue-600 text-white text-xs font-black rounded-lg transition-colors shadow"
             >
-              FULL INVENTORY
+              Lihat Detail Stok &rarr;
             </button>
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

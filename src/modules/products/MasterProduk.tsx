@@ -55,22 +55,23 @@ function MasterProduk({
 
   const showRph = true;
 
-  const isSuperAdmin = userRole === 'ALL' || (activeUsername || '').toLowerCase() === 'admin' || userRole === 'All Cabang' || userRole === 'HQ';
+  const isAdminA5 = (activeUsername || '').toLowerCase() === 'admina5';
+  const isSuperAdmin = userRole === 'ALL' || (activeUsername || '').toLowerCase() === 'admin' || userRole === 'All Cabang' || userRole === 'HQ' || isAdminA5;
   const isMP = (activeUsername || '').toLowerCase() === 'mp';
   
   // Can add a new product (only Super Admin or standard non-readonly write users can add)
-  const canAddProduct = !isReadOnly || isSuperAdmin;
+  const canAddProduct = (!isReadOnly || isSuperAdmin) && !isAdminA5;
   
   // Can edit everything in a product (only Super Admin or normal write-enabled users)
-  const canEditAll = !isReadOnly || isSuperAdmin;
+  const canEditAll = (!isReadOnly || isSuperAdmin) && !isAdminA5;
   
   // MP can only edit the RPH column
-  const canEditRphOnly = isMP;
+  const canEditRphOnly = isMP && !isAdminA5;
   
   // Can perform any edit action (either can edit all or edit RPH only)
-  const canEditAny = canEditAll || canEditRphOnly;
+  const canEditAny = (canEditAll || canEditRphOnly) && !isAdminA5;
 
-  const canChangeRphArea = isSuperAdmin || isMP;
+  const canChangeRphArea = (isSuperAdmin || isMP) && !isAdminA5;
 
   useEffect(() => {
     if (area && area !== "All Cabang" && area !== "HQ") {

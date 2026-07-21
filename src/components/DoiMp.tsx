@@ -2,7 +2,7 @@ import { fetchAndParseCSV } from "../lib/csvCache";
 import { useEffect, useState, useMemo, useCallback , memo} from "react";
 import { 
   Loader2, 
-  AlertCircle, 
+  AlertTriangle, 
   RefreshCw, 
   Search, 
   TrendingUp, 
@@ -217,11 +217,7 @@ function DoiMp({ spreadsheetId, area, activeUsername, userRole }: Props) {
       // Fetch Pengepokan Move Qty
       const penMap = new Map<string, number>();
       try {
-        const gid = '32687697';
-        const proxyUrl = `/api/stock-summary?gid=${gid}`;
-        const fallbackUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=${gid}&single=true&output=csv&hl=id`;
-        
-        const pokData = await fetchAndParseCSV<any[]>(proxyUrl, isManual, fallbackUrl);
+        const pokData = await fetchAndParseCSV<any[]>('https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=32687697&single=true&output=csv&hl=id');
           if (pokData.length > 0) {
             let headerIdx = 0;
             for (let i = 0; i < Math.min(10, pokData.length); i++) {
@@ -564,7 +560,7 @@ function DoiMp({ spreadsheetId, area, activeUsername, userRole }: Props) {
 
       {error && (
         <div className="bg-rose-50 border border-rose-200 rounded-2xl p-5 flex items-start gap-4">
-          <AlertCircle className="w-6 h-6 text-rose-500 shrink-0 mt-0.5" />
+          <AlertTriangle className="w-6 h-6 text-rose-500 shrink-0 mt-0.5" />
           <div>
             <h4 className="font-bold text-rose-900">Gagal Sinkronisasi Analisis DOI</h4>
             <p className="text-xs text-rose-700 mt-1">{error}</p>

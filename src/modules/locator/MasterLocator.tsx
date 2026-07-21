@@ -43,9 +43,10 @@ function MasterLocator({
   const [editWhType, setEditWhType] = useState('');
   const [editArea, setEditArea] = useState('');
 
-  const isSuperAdmin = userRole === 'ALL' || (activeUsername || '').toLowerCase() === 'admin';
-  const canEdit = !isReadOnly || isSuperAdmin;
-  const canAdd = !isReadOnly || isSuperAdmin;
+  const isAdminA5 = (activeUsername || '').toLowerCase() === 'admina5';
+  const isSuperAdmin = userRole === 'ALL' || (activeUsername || '').toLowerCase() === 'admin' || isAdminA5;
+  const canEdit = (!isReadOnly || isSuperAdmin) && !isAdminA5;
+  const canAdd = (!isReadOnly || isSuperAdmin) && !isAdminA5;
 
   const loadData = async (forceFresh = false, retryOnMissing = true) => {
     try {

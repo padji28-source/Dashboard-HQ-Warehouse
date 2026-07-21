@@ -1,6 +1,6 @@
 import { fetchAndParseCSV } from "../lib/csvCache";
 import { useEffect, useState, useMemo , memo} from "react";
-import { Loader2, AlertCircle, RefreshCw, BarChart3, ArrowDownToLine, CheckCircle2, CircleAlert, Percent, Box, MapPin, Search } from 'lucide-react';
+import { Loader2, AlertTriangle, RefreshCw, BarChart3, ArrowDownToLine, CheckCircle2, CircleAlert, Percent, Box, MapPin, Search } from 'lucide-react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -72,8 +72,8 @@ function Pengepokan() {
       setLoading(true);
       setErrorMsg(null);
 
-      // Use proxy for Pengepokan data (Update MTS POK)
-      const data = await fetchAndParseCSV<any[]>('/api/stock-summary?gid=32687697', false, 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=32687697&single=true&output=csv&hl=id');
+      // Construct Google Sheet CSV URL with explicit GID for the "Update MTS POK" sheet tab
+      const data = await fetchAndParseCSV<any[]>('https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=32687697&single=true&output=csv&hl=id');
 
       if (data.length === 0) {
         throw new Error('Data sheet kosong.');
@@ -403,7 +403,7 @@ function Pengepokan() {
             <span className="text-[10px] text-slate-400 mt-0.5 block">Netto ketidaksesuaian</span>
           </div>
           <div className="w-10 h-10 bg-rose-50 text-rose-600 rounded-lg flex items-center justify-center">
-            <AlertCircle className="w-5 h-5" />
+            <AlertTriangle className="w-5 h-5" />
           </div>
         </div>
 
@@ -414,7 +414,7 @@ function Pengepokan() {
             <span className="text-[10px] text-emerald-400 mt-0.5 block">Jumlah SKU yang memiliki selisih</span>
           </div>
           <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <AlertTriangle className="w-5 h-5 flex-shrink-0" />
           </div>
         </div>
       </div>
