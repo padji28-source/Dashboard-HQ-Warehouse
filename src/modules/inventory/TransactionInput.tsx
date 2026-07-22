@@ -877,21 +877,20 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
               
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-slate-50 sticky top-0 z-10" style={{ width: "100%" }}>
-                  <tr className="divide-x divide-slate-200/50" style={{ display: "flex", width: "100%" }}>
-                    <th className="px-3 py-3.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-16 bg-white flex items-center justify-center">#</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Type</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Tanggal</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[2] flex items-center">Kode Produk</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[3] flex items-center">Nama Bahan</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">UOM</th>
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center justify-end">Qty</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Loc Asal</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Loc Tujuan</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">No. Doc</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[2] flex items-center">Keterangan</th>
-                  </tr>
-                </thead>
+                  <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-3.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-16">#</th>
+                      <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Kode Produk</th>
+                      <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Nama Bahan</th>
+                      <th className="px-4 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Qty</th>
+                      <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">UOM</th>
+                      <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Loc Asal</th>
+                      {formTipe === 'TRANSFER' && (
+                        <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Loc Tujuan</th>
+                      )}
+                      <th className="px-4 py-3.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Aksi</th>
+                    </tr>
+                  </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700 bg-white">
                     {itemsList.length === 0 ? (
                       <tr>
@@ -1114,48 +1113,29 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
             </div>
           ) : (<>
             <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-slate-50 sticky top-0 z-10" style={{ width: "100%" }}>
-                  <tr className="divide-x divide-slate-200/50" style={{ display: "flex", width: "100%" }}>
-                    <th className="px-3 py-3.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-16 bg-white flex items-center justify-center">#</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Type</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Tanggal</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[2] flex items-center">Kode Produk</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[3] flex items-center">Nama Bahan</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">UOM</th>
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center justify-end">Qty</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Loc Asal</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">Loc Tujuan</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-1 flex items-center">No. Doc</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider bg-white flex-[2] flex items-center">Keterangan</th>
+              <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
+                  <tr>
+                    <th className="px-3 py-3.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-16">#</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Tanggal</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Kode Produk</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Nama Bahan</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">UOM</th>
+                    <th className="px-4 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Qty</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Loc Asal</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Loc Tujuan</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">No. Doc</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Keterangan</th>
                   </tr>
                 </thead>
               <tbody className="divide-y divide-slate-100">
                 {paginated.map((t, idx) => {
                   return (
                     <tr key={idx} className="hover:bg-blue-50/30 transition-colors text-slate-700 group">
-                      <td className="px-5 py-3 text-slate-500 tabular-nums">
-                        <div className="flex items-center gap-2">
-                           <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                           {displayTanggalIndonesian(t.tanggal)}
-                        </div>
+                      <td className="px-3 py-3 text-center text-slate-500 font-medium text-xs">
+                        {(currentPage - 1) * pageSize + idx + 1}
                       </td>
-                      <td className="px-5 py-3">
-                        <div className="font-medium text-slate-900 group-hover:text-blue-600 transition-colors">{t.namaBahan}</div>
-                      </td>
-                      <td className="px-5 py-3 text-right font-medium text-lg tabular-nums">
-                        <div className={
-                           (() => {
-                             const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
-                             const isIN = norm === 'IN' || norm.includes('AWAL') || norm === 'MASUK' || norm === 'RECEIPT';
-                             const isOUT = norm === 'OUT' || norm === 'KELUAR' || norm === 'ISSUE' || norm === 'PEMAKAIAN' || norm === 'TRANSFER' || norm === 'TF';
-                             return isIN ? 'text-emerald-600' : isOUT ? 'text-rose-600' : 'text-slate-700';
-                           })()
-                        }>{t.kuantitas.toLocaleString()}</div>
-                      </td>
-                      <td className="px-5 py-3 text-slate-500 text-sm">
-                        {t.uom}
-                      </td>
-                      <td className="px-5 py-3">
+                      <td className="px-4 py-3">
                         {(() => {
                            const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
                            const isAwal = norm.includes('AWAL');
@@ -1176,15 +1156,40 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
                            );
                         })()}
                       </td>
-                      <td className="px-5 py-3">
-                        <div className="font-medium text-slate-900 flex items-center gap-1">
+                      <td className="px-4 py-3 text-slate-500 tabular-nums">
+                        <div className="flex items-center gap-2 text-sm whitespace-nowrap">
+                           <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                           {displayTanggalIndonesian(t.tanggal)}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-slate-600 text-xs font-medium">
+                        {t.kodeProduk}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors whitespace-nowrap">{t.namaBahan}</div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 text-xs font-medium">
+                        {t.uom}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-[15px] tabular-nums">
+                        <div className={
+                           (() => {
+                             const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
+                             const isIN = norm === 'IN' || norm.includes('AWAL') || norm === 'MASUK' || norm === 'RECEIPT';
+                             const isOUT = norm === 'OUT' || norm === 'KELUAR' || norm === 'ISSUE' || norm === 'PEMAKAIAN' || norm === 'TRANSFER' || norm === 'TF';
+                             return isIN ? 'text-emerald-600' : isOUT ? 'text-rose-600' : 'text-slate-700';
+                           })()
+                        }>{t.kuantitas.toLocaleString()}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-700 text-xs flex items-center gap-1 whitespace-nowrap">
                           <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           {t.locator}
                         </div>
                       </td>
-                      <td className="px-5 py-3">
+                      <td className="px-4 py-3">
                         {t.locatorTo ? (
-                          <div className="font-medium text-slate-900 flex items-center gap-1">
+                          <div className="font-medium text-slate-700 text-xs flex items-center gap-1 whitespace-nowrap">
                             <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             {t.locatorTo}
                           </div>
@@ -1192,26 +1197,23 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
                           <span className="text-slate-300">-</span>
                         )}
                       </td>
-                      <td className="px-5 py-3 font-mono text-slate-500 text-xs">
+                      <td className="px-4 py-3 font-mono text-slate-500 text-xs">
                         {t.noDocument || '-'}
                       </td>
-                      <td className="px-5 py-3 text-slate-500 truncate max-w-[200px]" title={t.keterangan}>
+                      <td className="px-4 py-3 text-slate-500 text-xs truncate max-w-[200px]" title={t.keterangan}>
                         {t.keterangan || <span className="text-slate-300 italic">Tidak ada catatan</span>}
-                      </td>
-                      <td className="px-5 py-3 font-mono text-slate-500 text-xs">
-                        {t.kodeProduk}
                       </td>
                     </tr>
                   );
                 })}
                 {filtered.length > 0 && (
                   <tr className="bg-slate-50 font-semibold border-t-2 border-slate-200 text-slate-900 sticky bottom-0 z-10 shadow-[0_-1px_0_rgba(0,0,0,0.05)]">
-                    <td className="px-5 py-4 text-slate-800" colSpan={2}>Grand Total (Filtered)</td>
-                    <td className="px-5 py-4 text-right font-bold text-lg tabular-nums text-blue-600">
+                    <td className="px-4 py-4 text-slate-800" colSpan={6}>Grand Total (Filtered)</td>
+                    <td className="px-4 py-4 text-right font-bold text-[15px] tabular-nums text-blue-600">
                       {grandTotalQty.toLocaleString()}
                     </td>
-                    <td className="px-5 py-4 text-slate-500 text-sm" colSpan={7}>
-                      <span className="inline-flex flex-wrap items-center gap-4 text-xs font-semibold uppercase tracking-wider">
+                    <td className="px-4 py-4 text-slate-500 text-sm" colSpan={4}>
+                      <span className="inline-flex flex-wrap items-center gap-4 text-xs font-semibold tracking-wider">
                         <span className="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-md border border-emerald-100">Total IN: {totalIn.toLocaleString()}</span>
                         <span className="bg-rose-50 text-rose-700 px-2.5 py-1 rounded-md border border-rose-100">Total OUT: {totalOut.toLocaleString()}</span>
                         {totalAwal > 0 && <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md border border-blue-100">Total AWAL: {totalAwal.toLocaleString()}</span>}
