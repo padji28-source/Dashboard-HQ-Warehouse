@@ -75,7 +75,7 @@ function MasterProduk({
 
   useEffect(() => {
     if (area && area !== "All Cabang" && area !== "HQ") {
-      const mapped = area === "Jakarta A5" ? "Jakarta" : area;
+      const mapped = area;
       setSelectedRphArea(mapped);
     }
   }, [area]);

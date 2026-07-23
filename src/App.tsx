@@ -5,7 +5,7 @@ import { db } from './lib/firebase';
 import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 
 export const AREAS = [
-  "All Cabang", "Jakarta", "Jakarta A5", "Karawang", "Semarang", "Surabaya", "Jember", 
+  "All Cabang", "Jakarta", "Karawang", "Semarang", "Surabaya", "Jember", 
   "Makassar", "Pontianak", "Banjarmasin", "Palembang", "Medan", "Pekanbaru"
 ];
 
@@ -21,7 +21,6 @@ export const AREA_URLS: Record<string, string> = {
   "Surabaya": "https://script.google.com/macros/s/AKfycbyNvvxxikV5eZE4eBqqH_H4Nhl6B7GJT1btQz9ncVih4FHvxnQE4kEQAM789LtUBBFmlg/exec",
   "Karawang": "https://script.google.com/macros/s/AKfycbwTI_3RCL4lle9lJei4qTv_Cm4VnCCFawNFLgZzJ_O83Y5T3qhHN6JxiX5QujfoRDegzQ/exec",
   "Jakarta": "https://script.google.com/macros/s/AKfycbwgor6oSmZzRE0MaFN51B2YaiDJe8dtV3guKrGdZLY9gLdQgFsk4tANGGm1B1aQMdZUFw/exec",
-  "Jakarta A5": "https://script.google.com/macros/s/AKfycbwLKZrkQ_q7Vo4ycSiS7Y_WAPYUBlD8XyD9bUEdqe3ODPEvpzPCVcVzjyykIgyiw23R-w/exec",
 };
 
 // Admin authentication accounts mapping
@@ -44,8 +43,6 @@ export const ADMIN_ACCOUNTS: AdminAccount[] = [
   { username: 'ppic', password: 'ppic123', allowedArea: 'All Cabang', label: 'PPIC', readonly: true },
   { username: 'jakarta', password: 'jakarta123', allowedArea: 'Jakarta', label: 'Admin Jakarta' },
   { username: 'admin_jakarta', password: 'jakarta123', allowedArea: 'Jakarta', label: 'Admin Jakarta' },
-  { username: 'jakarta_a5', password: 'jakarta123', allowedArea: 'Jakarta A5', label: 'Admin Jakarta A5' },
-  { username: 'admin_jakarta_a5', password: 'jakarta123', allowedArea: 'Jakarta A5', label: 'Admin Jakarta A5' },
   { username: 'karawang', password: 'karawang123', allowedArea: 'Karawang', label: 'Admin Karawang' },
   { username: 'admin_karawang', password: 'karawang123', allowedArea: 'Karawang', label: 'Admin Karawang' },
   { username: 'semarang', password: 'semarang123', allowedArea: 'Semarang', label: 'Admin Semarang' },

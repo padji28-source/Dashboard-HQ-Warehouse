@@ -557,7 +557,6 @@ function CekStock({ spreadsheetId, area }: Props) {
       "Surabaya",
       "Karawang",
       "Jakarta",
-      "Jakarta A5",
     ];
 
     const chartMap: Record<string, { name: string; "Qty In": number; "Qty Out": number }> = {};

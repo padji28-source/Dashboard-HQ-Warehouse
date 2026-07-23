@@ -2,7 +2,7 @@ import { fetchAndParseCSV } from "../../lib/csvCache";
 import { useEffect, useState, useMemo, useRef , memo} from "react";
 import { fetchSheetData } from '../../lib/sheets';
 import { AREA_URLS } from '../../App';
-import { Loader2, Search, Scale, CheckCircle2, AlertTriangle, RefreshCw, Undo, Lock, History, FileSpreadsheet, Info, Calendar, Trash2, Check, X } from 'lucide-react';
+import { Loader2, Search, Scale, CheckCircle2, AlertTriangle, RefreshCw, Undo, Lock, History, FileSpreadsheet, Info, Calendar, Trash2, Check, X , TrendingUp} from 'lucide-react';
 import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
@@ -1036,6 +1036,42 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
     setSelectedLocator('ALL');
   }, [selectedAreaFilter]);
 
+  
+  const [predictLoading, setPredictLoading] = useState(false);
+  const handlePredictCycleCount = async () => {
+    try {
+      setPredictLoading(true);
+      
+      const payload = reconciliationList.slice(0, 100).map((i: any) => ({
+        kodeProduk: i.kodeProduk,
+        namaProduk: i.namaProduk,
+        mutasiQty: i.mutasiQty,
+        selisihSebelumnya: i.selisih,
+        stockSistem: i.stockSistem
+      }));
+      
+      const res = await fetch('/api/gemini/predict-cycle-count', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: payload })
+      });
+      
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      
+      let msg = "Rekomendasi Cycle Counting Berbasis AI:\n\n";
+      data.predictions.forEach((p: any, idx: number) => {
+         msg += `${idx+1}. ${p.namaProduk} (${p.kodeProduk})\n   Skor Risiko: ${p.riskScore}/100\n   Alasan: ${p.reason}\n\n`;
+      });
+      alert(msg);
+      
+    } catch(err:any) {
+      alert("Gagal melakukan prediksi AI: " + err.message);
+    } finally {
+      setPredictLoading(false);
+    }
+  };
+
   const handleExportExcel = async () => {
     const XLSX = await import("xlsx");
     if (displayedList.length === 0) {
@@ -1192,6 +1228,17 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
           >
             <FileSpreadsheet className="w-4.5 h-4.5 text-blue-600" />
             Export Excel
+          </button>
+          
+          <button 
+            type="button"
+            onClick={handlePredictCycleCount}
+            disabled={loading || predictLoading || reconciliationList.length === 0}
+            className={`px-3.5 py-2 border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 font-semibold rounded-lg flex items-center gap-2 transition-colors shadow-sm text-sm disabled:opacity-50 ${predictLoading ? 'animate-pulse' : ''}`}
+            title="Prediksi barang rentan selisih menggunakan AI"
+          >
+            {predictLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4.5 h-4.5 text-purple-600" />}
+            {predictLoading ? 'Menganalisis...' : 'Prediksi Selisih (AI)'}
           </button>
         </div>
       </div>

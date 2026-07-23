@@ -1,5 +1,5 @@
 import { fetchAndParseCSV } from "../../lib/csvCache";
-import { useEffect, useState, useMemo, useRef , memo} from "react";
+import React, { useEffect, useState, useMemo, useRef , memo} from "react";
 import { fetchSheetData } from "../../lib/sheets";
 import { AREA_URLS } from "../../App";
 import type {
@@ -515,7 +515,7 @@ function StockOverview({
       const includeInCumulative = !tanggal || tanggal <= selectedDate;
       if (!includeInCumulative) return;
 
-      const key = `${rowArea}_${lCode}_${pCode}`;
+      const key = `${rowArea}_${lCode.toUpperCase()}_${pCode.toUpperCase()}`;
       if (!stockMap.has(key)) {
         const lookupKey = lCode.trim();
         const lData = locatorsMap.get(lookupKey) ||
@@ -586,64 +586,7 @@ function StockOverview({
 
     console.log("Stock map size:", stockMap.size);
 
-    const filteredByArea = Array.from(stockMap.values()).filter((s) => {
-      const hasActivity = s.totalIn > 0 || s.totalOut > 0 || Math.abs(s.stock) > 0.001 || Math.abs(s.qtySistem) > 0.001;
-      if (!hasActivity) return false;
-      
-      if (
-        area &&
-        area !== "HQ" &&
-        area !== "All Cabang" &&
-        area.toLowerCase() !== "all"
-      ) {
-        const sArea = (s.area || "").trim().toLowerCase();
-        const areaLower = area.trim().toLowerCase();
-
-        const matchesAreaString =
-          sArea !== "" &&
-          (sArea === areaLower ||
-            sArea.includes(areaLower) ||
-            areaLower.includes(sArea));
-        if (matchesAreaString) {
-          return true;
-        }
-
-        const locCode = s.whGroup.trim().toUpperCase();
-
-        const areaPrefixes: Record<string, string[]> = {
-          jakarta: ["JKT", "JAK"],
-          "jakarta a5": ["JKT-A5", "JKT", "JAK"],
-          karawang: ["KRW", "KWG", "KAR"],
-          semarang: ["SMG", "SEM"],
-          surabaya: ["SUB", "SBY", "SUR"],
-          jember: ["JMB", "JEM"],
-          makassar: ["MKS", "MAK"],
-          pontianak: ["PTN", "PON"],
-          banjarmasin: ["BJM", "BAN"],
-          palembang: ["PLB", "PAL"],
-          medan: ["MDN", "MED"],
-          pekanbaru: ["PKU", "PEK"],
-        };
-
-        const prefixes = areaPrefixes[areaLower] || [
-          areaLower.substring(0, 3).toUpperCase(),
-        ];
-        const matchesPrefix = prefixes.some(
-          (pref) => locCode.startsWith(pref) || locCode.includes(pref),
-        );
-        if (matchesPrefix) return true;
-
-        if (s.area && !matchesAreaString) {
-          return false;
-        }
-
-        if (!s.area) return true;
-
-        return false;
-      }
-
-      return true;
-    });
+    const filteredByArea = Array.from(stockMap.values());
 
     setStockSummary(filteredByArea);
   }, [allTransactions, productsMap, locatorsMap, selectedSource, area, mtsMap]);

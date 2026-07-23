@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, type FormEvent , memo} from "react";
+import React, { useEffect, useState, useMemo, useRef, type FormEvent , memo} from "react";
 import { fetchSheetData, appendSheetRow, fetchCombinedProducts } from '../../lib/sheets';
 import type { Transaction, Product, Locator } from '../../shared/types';
 import { Loader2, Plus, Search, Package, MapPin, Calendar, FileText, ArrowDownRight, ArrowUpRight, CheckCircle2, Trash2, X, Download } from 'lucide-react';
@@ -207,6 +207,61 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
     setDropdownOpen(false);
   };
 
+  
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const handleOcrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setOcrLoading(true);
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        try {
+          const base64 = reader.result?.toString().split(',')[1];
+          const mimeType = file.type;
+          
+          const res = await fetch('/api/gemini/ocr-tally-sheet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageBase64: base64, mimeType })
+          });
+          
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          
+          const extracted = data.extractedData;
+          if (!Array.isArray(extracted) || extracted.length === 0) {
+            alert("Tidak ada data yang berhasil diekstrak.");
+            return;
+          }
+          
+          const newItems = extracted.map((item: any) => ({
+            id: Math.random().toString(36).substring(2, 9),
+            kodeProduk: item.kodeProduk || 'UNKNOWN',
+            namaBahan: item.namaProduk || '',
+            kuantitas: parseFloat(item.qty) || 0,
+            uom: 'Pcs',
+            locator: item.lCode || formLocator || 'UNKNOWN',
+            locatorTo: ''
+          }));
+          setItemsList(prev => [...prev, ...newItems]);
+          alert(`Berhasil mengekstrak ${newItems.length} barang dari dokumen! Silakan lengkapi kode/locator bila perlu.`);
+        } catch(err:any) {
+           alert("Gagal OCR: " + err.message);
+        } finally {
+          setOcrLoading(false);
+        }
+      };
+    } catch (err: any) {
+      alert("Gagal melakukan OCR: " + err.message);
+      setOcrLoading(false);
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const handleRemoveItem = (id: string) => {
     setItemsList(prev => prev.filter(item => item.id !== id));
   };
@@ -218,6 +273,7 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
     setDropdownOpen(false);
   };
 
+  
   const handleFormSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (itemsList.length === 0) {
@@ -231,7 +287,28 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
 
     setSubmitting(true);
     try {
+      // AI Anomaly Detection
+      try {
+        const historyData = transactions.slice(0, 50).map(t => ({qty: t.kuantitas, tipe: t.tipe}));
+        const checkRes = await fetch('/api/gemini/detect-anomaly', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transaction: itemsList, history: historyData })
+        });
+        const anomalyData = await checkRes.json();
+        if (anomalyData.isAnomaly) {
+           const proceed = window.confirm(`[AI Anomaly Alert] ${anomalyData.reason}\n\nYakin ingin melanjutkan menyimpan data ini?`);
+           if (!proceed) {
+             setSubmitting(false);
+             return;
+           }
+        }
+      } catch (err) {
+        console.warn("Anomaly detection failed", err);
+      }
+
       const rows = itemsList.map(item => [
+
         formTanggal,
         item.namaBahan,
         item.kuantitas,
@@ -574,16 +651,25 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
       {formOpen && !isReadOnly && (
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-md animate-in fade-in slide-in-from-top-4 space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            
             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <Plus className="w-5 h-5 text-blue-600" /> Input Transaksi Multi-Item Baru ({title})
             </h3>
-            <button 
-              type="button" 
-              onClick={() => setFormOpen(false)} 
-              className="text-slate-400 hover:text-slate-600 text-sm font-semibold hover:underline"
-            >
-              Batal / Tutup
-            </button>
+            <div className="flex items-center gap-3">
+              <label className={`cursor-pointer px-4 py-1.5 border border-purple-200 bg-purple-50 text-purple-700 rounded-lg text-sm font-semibold shadow-sm hover:bg-purple-100 transition-colors flex items-center gap-2 ${ocrLoading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                {ocrLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                {ocrLoading ? 'Ekstrak AI...' : 'Scan Tally Sheet (AI OCR)'}
+                <input type="file" accept="image/*" className="hidden" onChange={handleOcrUpload} disabled={ocrLoading} />
+              </label>
+              <button 
+                type="button" 
+                onClick={() => setFormOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold hover:underline"
+              >
+                Batal / Tutup
+              </button>
+            </div>
+
           </div>
 
           <form onSubmit={handleFormSubmit} className="space-y-6">

@@ -1,6 +1,16 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
+import { GoogleGenAI, Type } from "@google/genai";
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
 
 async function startServer() {
   const app = express();
@@ -101,6 +111,111 @@ async function startServer() {
         return res.send(cachedMts);
       }
       res.status(500).json({ error: err.message || "Failed to fetch MTS CSV" });
+    }
+  });
+
+  // AI Endpoints
+  app.post("/api/gemini/predict-cycle-count", async (req, res) => {
+    try {
+      const { items } = req.body;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: `Analisis data pergerakan stok inventaris berikut dan prediksikan 5 barang yang paling berisiko tinggi mengalami selisih (discrepancy) untuk cycle counting hari ini. Prioritaskan barang dengan jumlah transaksi tinggi, mutasi besar, dan histori selisih sebelumnya.\n\nData:\n${JSON.stringify(items).substring(0, 50000)}`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                kodeProduk: { type: Type.STRING },
+                namaProduk: { type: Type.STRING },
+                riskScore: { type: Type.NUMBER, description: "Skor risiko 1-100" },
+                reason: { type: Type.STRING, description: "Alasan mengapa barang ini berisiko" }
+              },
+              required: ["kodeProduk", "namaProduk", "riskScore", "reason"]
+            }
+          }
+        }
+      });
+      
+      res.json({ predictions: JSON.parse(response.text || "[]") });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/gemini/detect-anomaly", async (req, res) => {
+    try {
+      const { transaction, history } = req.body;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: `Saya memiliki sebuah transaksi inventaris baru dan data historis. Evaluasi apakah transaksi baru ini merupakan anomali (kemungkinan salah ketik atau tidak normal) berdasarkan tren historis.\n\nTransaksi Baru:\n${JSON.stringify(transaction)}\n\nHistoris (Rata-rata/Rentang):\n${JSON.stringify(history)}\n\nJawab dengan status anomali dan alasan singkat.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              isAnomaly: { type: Type.BOOLEAN },
+              confidence: { type: Type.NUMBER, description: "Tingkat keyakinan 0-100" },
+              reason: { type: Type.STRING }
+            },
+            required: ["isAnomaly", "confidence", "reason"]
+          }
+        }
+      });
+      
+      res.json(JSON.parse(response.text || "{}"));
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/gemini/ocr-tally-sheet", async (req, res) => {
+    try {
+      const { imageBase64, mimeType } = req.body;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3.6-flash", // Or gemini-3.6-flash since we are using image text extraction
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                data: imageBase64,
+                mimeType: mimeType || "image/jpeg"
+              }
+            },
+            { text: "Ekstrak data dari tally sheet atau surat jalan ini menjadi format tabel terstruktur. Ambil tanggal, nama barang, kode barang, locator/area, kuantitas, dan tipe pergerakan (IN/OUT/TRANSFER). Abaikan coretan yang tidak relevan." }
+          ]
+        },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                tanggal: { type: Type.STRING },
+                namaProduk: { type: Type.STRING },
+                kodeProduk: { type: Type.STRING },
+                lCode: { type: Type.STRING, description: "Locator/Area" },
+                qty: { type: Type.NUMBER },
+                tipe: { type: Type.STRING, description: "IN, OUT, atau TRANSFER" }
+              },
+              required: ["namaProduk", "qty", "tipe"]
+            }
+          }
+        }
+      });
+      
+      res.json({ extractedData: JSON.parse(response.text || "[]") });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
     }
   });
 
