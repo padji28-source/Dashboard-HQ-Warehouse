@@ -823,7 +823,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
       totalStokKemarin += item.stokKemarin || 0;
       totalStokRill += item.stokRill || 0;
       totalStockSistem += item.stockSistem || 0;
-      totalSelisih += item.selisih || 0;
+      totalSelisih += Math.abs(item.selisih || 0);
       totalMutasiQty += item.mutasiQty || 0;
       totalMutasiQtyIn += item.mutasiQtyIn || 0;
       totalMutasiQtyOut += item.mutasiQtyOut || 0;
@@ -990,7 +990,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
         totalStokKemarin += item.stokKemarin || 0;
         totalStokRill += item.stokRill || 0;
         totalStockSistem += item.stockSistem || 0;
-        totalSelisih += item.selisih || 0;
+        totalSelisih += Math.abs(item.selisih || 0);
         totalMutasiQty += item.mutasiQty || 0;
         totalMutasiQtyIn += item.mutasiQtyIn || 0;
         totalMutasiQtyOut += item.mutasiQtyOut || 0;
@@ -1787,10 +1787,10 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
 
                         <td className={
                           `px-5 py-4 text-right text-sm font-extrabold ${
-                            displayedTotals.selisih === 0 ? "text-emerald-700" : (displayedTotals.selisih > 0 ? "text-blue-700" : "text-rose-700")
+                            displayedTotals.selisih === 0 ? "text-emerald-700" : "text-rose-700"
                           }`
                         }>
-                          {displayedTotals.selisih === 0 ? '0' : (displayedTotals.selisih > 0 ? `+${formatValue(displayedTotals.selisih)}` : formatValue(displayedTotals.selisih))}
+                          {displayedTotals.selisih === 0 ? '0' : formatValue(displayedTotals.selisih)}
                         </td>
 
                         <td className="px-5 py-4 text-center text-slate-400 font-normal text-xs italic">
@@ -1824,10 +1824,10 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
 
                         <td className={
                           `px-5 py-4 text-right text-sm font-extrabold ${
-                            displayedTotals.selisih === 0 ? "text-emerald-700" : (displayedTotals.selisih > 0 ? "text-blue-700" : "text-rose-700")
+                            displayedTotals.selisih === 0 ? "text-emerald-700" : "text-rose-700"
                           }`
                         }>
-                          {displayedTotals.selisih === 0 ? '0' : (displayedTotals.selisih > 0 ? `+${formatValue(displayedTotals.selisih)}` : formatValue(displayedTotals.selisih))}
+                          {displayedTotals.selisih === 0 ? '0' : formatValue(displayedTotals.selisih)}
                         </td>
                       </>
                     )}
