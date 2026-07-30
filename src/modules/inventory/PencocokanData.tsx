@@ -23,6 +23,46 @@ function formatValue(num: number, uom?: string) {
   });
 }
 
+function parseMtsNumber(val: any): number {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  let valStr = String(val).trim();
+  if (!valStr) return 0;
+
+  valStr = valStr.replace(/^"|"$/g, '').trim();
+
+  const lastDot = valStr.lastIndexOf('.');
+  const lastComma = valStr.lastIndexOf(',');
+
+  if (lastComma > -1 && lastDot > -1) {
+    if (lastComma > lastDot) {
+      // ID format: 1.234,56 or 28.959,
+      valStr = valStr.replace(/\./g, '').replace(/,/g, '.');
+    } else {
+      // EN format: 1,234.56
+      valStr = valStr.replace(/,/g, '');
+    }
+  } else if (lastComma > -1 && lastDot === -1) {
+    // Only comma present:
+    const parts = valStr.split(',');
+    if (parts.length > 1 && parts[parts.length - 1].length === 3 && parts[0].replace('-', '').length <= 3) {
+      valStr = valStr.replace(/,/g, '');
+    } else {
+      valStr = valStr.replace(/,/g, '.');
+    }
+  } else if (lastDot > -1 && lastComma === -1) {
+    // Only dot present: e.g. "28.959" or "24.000" or "-29.200"
+    const parts = valStr.split('.');
+    if (parts.length > 1 && parts[parts.length - 1].length === 3 && parts[0].replace('-', '').length <= 3) {
+      valStr = valStr.replace(/\./g, '');
+    }
+  }
+
+  valStr = valStr.replace(/[^0-9.-]/g, '');
+  const res = parseFloat(valStr);
+  return isNaN(res) ? 0 : res;
+}
+
 function formatToDDMMYYYY(dateStr: string): string {
   if (!dateStr) return '';
   const cleaned = dateStr.trim();
@@ -346,7 +386,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
       const mtsMap = new Map<string, number>();
       
       try {
-        const dataMts = await fetchAndParseCSV<string[]>('/api/stock-summary', false, 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=1096265101&single=true&output=csv');
+        const dataMts = await fetchAndParseCSV<string[]>('/api/stock-summary', false, 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv');
           
           if (dataMts.length > 0) {
             let headerIndex = 0;
@@ -373,37 +413,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
               
               let lastQty = 0;
               if (colLastQty !== -1 && row[colLastQty] !== undefined) {
-                let valStr = String(row[colLastQty]).trim();
-                // Handle Indonesian number format (1.234,56) vs English (1,234.56)
-                // If it contains both, we check positions. But commonly in this sheet it's ID format like "28.959,"
-                // We can remove dots and change comma to dot IF it matches ID format, 
-                // OR we just remove all non-numeric/comma/dot.
-                if (valStr.includes(',') && !valStr.includes('.')) {
-                  valStr = valStr.replace(/,/g, '.');
-                } else if (valStr.includes('.') && valStr.includes(',')) {
-                  const lastDot = valStr.lastIndexOf('.');
-                  const lastComma = valStr.lastIndexOf(',');
-                  if (lastComma > lastDot) {
-                     // ID format: 1.234,56
-                     valStr = valStr.replace(/\./g, '').replace(/,/g, '.');
-                  } else {
-                     // EN format: 1,234.56
-                     valStr = valStr.replace(/,/g, '');
-                  }
-                } else if (valStr.includes('.')) {
-                   // Only dots. Could be thousand separator "28.959" or decimal "28.959"
-                   // Looking at the data, it's often thousands if > 3 digits, but to be safe:
-                   // The CSV has "28.959," which is handled above. 
-                   // If it's just "28.959", and it's from ID locale, it might be 28959.
-                   // To be completely robust for this specific MTS sheet, we'll strip dots if there are commas at the end, 
-                   // but wait, the ID format for 28 thousand is "28.959," so it has a comma.
-                   // If it's just "28.959" without comma, we'll leave it as is, parseFloat will parse as 28.959 (English decimal).
-                }
-                
-                // General cleanup for trailing spaces/currency
-                valStr = valStr.replace(/[^0-9.-]/g, '');
-                lastQty = parseFloat(valStr) || 0;
-                if (isNaN(lastQty)) lastQty = 0;
+                lastQty = parseMtsNumber(row[colLastQty]);
               }
 
               if (loc) {
@@ -823,7 +833,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
       totalStokKemarin += item.stokKemarin || 0;
       totalStokRill += item.stokRill || 0;
       totalStockSistem += item.stockSistem || 0;
-      totalSelisih += Math.abs(item.selisih || 0);
+      totalSelisih += item.selisih || 0;
       totalMutasiQty += item.mutasiQty || 0;
       totalMutasiQtyIn += item.mutasiQtyIn || 0;
       totalMutasiQtyOut += item.mutasiQtyOut || 0;
@@ -990,7 +1000,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
         totalStokKemarin += item.stokKemarin || 0;
         totalStokRill += item.stokRill || 0;
         totalStockSistem += item.stockSistem || 0;
-        totalSelisih += Math.abs(item.selisih || 0);
+        totalSelisih += item.selisih || 0;
         totalMutasiQty += item.mutasiQty || 0;
         totalMutasiQtyIn += item.mutasiQtyIn || 0;
         totalMutasiQtyOut += item.mutasiQtyOut || 0;
