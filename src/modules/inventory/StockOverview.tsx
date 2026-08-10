@@ -244,6 +244,7 @@ function StockOverview({
       setMtsMap(mtsMapLocal);
 
       const pMap = new Map<string, string>();
+      const reversePMap = new Map<string, string>();
       const lMap = new Map<
         string,
         { nama: string; whType: string; area: string }
@@ -281,7 +282,7 @@ function StockOverview({
 
           if (!pName && !pCode) return;
           if (!pCode) {
-            pCode = pName;
+            pCode = reversePMap.get(pName.toUpperCase()) || pName;
           }
 
           const qtyStr = String(r[2] || "0").replace(",", ".");
@@ -356,7 +357,10 @@ function StockOverview({
               // Merge products map
               pr.filter((r: any[]) => r.length > 0 && r[0]).forEach(
                 (r: any[]) => {
-                  pMap.set(String(r[0]).trim(), String(r[1] || "").trim());
+                  const kode = String(r[0]).trim();
+                  const nama = String(r[1] || "").trim();
+                  pMap.set(kode, nama);
+                  if (nama) reversePMap.set(nama.toUpperCase(), kode);
                 },
               );
 
@@ -467,7 +471,10 @@ function StockOverview({
         pRows
           .filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A')
           .forEach((r: any[]) => {
-            pMap.set(String(r[0]).trim(), String(r[1]).trim());
+            const kode = String(r[0]).trim();
+            const nama = String(r[1] || "").trim();
+            pMap.set(kode, nama);
+            if (nama) reversePMap.set(nama.toUpperCase(), kode);
           });
 
         lRows

@@ -186,22 +186,8 @@ async function deleteFromFirestore(fireId: string) {
 function parseToIsoDate(dtStr: string): string {
   if (!dtStr) return '';
   let cleaned = dtStr.trim();
-  
-  if (cleaned.includes('T')) {
-    const d = new Date(cleaned);
-    if (!isNaN(d.getTime())) {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    }
-  }
-
-  if (cleaned.includes(' ') && (cleaned.includes('-') || cleaned.includes('/'))) {
-    const parts = cleaned.split(' ');
-    if ((parts[0].includes('-') || parts[0].includes('/')) && parts.length > 1 && parts[1].includes(':')) {
-      cleaned = parts[0];
-    }
+  if (cleaned.includes(' ')) {
+    cleaned = cleaned.split(' ')[0];
   }
   
   // Excel Serial Date check (e.g. 45000)
@@ -211,13 +197,15 @@ function parseToIsoDate(dtStr: string): string {
     return dateObj.toISOString().split('T')[0];
   }
 
-  // Try exact YYYY-MM-DD
-  const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (yyyymmdd) {
-    const y = yyyymmdd[1];
-    const m = yyyymmdd[2].padStart(2, '0');
-    const d = yyyymmdd[3].padStart(2, '0');
-    return `${y}-${m}-${d}`;
+  // Try exact YYYY-MM-DD (don't match ISO strings with T like 2024-07-31T17:00:00.000Z to avoid timezone shifts)
+  if (!cleaned.includes('T')) {
+    const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (yyyymmdd) {
+      const y = yyyymmdd[1];
+      const m = yyyymmdd[2].padStart(2, '0');
+      const d = yyyymmdd[3].padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
   }
   
   // Try DD/MM/YYYY, MM/DD/YYYY, DD-MM-YYYY, MM-DD-YYYY
@@ -244,8 +232,8 @@ function parseToIsoDate(dtStr: string): string {
     if (parseInt(p2) > 12) {
       return `${y.padStart(4, '20')}-${p1}-${p2}`;
     }
-    // Match TransactionInput: Default to MM/DD/YYYY
-    return `${y.padStart(4, '20')}-${p1}-${p2}`;
+    // Default to DD/MM/YYYY for Indonesian locale
+    return `${y.padStart(4, '20')}-${p2}-${p1}`;
   }
 
   // Try standard Date parsing
@@ -469,9 +457,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
           if (!fromLocator && !toLocator) fromLocator = 'UNKNOWN_L';
 
           if (tipe === 'TRANSFER' || tipe === 'TF') {
-            if (fromLocator) {
-              mappedRows.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator, qty, uom, source, area: currentArea, tanggal });
-            }
+            mappedRows.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || 'UNKNOWN_L', qty, uom, source, area: currentArea, tanggal });
             if (toLocator) {
               mappedRows.push({ tipe: 'IN', pCode, pName, lCode: toLocator, qty, uom, source, area: currentArea, tanggal });
             }
@@ -604,6 +590,8 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
     const listMap = new Map<string, ReconciliationItem>();
 
     allTransactions.forEach(t => {
+      if (selectedSourceFilter !== 'ALL' && t.source !== selectedSourceFilter) return;
+
       const { tipe, pCode, pName, lCode, qty, uom, area: rowArea, tanggal, source } = t;
       const itemKey = `${rowArea}_${lCode.toUpperCase()}_${pCode.toUpperCase()}`;
 
@@ -734,7 +722,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
         status
       };
     });
-  }, [allTransactions, productsMap, locatorsMap, mtsLookupMap, area, reconType, selectedDate, selectedStartDate, selectedEndDate]);
+  }, [allTransactions, productsMap, locatorsMap, mtsLookupMap, area, reconType, selectedDate, selectedStartDate, selectedEndDate, selectedSourceFilter]);
 
   // Filter unique locators for selection
   const uniqueLocators = useMemo(() => {
