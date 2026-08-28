@@ -1,5 +1,5 @@
 import { useState, lazy, Suspense, memo } from 'react';
-import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye, TrendingUp, Loader2 } from 'lucide-react';
+import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye, TrendingUp, Loader2, Clock } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AREAS } from '../App';
@@ -15,6 +15,7 @@ const AkurasiStock = lazy(() => import('./AkurasiStock'));
 const Pengepokan = lazy(() => import('./Pengepokan'));
 const CekStock = lazy(() => import('./CekStock'));
 const DoiMp = lazy(() => import('./DoiMp'));
+const UnpostedDokumen = lazy(() => import('../modules/inventory/UnpostedDokumen'));
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -31,7 +32,7 @@ interface Props {
 }
 
 const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange, isReadOnly = false, activeUsername = '' }: Props) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'doi_mp'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'doi_mp' | 'unposted'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['stock']));
   const handleTabChange = (tab: any) => { setActiveTab(tab); setVisitedTabs(prev => new Set(prev).add(tab)); };
@@ -77,6 +78,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
 
   const mainTabs = [
     { id: 'stock', label: 'Executive Dashboard', icon: LayoutDashboard },
+    { id: 'unposted', label: 'Unposted Dokumen', icon: Clock },
     { id: 'cek_stock', label: 'Cek Stock', icon: Package },
     ...(isAuthorizedForDoiMp ? [{ id: 'doi_mp', label: 'DOI MP', icon: TrendingUp }] : []),
     ...(!isReadOnly && isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
@@ -313,6 +315,13 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
             {visitedTabs.has('stock') && (
               <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
                 <StockOverview spreadsheetId={spreadsheetId} area={area} onNavigateToTab={handleTabChange as any} />
+              </Suspense>
+            )}
+          </div>
+          <div className={cn(safeActiveTab !== 'unposted' && 'hidden')}>
+            {visitedTabs.has('unposted') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                <UnpostedDokumen area={area} userRole={userRole} activeUsername={activeUsername} />
               </Suspense>
             )}
           </div>

@@ -4,8 +4,9 @@ import { collection, getDocs } from 'firebase/firestore';
 import type { StockSummary } from '../../shared/types';
 import { CONFIG } from '../../config';
 import { cn, formatNumber } from '../../shared/utils';
-import { Calendar, Package, MapPin, Layers, TrendingUp, TrendingDown, AlertTriangle, RefreshCw, Loader2, Sparkles, FileText, Bot, Clock, ShieldAlert } from 'lucide-react';
+import { Calendar, Package, MapPin, Layers, TrendingUp, TrendingDown, AlertTriangle, RefreshCw, Loader2, Sparkles, FileText, Bot, Clock, ShieldAlert, FileCheck } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { fetchUnpostedDocuments, filterDocsByArea } from '../../lib/unpostedService';
 
 interface DashboardCardProps {
   title: string;
@@ -399,6 +400,29 @@ const ExecutiveDashboard = memo(function ExecutiveDashboard({
   onNavigateToTab
 }: ExecutiveDashboardProps) {
 
+  const [unpostedCount, setUnpostedCount] = useState<number>(0);
+  const [loadingUnposted, setLoadingUnposted] = useState<boolean>(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const getUnposted = async () => {
+      try {
+        setLoadingUnposted(true);
+        const docs = await fetchUnpostedDocuments();
+        if (isMounted) {
+          const filtered = filterDocsByArea(docs, area, area === 'All Cabang' || area === 'HQ' || area === 'ALL');
+          setUnpostedCount(filtered.length);
+        }
+      } catch (err) {
+        console.error('Error fetching unposted count for dashboard:', err);
+      } finally {
+        if (isMounted) setLoadingUnposted(false);
+      }
+    };
+    getUnposted();
+    return () => { isMounted = false; };
+  }, [area]);
+
   // Calculate aggregated summary metrics
   const stats = useMemo(() => {
     // Total unique SKUs/combinations (matching PencocokanData)
@@ -500,7 +524,7 @@ const ExecutiveDashboard = memo(function ExecutiveDashboard({
       </div>
 
       {/* Main KPI Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {/* KPI: Total Produk */}
         <DashboardCard
           title="Total SKU / Kombinasi"
@@ -510,6 +534,18 @@ const ExecutiveDashboard = memo(function ExecutiveDashboard({
           hoverBorderClass="hover:border-blue-200"
           onClick={() => onNavigateToTab('produk')}
           onClickLabel="Lihat daftar produk"
+        />
+
+        {/* KPI: QTY Unposted Dokumen */}
+        <DashboardCard
+          title="QTY Unposted Dokumen"
+          value={loadingUnposted ? "..." : formatNumber(unpostedCount)}
+          icon={Clock}
+          iconBgClass="bg-amber-50 text-amber-650"
+          hoverBorderClass="hover:border-amber-200"
+          onClick={() => onNavigateToTab('unposted')}
+          onClickLabel="Lihat unposted dokumen"
+          footerText={`Draft & In Progress (${area === 'ALL' || area === 'All Cabang' ? 'Semua Area' : area})`}
         />
 
         {/* KPI: Total Locator */}

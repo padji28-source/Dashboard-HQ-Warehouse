@@ -114,6 +114,48 @@ async function startServer() {
     }
   });
 
+  let cachedUnposted: string | null = null;
+  let cacheTimeUnposted = 0;
+
+  // API Route to proxy the Unposted Dokumen CSV (sheet Tarikan, gid=1541449669)
+  app.get("/api/unposted-docs", async (req, res) => {
+    try {
+      const now = Date.now();
+      const forceRefresh = !!req.query.t;
+      if (!forceRefresh && cachedUnposted && now - cacheTimeUnposted < 300000) {
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        return res.send(cachedUnposted);
+      }
+
+      console.log("Fetching fresh Unposted Dokumen CSV from Google Sheets...");
+      const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=1541449669&single=true&output=csv&hl=id';
+      const response = await fetch(csvUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+          "Accept": "text/csv,application/csv,text/plain,*/*",
+          "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch from Google Sheets: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.text();
+      cachedUnposted = data;
+      cacheTimeUnposted = now;
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.send(data);
+    } catch (err: any) {
+      console.error("Error in /api/unposted-docs proxy:", err);
+      if (cachedUnposted) {
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        return res.send(cachedUnposted);
+      }
+      res.status(500).json({ error: err.message || "Failed to fetch Unposted Dokumen CSV" });
+    }
+  });
+
   // AI Endpoints
   app.post("/api/gemini/predict-cycle-count", async (req, res) => {
     try {
