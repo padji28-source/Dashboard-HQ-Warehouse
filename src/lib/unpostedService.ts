@@ -87,12 +87,19 @@ export async function fetchUnpostedDocuments(forceFresh = false): Promise<Unpost
       const parts = lineStr.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
       parts.forEach((p, idx) => {
         const lower = p.toLowerCase();
-        if (lower === 'menu') menuIdx = idx;
-        else if (lower.includes('status')) statusIdx = idx;
-        else if (lower.includes('created')) createdIdx = idx;
-        else if (lower.includes('doc')) docNoIdx = idx;
-        else if (lower.includes('date')) dateIdx = idx;
-        else if (lower.includes('area')) areaIdx = idx;
+        if (lower === 'menu') {
+          menuIdx = idx;
+        } else if (lower.includes('status')) {
+          statusIdx = idx;
+        } else if (lower.includes('created')) {
+          createdIdx = idx;
+        } else if (lower.includes('documentno') || lower.includes('docno') || (lower.includes('doc') && !lower.includes('date'))) {
+          docNoIdx = idx;
+        } else if (lower.includes('date')) {
+          dateIdx = idx;
+        } else if (lower.includes('area')) {
+          areaIdx = idx;
+        }
       });
       startRow = i + 1;
       break;
