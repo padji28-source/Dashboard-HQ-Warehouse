@@ -61,7 +61,8 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
   const isAdminA5 = usernameLower === 'admina5';
   const isSuperAdmin = userRole === 'ALL' || usernameLower === 'admin' || isAdminA5;
   const isHQ = userRole === 'HQ' || userRole === 'All Cabang' || usernameLower === 'hq' || usernameLower === 'admin_hq' || area === 'All Cabang' || area === 'HQ';
-  const isSuperAdminOrHq = isSuperAdmin || isHQ;
+  const isPPICorMP = usernameLower === 'ppic' || usernameLower === 'mp' || userRole.toUpperCase().includes('PPIC') || userRole.toUpperCase().includes('MP');
+  const isSuperAdminOrHq = isSuperAdmin || isHQ || isPPICorMP;
 
   useEffect(() => {
     setFilterArea(area);
