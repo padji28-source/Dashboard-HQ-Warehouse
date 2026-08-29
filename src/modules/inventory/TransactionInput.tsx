@@ -2,6 +2,8 @@ import React, { useEffect, useState, useMemo, useRef, type FormEvent , memo} fro
 import { fetchSheetData, appendSheetRow, fetchCombinedProducts } from '../../lib/sheets';
 import type { Transaction, Product, Locator } from '../../shared/types';
 import { Loader2, Plus, Search, Package, MapPin, Calendar, FileText, ArrowDownRight, ArrowUpRight, CheckCircle2, Trash2, X, Download } from 'lucide-react';
+import { getParsedDateValue, displayTanggalIndonesian, parseToIsoDate } from '../../lib/dateUtils';
+export { getParsedDateValue, displayTanggalIndonesian, parseToIsoDate };
 
 interface Props {
   spreadsheetId: string;
@@ -10,82 +12,6 @@ interface Props {
   description: string;
   isReadOnly?: boolean;
 }
-
-const INDO_MONTHS = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-];
-
-export const getParsedDateValue = (dtStr: string): number => {
-  if (!dtStr) return 0;
-  
-  // Try YYYY-MM-DD
-  const yyyymmdd = dtStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (yyyymmdd) {
-    return new Date(parseInt(yyyymmdd[1], 10), parseInt(yyyymmdd[2], 10) - 1, parseInt(yyyymmdd[3], 10)).getTime();
-  }
-  
-  // Try MM/DD/YY or MM/DD/YYYY
-  const slashed = dtStr.split('/');
-  if (slashed.length === 3) {
-    const m = parseInt(slashed[0], 10) - 1;
-    const d = parseInt(slashed[1], 10);
-    let y = parseInt(slashed[2], 10);
-    if (slashed[2].length === 2) {
-      y += 2000;
-    }
-    return new Date(y, m, d).getTime();
-  }
-  
-  const t = Date.parse(dtStr);
-  return isNaN(t) ? 0 : t;
-};
-
-export const displayTanggalIndonesian = (dtStr: string): string => {
-  if (!dtStr) return '-';
-  
-  let dateObj: Date | null = null;
-  
-  // Try matching YYYY-MM-DD (e.g., "2026-06-08")
-  const yyyymmdd = dtStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (yyyymmdd) {
-    const y = parseInt(yyyymmdd[1], 10);
-    const m = parseInt(yyyymmdd[2], 10) - 1;
-    const d = parseInt(yyyymmdd[3], 10);
-    dateObj = new Date(y, m, d);
-  } else {
-    // Try matching MM/DD/YY or MM/DD/YYYY (e.g., "06/08/26" or "06/08/2026")
-    const slashed = dtStr.split('/');
-    if (slashed.length === 3) {
-      const m = parseInt(slashed[0], 10) - 1;
-      const d = parseInt(slashed[1], 10);
-      let y = parseInt(slashed[2], 10);
-      if (slashed[2].length === 2) {
-        y += 2000; // assume 20xx
-      }
-      if (!isNaN(m) && !isNaN(d) && !isNaN(y)) {
-        dateObj = new Date(y, m, d);
-      }
-    }
-  }
-  
-  if (!dateObj || isNaN(dateObj.getTime())) {
-    // Fallback to standard javascript Parsing
-    const timestamp = Date.parse(dtStr);
-    if (!isNaN(timestamp)) {
-      dateObj = new Date(timestamp);
-    }
-  }
-  
-  if (dateObj && !isNaN(dateObj.getTime())) {
-    const d = String(dateObj.getDate()).padStart(2, '0');
-    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const y = dateObj.getFullYear();
-    return `${d}-${m}-${y}`;
-  }
-  
-  return dtStr; // Return as is if fully unrecognized
-};
 
 function TransactionInput({ spreadsheetId, sheetName, title, description, isReadOnly = false }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -397,47 +323,60 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
         }
       }
 
+      const uniqueP = Array.from(new Map(
+        pRows
+          .filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A')
+          .map((r: any[]) => [String(r[0]).trim(), { kode: String(r[0]).trim(), nama: String(r[1] || '').trim(), satuan: String(r[2] || '').trim(), kategori: '' }])
+      ).values());
+      const uniqueL = Array.from(new Map(
+        lRows
+          .filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A')
+          .map((r: any[]) => {
+            const whGroup = String(r[0] || '').trim();
+            const nama = String(r[1] || whGroup).trim();
+            return [whGroup || nama, { whGroup, nama, deskripsi: String(r[2] || '').trim(), whType: String(r[3] || '').trim(), area: String(r[4] || '').trim() }];
+          })
+      ).values());
+
+      const reversePMap = new Map<string, string>();
+      uniqueP.forEach(p => {
+        if (p.nama && p.kode) {
+          reversePMap.set(p.nama.toUpperCase().trim(), p.kode.trim());
+        }
+      });
+
       const parsedTransactions = txRows
         .filter((r: any[]) => {
           if (r.length === 0) return false;
           const tanggal = String(r[0] || '').trim();
           const nama = String(r[1] || '').trim();
           const kode = String(r[9] || '').trim();
-          return tanggal !== '' && nama !== '' && kode !== '#N/A' && nama !== '#N/A' && tanggal !== '#N/A';
+          return tanggal !== '' && (nama !== '' || kode !== '') && kode !== '#N/A' && nama !== '#N/A' && tanggal !== '#N/A';
         })
-        .map((r: any[]) => ({
-          tanggal: String(r[0] || ''),
-          namaBahan: String(r[1] || ''),
-          kuantitas: parseFloat(String(r[2] || '0').replace(',', '.')) || 0,
-          uom: String(r[3] || ''),
-          tipe: String(r[4] || '').trim().toUpperCase() as 'IN'|'OUT'|'AWAL',
-          locator: String(r[5] || ''),
-          locatorTo: String(r[6] || ''),
-          noDocument: String(r[7] || ''),
-          keterangan: String(r[8] || ''),
-          kodeProduk: String(r[9] || '')
-        }));
+        .map((r: any[]) => {
+          const rawNama = String(r[1] || '').trim();
+          let rawKode = String(r[9] || '').trim();
+          if ((!rawKode || rawKode === '#N/A') && rawNama) {
+            rawKode = reversePMap.get(rawNama.toUpperCase()) || '';
+          }
+          return {
+            tanggal: String(r[0] || '').trim(),
+            namaBahan: rawNama,
+            kuantitas: parseFloat(String(r[2] || '0').replace(',', '.')) || 0,
+            uom: String(r[3] || '').trim(),
+            tipe: String(r[4] || '').trim().toUpperCase() as 'IN'|'OUT'|'AWAL',
+            locator: String(r[5] || '').trim(),
+            locatorTo: String(r[6] || '').trim(),
+            noDocument: String(r[7] || '').trim(),
+            keterangan: String(r[8] || '').trim(),
+            kodeProduk: rawKode
+          };
+        });
 
       // Sort chronological ascending (oldest on top, newest at the bottom)
       parsedTransactions.sort((a, b) => getParsedDateValue(a.tanggal) - getParsedDateValue(b.tanggal));
 
       setTransactions(parsedTransactions);
-
-      const uniqueP = Array.from(new Map(
-        pRows
-          .filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A')
-          .map((r: any[]) => [String(r[0]), { kode: String(r[0]), nama: String(r[1] || ''), satuan: String(r[2] || ''), kategori: '' }])
-      ).values());
-      const uniqueL = Array.from(new Map(
-        lRows
-          .filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A')
-          .map((r: any[]) => {
-            const whGroup = String(r[0] || '');
-            const nama = String(r[1] || whGroup);
-            return [nama, { whGroup, nama, deskripsi: String(r[2] || ''), whType: String(r[3] || ''), area: String(r[4] || '') }];
-          })
-      ).values());
-
       setProducts(uniqueP as Product[]);
       setLocators(uniqueL as Locator[]);
 
@@ -502,59 +441,106 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
       .slice(0, 15);
   }, [search, uniqueProducts]);
 
-  const filtered = transactions.filter(t => {
-    const matchesSearch = selectedProduct
-      ? t.kodeProduk === selectedProduct.kodeProduk
-      : t.kodeProduk.toLowerCase().includes(search.toLowerCase()) || 
-        t.namaBahan.toLowerCase().includes(search.toLowerCase()) || 
-        t.locator.toLowerCase().includes(search.toLowerCase()) ||
-        t.noDocument.toLowerCase().includes(search.toLowerCase()) ||
-        t.keterangan.toLowerCase().includes(search.toLowerCase());
+  const filtered = useMemo(() => {
+    return transactions.filter(t => {
+      const q = search.toLowerCase().trim();
+      const matchesSearch = selectedProduct
+        ? (t.kodeProduk.toUpperCase() === selectedProduct.kodeProduk.toUpperCase() || 
+           (t.namaBahan && selectedProduct.namaProduk && t.namaBahan.toLowerCase() === selectedProduct.namaProduk.toLowerCase()))
+        : !q || 
+          t.kodeProduk.toLowerCase().includes(q) || 
+          t.namaBahan.toLowerCase().includes(q) || 
+          t.locator.toLowerCase().includes(q) ||
+          t.locatorTo.toLowerCase().includes(q) ||
+          t.noDocument.toLowerCase().includes(q) ||
+          t.keterangan.toLowerCase().includes(q);
 
-    const matchesLocator = 
-      selectedLocator === 'ALL' || 
-      t.locator === selectedLocator;
+      const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
+      const isTransfer = norm === 'TRANSFER' || norm === 'TF';
 
-    const matchesLocatorTo = 
-      selectedLocatorTo === 'ALL' || 
-      t.locatorTo === selectedLocatorTo;
+      const matchesLocator = 
+        selectedLocator === 'ALL' || 
+        t.locator === selectedLocator ||
+        (isTransfer && t.locatorTo === selectedLocator);
 
-    // Timezone & format consistent parsing using getParsedDateValue
-    const matchesDateRange = (() => {
-      if (!startDate && !endDate) return true;
-      const val = getParsedDateValue(t.tanggal);
-      if (!val) return false;
-      if (startDate) {
-        const startVal = getParsedDateValue(startDate);
-        if (val < startVal) return false;
-      }
-      if (endDate) {
-        const endVal = getParsedDateValue(endDate);
-        if (val > endVal) return false;
-      }
-      return true;
-    })();
+      const matchesLocatorTo = 
+        selectedLocatorTo === 'ALL' || 
+        t.locatorTo === selectedLocatorTo;
 
-    return matchesSearch && matchesLocator && matchesLocatorTo && matchesDateRange;
-  });
+      // Timezone & format consistent parsing using getParsedDateValue
+      const matchesDateRange = (() => {
+        if (!startDate && !endDate) return true;
+        const val = getParsedDateValue(t.tanggal);
+        if (!val) return false;
+        if (startDate) {
+          const startVal = getParsedDateValue(startDate);
+          if (val < startVal) return false;
+        }
+        if (endDate) {
+          const endVal = getParsedDateValue(endDate);
+          if (val > endVal) return false;
+        }
+        return true;
+      })();
+
+      return matchesSearch && matchesLocator && matchesLocatorTo && matchesDateRange;
+    });
+  }, [transactions, selectedProduct, search, selectedLocator, selectedLocatorTo, startDate, endDate]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const totalIn = filtered.reduce((sum, t) => {
-    const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
-    const isIN = (norm === 'IN' || norm === 'MASUK' || norm === 'RECEIPT') && !norm.includes('AWAL');
-    return isIN ? sum + t.kuantitas : sum;
-  }, 0);
-  const totalOut = filtered.reduce((sum, t) => {
-    const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
-    const isOUT = norm === 'OUT' || norm === 'KELUAR' || norm === 'ISSUE' || norm === 'PEMAKAIAN' || norm === 'TRANSFER' || norm === 'TF';
-    return isOUT ? sum + t.kuantitas : sum;
-  }, 0);
-  const totalAwal = filtered.reduce((sum, t) => {
-    const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
-    return norm.includes('AWAL') ? sum + t.kuantitas : sum;
-  }, 0);
+  const { totalIn, totalOut, totalAwal, stokRill } = useMemo(() => {
+    let sumIn = 0;
+    let sumOut = 0;
+    let sumAwal = 0;
+
+    filtered.forEach(t => {
+      const norm = (t.tipe || '').replace(/\s+/g, '').toUpperCase();
+      const isTransfer = norm === 'TRANSFER' || norm === 'TF';
+      const isAwal = norm.includes('AWAL') || norm === 'SALDO' || norm === 'INITIAL';
+      const isNormalIN = (norm === 'IN' || norm === 'MASUK' || norm === 'RECEIPT') && !isAwal;
+      const isNormalOUT = norm === 'OUT' || norm === 'KELUAR' || norm === 'ISSUE' || norm === 'PEMAKAIAN';
+
+      if (selectedLocator === 'ALL') {
+        if (isAwal) {
+          sumAwal += t.kuantitas;
+        } else if (isNormalIN) {
+          sumIn += t.kuantitas;
+        } else if (isNormalOUT) {
+          sumOut += t.kuantitas;
+        } else if (isTransfer) {
+          // Internal warehouse transfer: Net 0 change to overall warehouse stock
+        } else if (t.kuantitas > 0) {
+          sumIn += t.kuantitas;
+        }
+      } else {
+        // Specific locator filter
+        if (t.locator === selectedLocator) {
+          if (isAwal) {
+            sumAwal += t.kuantitas;
+          } else if (isNormalIN) {
+            sumIn += t.kuantitas;
+          } else if (isNormalOUT || isTransfer) {
+            sumOut += t.kuantitas;
+          } else if (t.kuantitas > 0) {
+            sumIn += t.kuantitas;
+          }
+        } else if (isTransfer && t.locatorTo === selectedLocator) {
+          sumIn += t.kuantitas;
+        }
+      }
+    });
+
+    const realStock = Math.round((sumAwal + sumIn - sumOut) * 1000) / 1000;
+    return {
+      totalIn: Math.round(sumIn * 1000) / 1000,
+      totalOut: Math.round(sumOut * 1000) / 1000,
+      totalAwal: Math.round(sumAwal * 1000) / 1000,
+      stokRill: realStock
+    };
+  }, [filtered, selectedLocator]);
+
   const grandTotalQty = filtered.reduce((sum, t) => sum + t.kuantitas, 0);
 
   const exportToExcel = async () => {
@@ -1303,7 +1289,7 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
                         <span className="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-md border border-emerald-100">Total IN: {totalIn.toLocaleString()}</span>
                         <span className="bg-rose-50 text-rose-700 px-2.5 py-1 rounded-md border border-rose-100">Total OUT: {totalOut.toLocaleString()}</span>
                         {totalAwal > 0 && <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md border border-blue-100">Total AWAL: {totalAwal.toLocaleString()}</span>}
-                        <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md border border-indigo-150 font-bold">Stok Rill: {(totalAwal + totalIn - totalOut).toLocaleString()}</span>
+                        <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md border border-indigo-150 font-bold">Stok Rill: {stokRill.toLocaleString()}</span>
                       </span>
                     </td>
                   </tr>

@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { db } from '../lib/firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { parseToIsoDate, formatToDDMMYYYY } from '../lib/dateUtils';
 
 function cn(...classes: any[]) {
   return classes.filter(Boolean).join(' ');
@@ -132,106 +133,6 @@ async function deleteAccuracyFromFirestore(fireId: string) {
     console.warn('Failed to delete accuracy from Firestore:', e);
     return false;
   }
-}
-
-function parseToIsoDate(dtStr: string): string {
-  if (!dtStr) return '';
-  // Remove time part if exists (e.g. "06-01-2026 14:30:00" -> "06-01-2026")
-  let cleaned = dtStr.trim();
-  if (cleaned.includes(' ')) {
-    cleaned = cleaned.split(' ')[0];
-  }
-  
-  // Excel Serial Date check (e.g. 45000)
-  const num = Number(cleaned);
-  if (!isNaN(num) && num > 10000) {
-    const dateObj = new Date(Math.round((num - 25569) * 86400 * 1000));
-    return dateObj.toISOString().split('T')[0];
-  }
-
-  // Try exact YYYY-MM-DD (don't match ISO strings with T like 2024-07-31T17:00:00.000Z to avoid timezone shifts)
-  if (!cleaned.includes('T')) {
-    const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if (yyyymmdd) {
-      const y = yyyymmdd[1];
-      const m = yyyymmdd[2].padStart(2, '0');
-      const d = yyyymmdd[3].padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
-  }
-  
-  // Try DD/MM/YYYY, MM/DD/YYYY, DD-MM-YYYY, MM-DD-YYYY
-  const parts = cleaned.includes('/') ? cleaned.split('/') : cleaned.split('-');
-  if (parts.length === 3) {
-    let p1 = parts[0].padStart(2, '0');
-    let p2 = parts[1].padStart(2, '0');
-    let y = parts[2].trim();
-    
-    // If the year is first (e.g. 2026-06-01), but somehow didn't match the regex
-    if (p1.length === 4) {
-       return `${p1}-${p2}-${y.padStart(2, '0')}`;
-    }
-
-    if (y.length === 2) {
-      y = '20' + y;
-    }
-    
-    // If p1 > 12, it must be DD/MM/YYYY
-    if (parseInt(p1) > 12) {
-      return `${y.padStart(4, '20')}-${p2}-${p1}`;
-    }
-    // If p2 > 12, it must be MM/DD/YYYY
-    if (parseInt(p2) > 12) {
-      return `${y.padStart(4, '20')}-${p1}-${p2}`;
-    }
-    // Default to DD/MM/YYYY for Indonesian locale
-    return `${y.padStart(4, '20')}-${p2}-${p1}`;
-  }
-
-  // Try standard Date parsing
-  const parsed = Date.parse(cleaned);
-  if (!isNaN(parsed)) {
-    const dObj = new Date(parsed);
-    const y = dObj.getFullYear();
-    const m = String(dObj.getMonth() + 1).padStart(2, '0');
-    const d = String(dObj.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
-  return '';
-}
-
-function formatToDDMMYYYY(dateStr: string): string {
-  if (!dateStr) return '';
-  const cleaned = dateStr.trim();
-  
-  // Try YYYY-MM-DD or YYYY-M-D
-  const yyyymmdd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (yyyymmdd) {
-    const y = yyyymmdd[1];
-    const m = yyyymmdd[2].padStart(2, '0');
-    const d = yyyymmdd[3].padStart(2, '0');
-    return `${d}-${m}-${y}`;
-  }
-
-  // Try YYYY-MM or YYYY-M
-  const yyyymm = cleaned.match(/^(\d{4})-(\d{1,2})$/);
-  if (yyyymm) {
-    const y = yyyymm[1];
-    const m = yyyymm[2].padStart(2, '0');
-    return `${m}-${y}`;
-  }
-
-  // Try standard Date parsing
-  const parsed = Date.parse(cleaned);
-  if (!isNaN(parsed)) {
-    const dObj = new Date(parsed);
-    const d = String(dObj.getDate()).padStart(2, '0');
-    const m = String(dObj.getMonth() + 1).padStart(2, '0');
-    const y = dObj.getFullYear();
-    return `${d}-${m}-${y}`;
-  }
-
-  return dateStr;
 }
 
 function AkurasiStock() {
