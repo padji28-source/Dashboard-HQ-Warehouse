@@ -135,6 +135,42 @@ async function deleteAccuracyFromFirestore(fireId: string) {
   }
 }
 
+function parseMtsNumber(val: any): number {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  let valStr = String(val).trim();
+  if (!valStr) return 0;
+
+  valStr = valStr.replace(/^"|"$/g, '').trim();
+
+  const lastDot = valStr.lastIndexOf('.');
+  const lastComma = valStr.lastIndexOf(',');
+
+  if (lastComma > -1 && lastDot > -1) {
+    if (lastComma > lastDot) {
+      valStr = valStr.replace(/\./g, '').replace(/,/g, '.');
+    } else {
+      valStr = valStr.replace(/,/g, '');
+    }
+  } else if (lastComma > -1 && lastDot === -1) {
+    const parts = valStr.split(',');
+    if (parts.length > 1 && parts[parts.length - 1].length === 3 && parts[0].replace('-', '').length <= 3) {
+      valStr = valStr.replace(/,/g, '');
+    } else {
+      valStr = valStr.replace(/,/g, '.');
+    }
+  } else if (lastDot > -1 && lastComma === -1) {
+    const parts = valStr.split('.');
+    if (parts.length > 1 && parts[parts.length - 1].length === 3 && parts[0].replace('-', '').length <= 3) {
+      valStr = valStr.replace(/\./g, '');
+    }
+  }
+
+  valStr = valStr.replace(/[^0-9.-]/g, '');
+  const res = parseFloat(valStr);
+  return isNaN(res) ? 0 : res;
+}
+
 function AkurasiStock() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -221,18 +257,18 @@ function AkurasiStock() {
       const csvUrl = '/api/stock-summary';
       const mtsMap = new Map<string, number>();
       const globalPMap = new Map<string, { nama: string; satuan: string }>();
+      const reversePMap = new Map<string, string>();
+
       try {
         const combinedProds = await fetchCombinedProducts(isManual).catch(() => []);
         combinedProds.forEach(p => {
-          const key = p.kode.toUpperCase().trim();
-          globalPMap.set(key, {
-            nama: p.nama,
-            satuan: p.satuan
-          });
-          globalPMap.set(p.kode, {
-            nama: p.nama,
-            satuan: p.satuan
-          });
+          const code = (p.kode || '').trim();
+          const name = (p.nama || '').trim();
+          if (code) {
+            globalPMap.set(code.toUpperCase(), { nama: name, satuan: p.satuan });
+            globalPMap.set(code, { nama: name, satuan: p.satuan });
+            if (name) reversePMap.set(name.toUpperCase(), code);
+          }
         });
       } catch (err) {
         console.error("Gagal memuat produk gabungan:", err);
@@ -266,40 +302,17 @@ function AkurasiStock() {
               
               let lastQty = 0;
               if (colLastQty !== -1 && row[colLastQty] !== undefined) {
-                let valStr = String(row[colLastQty]).trim();
-                let lastDot = valStr.lastIndexOf('.');
-                let lastComma = valStr.lastIndexOf(',');
-                
-                if (lastComma > -1 && lastDot > -1) {
-                  if (lastComma > lastDot) {
-                    valStr = valStr.replace(/\./g, '').replace(/,/g, '.');
-                  } else {
-                    valStr = valStr.replace(/,/g, '');
-                  }
-                } else if (lastComma > -1 && lastDot === -1) {
-                  const parts = valStr.split(',');
-                  if (parts.length > 1 && parts[parts.length - 1].length === 3 && parts[0].replace('-', '').length <= 3) {
-                    valStr = valStr.replace(/,/g, '');
-                  } else {
-                    valStr = valStr.replace(/,/g, '.');
-                  }
-                } else if (lastDot > -1 && lastComma === -1) {
-                  const parts = valStr.split('.');
-                  if (parts.length > 1 && parts[parts.length - 1].length === 3 && parts[0].replace('-', '').length <= 3) {
-                    valStr = valStr.replace(/\./g, '');
-                  }
-                }
-                valStr = valStr.replace(/[^0-9.-]/g, '');
-                lastQty = parseFloat(valStr) || 0;
-                if (isNaN(lastQty)) lastQty = 0;
+                lastQty = parseMtsNumber(row[colLastQty]);
               }
 
               if (loc) {
                 if (sku) {
                   mtsMap.set(`${loc}_${sku}`, lastQty);
+                  mtsMap.set(`${sku}_${loc}`, lastQty);
                 }
                 if (name) {
                   mtsMap.set(`${loc}_${name}`, lastQty);
+                  mtsMap.set(`${name}_${loc}`, lastQty);
                 }
               }
             });
@@ -316,15 +329,24 @@ function AkurasiStock() {
       await Promise.all(
         urlEntries.map(async ([aName, aUrl]) => {
           try {
-            const [tn, tr, tm, ts, lr] = await Promise.all([
+            const [tn, tr, tm, ts, pr, lr] = await Promise.all([
               fetchSheetData(aUrl, "'INPUT'!A2:J", isManual).catch(() => []),
               fetchSheetData(aUrl, "'INPUT RM'!A2:J", isManual).catch(() => []),
               fetchSheetData(aUrl, "'INPUT MFG'!A2:J", isManual).catch(() => []),
               fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", isManual).catch(() => []),
+              fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:D", isManual).catch(() => []),
               fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", isManual).catch(() => [])
             ]);
 
-            const pMap = globalPMap;
+            const pMap = new Map(globalPMap);
+            (pr || []).filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
+              const kode = String(r[0]).trim();
+              const nama = String(r[1] || '').trim();
+              const satuan = String(r[2] || '').trim();
+              pMap.set(kode, { nama, satuan });
+              pMap.set(kode.toUpperCase(), { nama, satuan });
+              if (nama) reversePMap.set(nama.toUpperCase(), kode);
+            });
 
             const lMap = new Map<string, { nama: string; whType: string; area: string }>();
             lr.filter((r: any[]) => r.length > 0 && (r[0] || r[1]) && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
@@ -352,7 +374,7 @@ function AkurasiStock() {
                 const tanggal = String(r[0] || '').trim();
                 const nama = String(r[1] || '').trim();
                 const kode = String(r[9] || '').trim();
-                return tanggal !== '' && nama !== '' && kode !== '#N/A' && nama !== '#N/A' && tanggal !== '#N/A';
+                return tanggal !== '' && (nama !== '' || kode !== '') && kode !== '#N/A' && nama !== '#N/A' && tanggal !== '#N/A';
               });
               valid.forEach((r: any[]) => {
                 const tanggalRaw = String(r[0] || '').trim();
@@ -363,7 +385,9 @@ function AkurasiStock() {
                 const uom = String(r[3] || '').trim();
                 
                 if (!pName && !pCode) return;
-                if (!pCode) pCode = pName;
+                if ((!pCode || pCode === '#N/A') && pName) {
+                  pCode = reversePMap.get(pName.toUpperCase()) || pName;
+                }
 
                 const qtyStr = String(r[2] || '0').replace(',', '.');
                 let qty = parseFloat(qtyStr) || 0;
@@ -374,7 +398,7 @@ function AkurasiStock() {
                 if (!fromLocator && !toLocator) fromLocator = 'UNKNOWN_L';
 
                 if (tipe === 'TRANSFER' || tipe === 'TF') {
-                  rawTransactions.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || toLocator || 'UNKNOWN_L', qty, uom, tanggal, source: sourceSheet });
+                  rawTransactions.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || 'UNKNOWN_L', qty, uom, tanggal, source: sourceSheet });
                   if (toLocator) {
                     rawTransactions.push({ tipe: 'IN', pCode, pName, lCode: toLocator, qty, uom, tanggal, source: sourceSheet });
                   }
@@ -403,7 +427,7 @@ function AkurasiStock() {
 
             rawTransactions.forEach(t => {
               const { tipe, pCode, pName, lCode, qty, uom, tanggal, source } = t;
-              const itemKey = `${lCode}_${pCode}`;
+              const itemKey = `${source}_${lCode.toUpperCase().trim()}_${pCode.toUpperCase().trim()}`;
 
               let includeInCumulative = false;
               if (reconType === 'daily') {
@@ -414,12 +438,12 @@ function AkurasiStock() {
 
               if (includeInCumulative) {
                 if (!areaStocksMap.has(itemKey)) {
-                  const pData = pMap.get(pCode) || { nama: pName || pCode, satuan: uom || 'Pcs' };
+                  const pData = pMap.get(pCode) || pMap.get(pCode.toUpperCase()) || { nama: pName || pCode, satuan: uom || 'Pcs' };
                   areaStocksMap.set(itemKey, {
                     key: itemKey,
-                    lCode,
-                    pCode: pCode === pName ? '' : pCode,
-                    pName: pData.nama,
+                    lCode: lCode.trim(),
+                    pCode: pCode,
+                    pName: pData.nama || pName || pCode,
                     uom: pData.satuan || uom || 'Pcs',
                     physicalQty: 0,
                     source: source || 'INPUT'
@@ -436,7 +460,7 @@ function AkurasiStock() {
                 } else if (isOUT) {
                   item.physicalQty -= qty;
                 } else {
-                  if (qty > 0) {
+                  if (qty > 0 && !['TRANSFER', 'TF'].includes(normType)) {
                     item.physicalQty += qty;
                   }
                 }
@@ -445,16 +469,22 @@ function AkurasiStock() {
 
             areaStocksMap.forEach(item => {
               const locKey = item.lCode.toUpperCase().trim();
-              const pCodeUpper = item.pCode.toUpperCase().trim();
-              const pNameUpper = item.pName.toUpperCase().trim();
+              const productCodeUpper = item.pCode.toUpperCase().trim();
+              const productNameUpper = item.pName.toUpperCase().trim();
 
               let systemQty = 0;
-              if (mtsMap.has(`${locKey}_${pCodeUpper}`)) {
-                systemQty = mtsMap.get(`${locKey}_${pCodeUpper}`) || 0;
-              } else if (mtsMap.has(`${locKey}_${pNameUpper}`)) {
-                systemQty = mtsMap.get(`${locKey}_${pNameUpper}`) || 0;
-              } else if (mtsMap.has(`${locKey}_${pCodeUpper.replace(/\s+/g, '')}`)) {
-                systemQty = mtsMap.get(`${locKey}_${pCodeUpper.replace(/\s+/g, '')}`) || 0;
+              if (mtsMap.has(`${locKey}_${productCodeUpper}`)) {
+                systemQty = mtsMap.get(`${locKey}_${productCodeUpper}`) || 0;
+              } else if (mtsMap.has(`${locKey}_${productNameUpper}`)) {
+                systemQty = mtsMap.get(`${locKey}_${productNameUpper}`) || 0;
+              } else if (mtsMap.has(`${locKey}_${productCodeUpper.replace(/\s+/g, '')}`)) {
+                systemQty = mtsMap.get(`${locKey}_${productCodeUpper.replace(/\s+/g, '')}`) || 0;
+              } else if (mtsMap.has(`${productCodeUpper}_${locKey}`)) {
+                systemQty = mtsMap.get(`${productCodeUpper}_${locKey}`) || 0;
+              } else if (mtsMap.has(`${productNameUpper}_${locKey}`)) {
+                systemQty = mtsMap.get(`${productNameUpper}_${locKey}`) || 0;
+              } else if (mtsMap.has(`${productCodeUpper.replace(/\s+/g, '')}_${locKey}`)) {
+                systemQty = mtsMap.get(`${productCodeUpper.replace(/\s+/g, '')}_${locKey}`) || 0;
               }
 
               const physicalQty = Math.round(item.physicalQty * 1000) / 1000;
