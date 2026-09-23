@@ -34,8 +34,10 @@ export interface AdminAccount {
 
 export const ADMIN_ACCOUNTS: AdminAccount[] = [
   { username: 'admin', password: 'admin123', allowedArea: 'ALL', label: 'Super Admin (Semua Area)' },
-  { username: 'admina5', password: 'admina5123', allowedArea: 'ALL', label: 'Admin A5' },
-  { username: 'petugasa5', password: 'petugasa5123', allowedArea: 'ALL', label: 'Petugas A5' },
+  { username: 'adminc3', password: 'adminc3123', allowedArea: 'ALL', label: 'Admin C3' },
+  { username: 'petugasc3', password: 'petugasc3123', allowedArea: 'ALL', label: 'Petugas C3' },
+  { username: 'admina5', password: 'admina5123', allowedArea: 'ALL', label: 'Admin C3' },
+  { username: 'petugasa5', password: 'petugasa5123', allowedArea: 'ALL', label: 'Petugas C3' },
   { username: 'helper', password: 'helper123', allowedArea: 'ALL', label: 'Helper' },
   { username: 'hq', password: 'hq123', allowedArea: 'All Cabang', label: 'Admin All Cabang (Pusat)' },
   { username: 'admin_hq', password: 'hq123', allowedArea: 'All Cabang', label: 'Admin All Cabang' },
@@ -262,8 +264,8 @@ export default function App() {
                   <div>
                     <p className="text-slate-800 font-bold">Role Baru (Sesuai Tugas):</p>
                     <ul className="ml-2 space-y-1 mb-2 list-disc list-inside text-[11px]">
-                      <li><strong>Admin A5</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">admina5</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">admina5123</code></li>
-                      <li><strong>Petugas A5</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">petugasa5</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">petugasa5123</code></li>
+                      <li><strong>Admin C3</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">adminc3</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">adminc3123</code></li>
+                      <li><strong>Petugas C3</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">petugasc3</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">petugasc3123</code></li>
                       <li><strong>Helper</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">helper</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">helper123</code></li>
                     </ul>
                     <p className="text-slate-800 font-bold">Admin Area Spesifik:</p>

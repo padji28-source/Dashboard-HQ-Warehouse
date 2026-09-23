@@ -40,8 +40,8 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
 
   const usernameLower = (activeUsername || '').toLowerCase();
-  const isAdminA5 = usernameLower === 'admina5';
-  const isPetugasA5 = usernameLower === 'petugasa5';
+  const isAdminA5 = usernameLower === 'admina5' || usernameLower === 'adminc3';
+  const isPetugasA5 = usernameLower === 'petugasa5' || usernameLower === 'petugasc3';
   const isHelper = usernameLower === 'helper';
 
   const isSuperAdmin = userRole === 'ALL' || usernameLower === 'admin' || isAdminA5;
@@ -140,7 +140,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
           ) : (
             <div className="text-right hidden sm:block">
               <p className="text-sm font-semibold text-slate-900 leading-none">
-                {isAdminA5 ? 'Admin A5' : isPetugasA5 ? 'Petugas A5' : isHelper ? 'Helper' : 'Administrator'}
+                {isAdminA5 ? 'Admin C3' : isPetugasA5 ? 'Petugas C3' : isHelper ? 'Helper' : 'Administrator'}
               </p>
               <p className="text-xs text-slate-500 mt-1 leading-none">Area {area}</p>
             </div>
@@ -148,12 +148,12 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
 
           <div className="text-right hidden sm:block">
             <span className="inline-block px-2 py-0.5 text-[10px] font-bold bg-blue-50 border border-blue-100 text-blue-700 rounded-full uppercase tracking-wider">
-              {isAdminA5 ? 'Admin A5' : isPetugasA5 ? 'Petugas A5' : isHelper ? 'Helper' : userRole === 'ALL' ? 'Super Admin' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'Admin All Cabang' : 'Admin Area'}
+              {isAdminA5 ? 'Admin C3' : isPetugasA5 ? 'Petugas C3' : isHelper ? 'Helper' : userRole === 'ALL' ? 'Super Admin' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'Admin All Cabang' : 'Admin Area'}
             </span>
           </div>
 
           <div className="w-9 h-9 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-700 text-xs sm:text-sm font-bold uppercase shrink-0 shadow-inner">
-            {isAdminA5 ? 'A5' : isPetugasA5 ? 'PA' : isHelper ? 'HP' : userRole === 'ALL' ? 'SA' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'AC' : area.substring(0, 2)}
+            {isAdminA5 ? 'C3' : isPetugasA5 ? 'PC' : isHelper ? 'HP' : userRole === 'ALL' ? 'SA' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'AC' : area.substring(0, 2)}
           </div>
         </div>
       </header>
@@ -276,18 +276,18 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
               </div>
             )}
 
-            {(userRole === 'ALL' || isAdminA5) && (
+            {(userRole === 'ALL' || userRole === 'HQ' || userRole === 'All Cabang' || isAdminA5) && (
               <div className="mt-4 pt-4 border-t border-slate-800">
                 <div className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Sistem Eksternal</div>
                 <a
-                  href="https://wms-a5-tes.vercel.app/"
+                  href="https://wmsc3.vercel.app/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-150 transition-all duration-200"
                 >
                   <div className="flex items-center gap-3">
                     <ExternalLink className="w-5 h-5 text-emerald-400 shrink-0" />
-                    <span>WMS A5</span>
+                    <span className="font-bold text-emerald-400">WMS C3</span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-500" />
                 </a>

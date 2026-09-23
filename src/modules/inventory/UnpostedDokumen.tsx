@@ -58,7 +58,7 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
   const [pageSize, setPageSize] = useState(25);
 
   const usernameLower = (activeUsername || '').toLowerCase();
-  const isAdminA5 = usernameLower === 'admina5';
+  const isAdminA5 = usernameLower === 'admina5' || usernameLower === 'adminc3';
   const isSuperAdmin = userRole === 'ALL' || usernameLower === 'admin' || isAdminA5;
   const isHQ = userRole === 'HQ' || userRole === 'All Cabang' || usernameLower === 'hq' || usernameLower === 'admin_hq' || area === 'All Cabang' || area === 'HQ';
   const isPPICorMP = usernameLower === 'ppic' || usernameLower === 'mp' || userRole.toUpperCase().includes('PPIC') || userRole.toUpperCase().includes('MP');
