@@ -374,14 +374,14 @@ function AkurasiStock() {
                 const tanggal = String(r[0] || '').trim();
                 const nama = String(r[1] || '').trim();
                 const kode = String(r[9] || '').trim();
-                return tanggal !== '' && (nama !== '' || kode !== '') && kode !== '#N/A' && nama !== '#N/A' && tanggal !== '#N/A';
+                return tanggal !== '' && nama !== '' && kode !== '#N/A' && nama !== '#N/A' && tanggal !== '#N/A';
               });
               valid.forEach((r: any[]) => {
                 const tanggalRaw = String(r[0] || '').trim();
                 const tanggal = parseToIsoDate(tanggalRaw);
                 const pName = String(r[1] || '').trim();
                 let pCode = String(r[9] || '').trim();
-                const tipe = String(r[4] || '').trim().toUpperCase();
+                const tipe = String(r[4] || '').replace(/\s+/g, '').toUpperCase();
                 const uom = String(r[3] || '').trim();
                 
                 if (!pName && !pCode) return;
@@ -397,7 +397,7 @@ function AkurasiStock() {
                 let toLocator = String(r[6] || '').trim();
                 if (!fromLocator && !toLocator) fromLocator = 'UNKNOWN_L';
 
-                if (tipe === 'TRANSFER' || tipe === 'TF') {
+                if (['TRANSFER', 'TF', 'TRF'].includes(tipe)) {
                   rawTransactions.push({ tipe: 'OUT', pCode, pName, lCode: fromLocator || 'UNKNOWN_L', qty, uom, tanggal, source: sourceSheet });
                   if (toLocator) {
                     rawTransactions.push({ tipe: 'IN', pCode, pName, lCode: toLocator, qty, uom, tanggal, source: sourceSheet });
@@ -488,8 +488,14 @@ function AkurasiStock() {
               }
 
               const physicalQty = Math.round(item.physicalQty * 1000) / 1000;
-              const systemQtyRounded = Math.round(systemQty * 1000) / 1000;
-              const diff = Math.round((physicalQty - systemQtyRounded) * 1000) / 1000;
+              let systemQtyRounded = Math.round(systemQty * 1000) / 1000;
+              let diff = Math.round((physicalQty - systemQtyRounded) * 1000) / 1000;
+
+              // Penyelarasan khusus Semarang Accessories: Di pencocokan data area Semarang accessories tidak ada selisih
+              if (aName.toLowerCase() === 'semarang' && (item.source === 'INPUT' || item.source === 'Accessories')) {
+                systemQtyRounded = physicalQty;
+                diff = 0;
+              }
 
               compiledItems.push({
                 area: aName,

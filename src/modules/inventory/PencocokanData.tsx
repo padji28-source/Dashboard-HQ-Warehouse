@@ -2,7 +2,7 @@ import { fetchAndParseCSV } from "../../lib/csvCache";
 import { useEffect, useState, useMemo, useRef , memo} from "react";
 import { fetchSheetData } from '../../lib/sheets';
 import { AREA_URLS } from '../../App';
-import { Loader2, Search, Scale, CheckCircle2, AlertTriangle, RefreshCw, Undo, Lock, History, FileSpreadsheet, Info, Calendar, Trash2, Check, X , TrendingUp} from 'lucide-react';
+import { Loader2, Search, Scale, CheckCircle2, AlertTriangle, RefreshCw, Undo, Lock, History, FileSpreadsheet, Info, Calendar, Trash2, Check, X , TrendingUp, Activity} from 'lucide-react';
 import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { parseToIsoDate, formatToDDMMYYYY } from '../../lib/dateUtils';
@@ -168,6 +168,30 @@ interface ReconciliationItem {
   source: string;
 }
 
+interface WeeklyLocatorQty {
+  locatorCode: string;
+  locatorName: string;
+  qty: number;
+}
+
+interface WeeklyProductItem {
+  key: string;
+  kodeProduk: string;
+  namaProduk: string;
+  uom: string;
+  area: string;
+  source: string;
+  locators: WeeklyLocatorQty[];
+  totalStokKemarin: number;
+  totalMutasiIn: number;
+  totalMutasiOut: number;
+  totalQty: number;
+  totalStockSistem: number;
+  totalSelisih: number;
+  status: string;
+  hasMovement?: boolean;
+}
+
 function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: string }) {
   const [loading, setLoading] = useState(true);
   const [allTransactions, setAllTransactions] = useState<any[]>([]);
@@ -175,8 +199,9 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
   const [locatorsMap, setLocatorsMap] = useState<Map<string, { nama: string; whType: string; area: string }>>(new Map());
   const [mtsLookupMap, setMtsLookupMap] = useState<Map<string, number>>(new Map());
   
-  // Daily and Monthly Reconciliation configuration
-  const [reconType, setReconType] = useState<'daily' | 'monthly'>('daily');
+  // Daily, Monthly, and Week Reconciliation configuration
+  const [reconType, setReconType] = useState<'daily' | 'monthly' | 'week'>('daily');
+  const [weekViewMode, setWeekViewMode] = useState<'detail' | 'matrix'>('detail');
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
     const offset = now.getTimezoneOffset();
@@ -194,6 +219,31 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
     const localNow = new Date(now.getTime() - offset * 60 * 1000);
     return localNow.toISOString().split('T')[0];
   });
+
+  // Week range helpers
+  const getWeekBounds = (refDate: Date = new Date()) => {
+    const d = new Date(refDate);
+    const day = d.getDay();
+    const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(d.getFullYear(), d.getMonth(), diffToMonday);
+    const sunday = new Date(d.getFullYear(), d.getMonth(), diffToMonday + 6);
+    const toIso = (dt: Date) => {
+      const offset = dt.getTimezoneOffset();
+      return new Date(dt.getTime() - offset * 60 * 1000).toISOString().split('T')[0];
+    };
+    return { startIso: toIso(monday), endIso: toIso(sunday) };
+  };
+
+  const [selectedWeekStartDate, setSelectedWeekStartDate] = useState(() => getWeekBounds().startIso);
+  const [selectedWeekEndDate, setSelectedWeekEndDate] = useState(() => getWeekBounds().endIso);
+
+  const setQuickWeek = (offsetWeeks: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - offsetWeeks * 7);
+    const bounds = getWeekBounds(d);
+    setSelectedWeekStartDate(bounds.startIso);
+    setSelectedWeekEndDate(bounds.endIso);
+  };
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -217,6 +267,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL'); // ALL, SESUAI, SELISIH
   const [selectedLocator, setSelectedLocator] = useState('ALL');
   const [selectedSourceFilter, setSelectedSourceFilter] = useState('ALL'); // ALL, INPUT, INPUT RM, INPUT MFG, INPUT SUPPLIES
+  const [selectedMovementFilter, setSelectedMovementFilter] = useState('ALL'); // ALL, BERGERAK, TIDAK_BERGERAK, STOK_ADA, STOK_KOSONG
 
   // Pagination state
   const [pageSize, setPageSize] = useState(50);
@@ -264,7 +315,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
   // Auto-reset page index when filters, type, or selection date changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedAreaFilter, selectedLocator, selectedStatusFilter, selectedSourceFilter, pageSize, reconType, selectedDate, selectedStartDate, selectedEndDate]);
+  }, [searchQuery, selectedAreaFilter, selectedLocator, selectedStatusFilter, selectedSourceFilter, selectedMovementFilter, pageSize, reconType, selectedDate, selectedStartDate, selectedEndDate, selectedWeekStartDate, selectedWeekEndDate]);
 
   const loadData = async () => {
     try {
@@ -506,6 +557,10 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
         includeInCumulative = !tanggal || tanggal <= selectedDate;
         includeInYesterday = !tanggal || tanggal < selectedDate || (isAwal && tanggal <= selectedDate);
         includeInMutation = tanggal === selectedDate && !isAwal;
+      } else if (reconType === 'week') {
+        includeInCumulative = !tanggal || tanggal <= selectedWeekEndDate;
+        includeInYesterday = !tanggal || tanggal < selectedWeekStartDate || (isAwal && tanggal <= selectedWeekEndDate);
+        includeInMutation = tanggal >= selectedWeekStartDate && tanggal <= selectedWeekEndDate && !isAwal;
       } else {
         includeInCumulative = !tanggal || tanggal <= selectedEndDate;
         includeInYesterday = !tanggal || tanggal < selectedStartDate || (isAwal && tanggal <= selectedEndDate);
@@ -622,7 +677,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
         status
       };
     });
-  }, [allTransactions, productsMap, locatorsMap, mtsLookupMap, area, reconType, selectedDate, selectedStartDate, selectedEndDate, selectedSourceFilter]);
+  }, [allTransactions, productsMap, locatorsMap, mtsLookupMap, area, reconType, selectedDate, selectedStartDate, selectedEndDate, selectedWeekStartDate, selectedWeekEndDate, selectedSourceFilter]);
 
   // Filter unique locators for selection
   const uniqueLocators = useMemo(() => {
@@ -681,9 +736,15 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
 
       if (selectedSourceFilter !== 'ALL' && item.source !== selectedSourceFilter) return false;
 
+      const hasMovement = Math.abs(item.mutasiQty || 0) > 0 || (item.mutasiQtyIn || 0) > 0 || (item.mutasiQtyOut || 0) > 0;
+      if (selectedMovementFilter === 'BERGERAK' && !hasMovement) return false;
+      if (selectedMovementFilter === 'TIDAK_BERGERAK' && hasMovement) return false;
+      if (selectedMovementFilter === 'STOK_ADA' && (item.stokRill || 0) <= 0) return false;
+      if (selectedMovementFilter === 'STOK_KOSONG' && (item.stokRill || 0) > 0) return false;
+
       return true;
     });
-  }, [reconciliationList, searchQuery, selectedAreaFilter, selectedLocator, selectedStatusFilter, selectedProduct, selectedSourceFilter]);
+  }, [reconciliationList, searchQuery, selectedAreaFilter, selectedLocator, selectedStatusFilter, selectedProduct, selectedSourceFilter, selectedMovementFilter]);
 
   // Summary Metrics for LIVE
   const metrics = useMemo(() => {
@@ -691,6 +752,18 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
     let filteredByAreaList = selectedAreaFilter === 'ALL' ? list : list.filter(i => i.area === selectedAreaFilter);
     if (selectedSourceFilter !== 'ALL') {
       filteredByAreaList = filteredByAreaList.filter(i => i.source === selectedSourceFilter);
+    }
+    if (selectedLocator !== 'ALL') {
+      filteredByAreaList = filteredByAreaList.filter(i => i.whGroup === selectedLocator);
+    }
+    if (selectedMovementFilter === 'BERGERAK') {
+      filteredByAreaList = filteredByAreaList.filter(i => Math.abs(i.mutasiQty || 0) > 0 || (i.mutasiQtyIn || 0) > 0 || (i.mutasiQtyOut || 0) > 0);
+    } else if (selectedMovementFilter === 'TIDAK_BERGERAK') {
+      filteredByAreaList = filteredByAreaList.filter(i => !(Math.abs(i.mutasiQty || 0) > 0 || (i.mutasiQtyIn || 0) > 0 || (i.mutasiQtyOut || 0) > 0));
+    } else if (selectedMovementFilter === 'STOK_ADA') {
+      filteredByAreaList = filteredByAreaList.filter(i => (i.stokRill || 0) > 0);
+    } else if (selectedMovementFilter === 'STOK_KOSONG') {
+      filteredByAreaList = filteredByAreaList.filter(i => (i.stokRill || 0) <= 0);
     }
     
     const totalCounted = filteredByAreaList.filter(i => i.stokRill !== null).length;
@@ -705,7 +778,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
       selisih: totalSelisih,
       belumDiisi: totalBelum
     };
-  }, [reconciliationList, selectedAreaFilter, selectedSourceFilter]);
+  }, [reconciliationList, selectedAreaFilter, selectedSourceFilter, selectedLocator, selectedMovementFilter]);
 
   // Grand Total calculation for LIVE
   const grandTotals = useMemo(() => {
@@ -740,8 +813,12 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
 
   // Save action handlers
   const initSaveSession = () => {
-    const dStr = reconType === 'daily' ? selectedDate : `${selectedStartDate}_to_${selectedEndDate}`;
-    const typeLabel = reconType === 'daily' ? 'Harian' : 'Bulanan';
+    const dStr = reconType === 'daily' 
+      ? selectedDate 
+      : reconType === 'week'
+        ? `${selectedWeekStartDate}_to_${selectedWeekEndDate}`
+        : `${selectedStartDate}_to_${selectedEndDate}`;
+    const typeLabel = reconType === 'daily' ? 'Harian' : reconType === 'week' ? 'Mingguan' : 'Bulanan';
     const areaLabel = selectedAreaFilter === 'ALL' ? (area === 'HQ' ? 'HQ-Pusat' : area) : selectedAreaFilter;
     setSessionNameInput(`Pencocokan ${typeLabel} ${areaLabel} (${dStr})`);
     setShowSaveModal(true);
@@ -755,7 +832,11 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
     
     try {
       setIsSaving(true);
-      const dStr = reconType === 'daily' ? selectedDate : `${selectedStartDate}_to_${selectedEndDate}`;
+      const dStr = reconType === 'daily' 
+        ? selectedDate 
+        : reconType === 'week'
+          ? `${selectedWeekStartDate}_to_${selectedWeekEndDate}`
+          : `${selectedStartDate}_to_${selectedEndDate}`;
       
       const sessionData = {
         id: 'rec_' + Date.now(),
@@ -868,11 +949,17 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
 
         if (selectedSourceFilter !== 'ALL' && item.source !== selectedSourceFilter) return false;
 
+        const hasMovement = Math.abs(item.mutasiQty || 0) > 0 || (item.mutasiQtyIn || 0) > 0 || (item.mutasiQtyOut || 0) > 0;
+        if (selectedMovementFilter === 'BERGERAK' && !hasMovement) return false;
+        if (selectedMovementFilter === 'TIDAK_BERGERAK' && hasMovement) return false;
+        if (selectedMovementFilter === 'STOK_ADA' && (item.stokRill || 0) <= 0) return false;
+        if (selectedMovementFilter === 'STOK_KOSONG' && (item.stokRill || 0) > 0) return false;
+
         return true;
       });
     }
     return filteredReconciliation;
-  }, [activeSavedSession, filteredReconciliation, searchQuery, selectedProduct, selectedSourceFilter]);
+  }, [activeSavedSession, filteredReconciliation, searchQuery, selectedProduct, selectedSourceFilter, selectedMovementFilter]);
 
   const displayedTotals = useMemo(() => {
     if (activeSavedSession) {
@@ -913,6 +1000,19 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
       if (selectedSourceFilter !== 'ALL') {
         list = list.filter((i: any) => i.source === selectedSourceFilter);
       }
+      if (selectedLocator !== 'ALL') {
+        list = list.filter((i: any) => i.whGroup === selectedLocator);
+      }
+      if (selectedMovementFilter === 'BERGERAK') {
+        list = list.filter((i: any) => Math.abs(i.mutasiQty || 0) > 0 || (i.mutasiQtyIn || 0) > 0 || (i.mutasiQtyOut || 0) > 0);
+      } else if (selectedMovementFilter === 'TIDAK_BERGERAK') {
+        list = list.filter((i: any) => !(Math.abs(i.mutasiQty || 0) > 0 || (i.mutasiQtyIn || 0) > 0 || (i.mutasiQtyOut || 0) > 0));
+      } else if (selectedMovementFilter === 'STOK_ADA') {
+        list = list.filter((i: any) => (i.stokRill || 0) > 0);
+      } else if (selectedMovementFilter === 'STOK_KOSONG') {
+        list = list.filter((i: any) => (i.stokRill || 0) <= 0);
+      }
+
       const totalCounted = list.filter((i: any) => i.stokRill !== null).length;
       const totalMatched = list.filter((i: any) => i.status === 'SESUAI').length;
       const totalSelisih = list.filter((i: any) => i.status === 'SELISIH').length;
@@ -927,7 +1027,40 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
       };
     }
     return metrics;
-  }, [activeSavedSession, metrics, selectedSourceFilter]);
+  }, [activeSavedSession, metrics, selectedSourceFilter, selectedLocator, selectedMovementFilter]);
+
+  const movementCounts = useMemo(() => {
+    const baseList = activeSavedSession ? activeSavedSession.items : reconciliationList;
+    let list = selectedAreaFilter === 'ALL' ? baseList : baseList.filter((i: any) => i.area === selectedAreaFilter);
+    if (selectedSourceFilter !== 'ALL') {
+      list = list.filter((i: any) => i.source === selectedSourceFilter);
+    }
+    if (selectedLocator !== 'ALL') {
+      list = list.filter((i: any) => i.whGroup === selectedLocator);
+    }
+
+    let moving = 0;
+    let staticCount = 0;
+    let withStock = 0;
+    let zeroStock = 0;
+
+    list.forEach((item: any) => {
+      const hasMovement = Math.abs(item.mutasiQty || 0) > 0 || (item.mutasiQtyIn || 0) > 0 || (item.mutasiQtyOut || 0) > 0;
+      if (hasMovement) moving++;
+      else staticCount++;
+
+      if ((item.stokRill || 0) > 0) withStock++;
+      else zeroStock++;
+    });
+
+    return {
+      all: list.length,
+      moving,
+      staticCount,
+      withStock,
+      zeroStock
+    };
+  }, [reconciliationList, activeSavedSession, selectedAreaFilter, selectedSourceFilter, selectedLocator]);
 
   const categoryCounts = useMemo(() => {
     const list = activeSavedSession ? activeSavedSession.items : reconciliationList;
@@ -944,12 +1077,152 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
 
   const currentReconType = activeSavedSession ? activeSavedSession.type : reconType;
 
+  // Grouped Product List for Week Reconciliation Mode
+  const weeklyProductList = useMemo<WeeklyProductItem[]>(() => {
+    const baseList = activeSavedSession ? activeSavedSession.items : reconciliationList;
+    const productMap = new Map<string, WeeklyProductItem>();
+
+    baseList.forEach(item => {
+      if (selectedAreaFilter !== 'ALL' && item.area !== selectedAreaFilter) return;
+      if (selectedSourceFilter !== 'ALL' && item.source !== selectedSourceFilter) return;
+      if (selectedLocator !== 'ALL' && item.whGroup !== selectedLocator) return;
+
+      const pKey = (area === 'HQ' || spreadsheetId === 'HQ')
+        ? `${item.area}__${(item.kodeProduk || '').toUpperCase().trim()}`
+        : (item.kodeProduk || '').toUpperCase().trim();
+
+      if (!productMap.has(pKey)) {
+        productMap.set(pKey, {
+          key: pKey,
+          kodeProduk: item.kodeProduk,
+          namaProduk: item.namaProduk,
+          uom: item.uom || 'Pcs',
+          area: item.area,
+          source: item.source,
+          locators: [],
+          totalStokKemarin: 0,
+          totalMutasiIn: 0,
+          totalMutasiOut: 0,
+          totalQty: 0,
+          totalStockSistem: 0,
+          totalSelisih: 0,
+          status: 'SESUAI',
+          hasMovement: false
+        });
+      }
+
+      const pItem = productMap.get(pKey)!;
+      pItem.totalStokKemarin = Math.round(((pItem.totalStokKemarin || 0) + (item.stokKemarin || 0)) * 1000) / 1000;
+      pItem.totalMutasiIn = Math.round(((pItem.totalMutasiIn || 0) + ((item as any).mutasiQtyIn || 0)) * 1000) / 1000;
+      pItem.totalMutasiOut = Math.round(((pItem.totalMutasiOut || 0) + ((item as any).mutasiQtyOut || 0)) * 1000) / 1000;
+      pItem.totalStockSistem = Math.round(((pItem.totalStockSistem || 0) + (item.stockSistem || 0)) * 1000) / 1000;
+
+      const itemHasMovement = Math.abs(item.mutasiQty || 0) > 0 || (item.mutasiQtyIn || 0) > 0 || (item.mutasiQtyOut || 0) > 0;
+      if (itemHasMovement) {
+        pItem.hasMovement = true;
+      }
+
+      const existingLoc = pItem.locators.find(l => l.locatorCode === item.whGroup);
+      if (existingLoc) {
+        existingLoc.qty = Math.round((existingLoc.qty + (item.stokRill || 0)) * 1000) / 1000;
+      } else {
+        pItem.locators.push({
+          locatorCode: item.whGroup,
+          locatorName: item.namaLocator,
+          qty: Math.round((item.stokRill || 0) * 1000) / 1000
+        });
+      }
+    });
+
+    const results: WeeklyProductItem[] = [];
+    productMap.forEach(item => {
+      item.totalQty = Math.round(item.locators.reduce((sum, l) => sum + l.qty, 0) * 1000) / 1000;
+      item.totalSelisih = Math.round((item.totalQty - (item.totalStockSistem || 0)) * 1000) / 1000;
+      item.status = item.totalSelisih === 0 ? 'SESUAI' : 'SELISIH';
+      
+      if (selectedStatusFilter !== 'ALL' && item.status !== selectedStatusFilter) return;
+      if (selectedMovementFilter === 'BERGERAK' && !item.hasMovement) return;
+      if (selectedMovementFilter === 'TIDAK_BERGERAK' && item.hasMovement) return;
+      if (selectedMovementFilter === 'STOK_ADA' && item.totalQty <= 0) return;
+      if (selectedMovementFilter === 'STOK_KOSONG' && item.totalQty > 0) return;
+
+      const matchSearch = selectedProduct
+        ? item.kodeProduk === selectedProduct.kodeProduk
+        : (item.namaProduk.toLowerCase().includes(searchQuery.toLowerCase()) || 
+           item.kodeProduk.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           item.locators.some(l => l.locatorCode.toLowerCase().includes(searchQuery.toLowerCase()) || l.locatorName.toLowerCase().includes(searchQuery.toLowerCase())));
+
+      if (matchSearch) {
+        results.push(item);
+      }
+    });
+
+    return results.sort((a, b) => a.namaProduk.localeCompare(b.namaProduk));
+  }, [reconciliationList, activeSavedSession, selectedAreaFilter, selectedSourceFilter, selectedLocator, selectedStatusFilter, selectedProduct, searchQuery, area, spreadsheetId, selectedMovementFilter]);
+
+  const totalWeeklyQty = useMemo(() => {
+    return Math.round(weeklyProductList.reduce((sum, p) => sum + p.totalQty, 0) * 1000) / 1000;
+  }, [weeklyProductList]);
+
+  const weeklyMatrixTotals = useMemo(() => {
+    let totalStokAwal = 0;
+    let totalMutasiIn = 0;
+    let totalMutasiOut = 0;
+    let totalQty = 0;
+    let totalStockSistem = 0;
+    let totalSelisih = 0;
+
+    weeklyProductList.forEach(p => {
+      totalStokAwal += p.totalStokKemarin || 0;
+      totalMutasiIn += p.totalMutasiIn || 0;
+      totalMutasiOut += p.totalMutasiOut || 0;
+      totalQty += p.totalQty || 0;
+      totalStockSistem += p.totalStockSistem || 0;
+      totalSelisih += p.totalSelisih || 0;
+    });
+
+    return {
+      totalStokAwal: Math.round(totalStokAwal * 1000) / 1000,
+      totalMutasiIn: Math.round(totalMutasiIn * 1000) / 1000,
+      totalMutasiOut: Math.round(totalMutasiOut * 1000) / 1000,
+      totalQty: Math.round(totalQty * 1000) / 1000,
+      totalStockSistem: Math.round(totalStockSistem * 1000) / 1000,
+      totalSelisih: Math.round(totalSelisih * 1000) / 1000
+    };
+  }, [weeklyProductList]);
+
   // Compute pagination based on adaptive list
-  const totalPages = Math.ceil(displayedList.length / pageSize);
+  const activeItemsCount = currentReconType === 'week' ? weeklyProductList.length : displayedList.length;
+  const totalPages = Math.ceil(activeItemsCount / pageSize) || 1;
   const paginatedReconciliation = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return displayedList.slice(start, start + pageSize);
   }, [displayedList, currentPage, pageSize]);
+
+  const paginatedWeeklyList = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return weeklyProductList.slice(start, start + pageSize);
+  }, [weeklyProductList, currentPage, pageSize]);
+
+  // Distinct locator columns for Week view
+  const weekLocatorColumns = useMemo(() => {
+    const locSet = new Set<string>();
+    weeklyProductList.forEach(p => {
+      p.locators.forEach(l => {
+        if (l.locatorCode && l.locatorCode.trim()) {
+          locSet.add(l.locatorCode.trim());
+        }
+      });
+    });
+    if (selectedLocator !== 'ALL') {
+      return [selectedLocator];
+    }
+    const list = Array.from(locSet);
+    if (list.length === 0) {
+      return uniqueLocators.map(l => l.code);
+    }
+    return list.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [weeklyProductList, selectedLocator, uniqueLocators]);
 
   // Unique areas available inside data
   const uniqueAreas = useMemo(() => {
@@ -999,15 +1272,70 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
 
   const handleExportExcel = async () => {
     const XLSX = await import("xlsx");
-    if (displayedList.length === 0) {
+    const itemsCount = currentReconType === 'week' ? weeklyProductList.length : displayedList.length;
+    if (itemsCount === 0) {
       alert('Tidak ada data untuk diekspor!');
       return;
     }
 
-    let dataToExport = [];
-    const dateStr = currentReconType === 'daily' ? formatToDDMMYYYY(selectedDate) : `${formatToDDMMYYYY(selectedStartDate)} - ${formatToDDMMYYYY(selectedEndDate)}`;
-    const typeLabel = currentReconType === 'daily' ? 'Harian' : 'Bulanan';
+    const dateStr = currentReconType === 'daily' 
+      ? formatToDDMMYYYY(selectedDate) 
+      : currentReconType === 'week'
+        ? `${formatToDDMMYYYY(selectedWeekStartDate)} - ${formatToDDMMYYYY(selectedWeekEndDate)}`
+        : `${formatToDDMMYYYY(selectedStartDate)} - ${formatToDDMMYYYY(selectedEndDate)}`;
+    const typeLabel = currentReconType === 'daily' ? 'Harian' : currentReconType === 'week' ? 'Mingguan' : 'Bulanan';
 
+    if (currentReconType === 'week') {
+      const headers = ['No'];
+      if (area === 'HQ' || spreadsheetId === 'HQ') headers.push('Area');
+      headers.push('Kode Produk', 'Nama Produk', 'UOM');
+      weekLocatorColumns.forEach(loc => headers.push(loc));
+      headers.push('Total Qty');
+
+      const excelRows: any[] = [headers];
+      weeklyProductList.forEach((item, idx) => {
+        const row: any[] = [idx + 1];
+        if (area === 'HQ' || spreadsheetId === 'HQ') row.push(item.area || '');
+        row.push(item.kodeProduk, item.namaProduk, item.uom || 'Pcs');
+        weekLocatorColumns.forEach(loc => {
+          const found = item.locators.find(l => l.locatorCode === loc);
+          row.push(found ? found.qty : 0);
+        });
+        row.push(item.totalQty);
+        excelRows.push(row);
+      });
+
+      // Total row
+      const totalRow: any[] = ['Total Keseluruhan'];
+      if (area === 'HQ' || spreadsheetId === 'HQ') totalRow.push('');
+      totalRow.push('', '', '');
+      weekLocatorColumns.forEach(loc => {
+        const sum = weeklyProductList.reduce((s, p) => s + (p.locators.find(l => l.locatorCode === loc)?.qty || 0), 0);
+        totalRow.push(sum);
+      });
+      totalRow.push(totalWeeklyQty);
+      excelRows.push(totalRow);
+
+      const worksheet = XLSX.utils.aoa_to_sheet(excelRows);
+      const colWidths = [
+        { wch: 6 },
+        ...(area === 'HQ' || spreadsheetId === 'HQ' ? [{ wch: 12 }] : []),
+        { wch: 18 },
+        { wch: 38 },
+        { wch: 10 },
+        ...weekLocatorColumns.map(() => ({ wch: 14 })),
+        { wch: 16 }
+      ];
+      worksheet['!cols'] = colWidths;
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, `Rekon Mingguan`);
+      const activeArea = activeSavedSession ? activeSavedSession.area : area;
+      const fileName = `Pencocokan_Data_Mingguan_${(activeArea || 'HQ').toUpperCase()}_${dateStr}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      return;
+    }
+
+    let dataToExport = [];
     if (currentReconType === 'daily') {
       dataToExport = displayedList.map(item => ({
         'Locator': `${item.namaLocator} (${item.whGroup})`,
@@ -1039,7 +1367,14 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
 
-    const colWidths = currentReconType === 'daily' 
+    const colWidths = currentReconType === 'week'
+      ? [
+          { wch: 18 }, // Kode produk
+          { wch: 40 }, // nama produk
+          { wch: 50 }, // qty pada locator
+          { wch: 16 }, // Total QTY
+        ]
+      : currentReconType === 'daily' 
       ? [
           { wch: 25 }, // Locator
           { wch: 15 }, // Kode Produk
@@ -1168,13 +1503,13 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
         </div>
       </div>
 
-      {/* Mode Sub-nav Tabs (Daily vs Monthly) */}
+      {/* Mode Sub-nav Tabs (Daily vs Monthly vs Week) */}
       {!activeSavedSession && (
-        <div className="bg-white border border-slate-200 rounded-xl p-1 flex shadow-sm max-w-md">
+        <div className="bg-white border border-slate-200 rounded-xl p-1 flex flex-wrap shadow-sm max-w-xl">
           <button
             onClick={() => setReconType('daily')}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs sm:text-sm font-semibold rounded-lg transition-all focus:outline-none",
+              "flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 px-3 text-xs sm:text-sm font-semibold rounded-lg transition-all focus:outline-none",
               reconType === 'daily'
                 ? "bg-blue-600 text-white shadow"
                 : "text-slate-600 hover:text-slate-950 hover:bg-slate-50"
@@ -1186,14 +1521,26 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
           <button
             onClick={() => setReconType('monthly')}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs sm:text-sm font-semibold rounded-lg transition-all focus:outline-none",
+              "flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 px-3 text-xs sm:text-sm font-semibold rounded-lg transition-all focus:outline-none",
               reconType === 'monthly'
                 ? "bg-blue-600 text-white shadow"
-                : "text-slate-600 hover:text-slate-955 hover:bg-slate-50"
+                : "text-slate-600 hover:text-slate-950 hover:bg-slate-50"
             )}
           >
             <Calendar className="w-4 h-4" />
             Pencocokan Periode
+          </button>
+          <button
+            onClick={() => setReconType('week')}
+            className={cn(
+              "flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 px-3 text-xs sm:text-sm font-semibold rounded-lg transition-all focus:outline-none",
+              reconType === 'week'
+                ? "bg-blue-600 text-white shadow"
+                : "text-slate-600 hover:text-slate-950 hover:bg-slate-50"
+            )}
+          >
+            <Calendar className="w-4 h-4" />
+            Pencocokan Periode Week
           </button>
         </div>
       )}
@@ -1204,11 +1551,15 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
         <div>
           {activeSavedSession ? (
             <span>
-              Arsip Terkunci: Menampilkan snapshot historis dengan tipe pencocokan <strong>{activeSavedSession.type === 'daily' ? 'Harian' : 'Bulanan'}</strong> untuk tanggal/periode <strong>{formatToDDMMYYYY(activeSavedSession.date)}</strong> di wilayah area <strong>{activeSavedSession.area}</strong>.
+              Arsip Terkunci: Menampilkan snapshot historis dengan tipe pencocokan <strong>{activeSavedSession.type === 'daily' ? 'Harian' : activeSavedSession.type === 'week' ? 'Mingguan' : 'Bulanan'}</strong> untuk tanggal/periode <strong>{formatToDDMMYYYY(activeSavedSession.date)}</strong> di wilayah area <strong>{activeSavedSession.area}</strong>.
             </span>
           ) : reconType === 'daily' ? (
             <span>
               Sedang menampilkan <strong>Pencocokan Harian</strong> untuk tanggal <strong>{formatToDDMMYYYY(selectedDate)}</strong>. Stok Rill diakumulasi dari seluruh transaksi <strong>sebelum atau pada tanggal tersebut</strong>, dengan kolom Mutasi mencatat aktivitas mutasi harian khusus di tanggal berjalan.
+            </span>
+          ) : reconType === 'week' ? (
+            <span>
+              Sedang menampilkan <strong>Pencocokan Periode Week</strong> untuk periode minggu <strong>{formatToDDMMYYYY(selectedWeekStartDate)} s/d {formatToDDMMYYYY(selectedWeekEndDate)}</strong>. Menyediakan mode <strong>Tabel Rinci (Locator)</strong> untuk rekonsiliasi detail serta mode <strong>Matriks Ringkasan (SKU)</strong> untuk melihat distribusi kuantitas antar locator.
             </span>
           ) : (
             <span>
@@ -1219,41 +1570,92 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
       </div>
 
       {/* Stats Summary Panel */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <div className="text-xs font-semibold text-slate-500 uppercase">Total SKU / Kombinasi</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{displayedMetrics.totalItems}</div>
-          <div className="text-xs text-slate-400 mt-1">Grup lokasi & produk aktif</div>
+      {currentReconType === 'week' ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <div className="text-xs font-semibold text-slate-500 uppercase">
+              {weekViewMode === 'matrix' ? 'Total Produk (SKU)' : 'Total Baris / Locator'}
+            </div>
+            <div className="text-2xl font-bold text-slate-900 mt-1">
+              {weekViewMode === 'matrix' ? weeklyProductList.length : displayedList.length}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              {weekViewMode === 'matrix' ? 'SKU unik terdaftar' : 'Titik kombinasi aktif'}
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-l-4 border-l-emerald-500">
+            <div className="text-xs font-semibold text-emerald-600 uppercase font-bold">Sesuai (Match)</div>
+            <div className="text-2xl font-bold text-emerald-700 mt-1 flex items-center gap-1.5">
+              <CheckCircle2 className="w-5 h-5" />
+              {weekViewMode === 'matrix' 
+                ? weeklyProductList.filter(p => p.status === 'SESUAI').length 
+                : displayedList.filter((i: any) => i.status === 'SESUAI').length}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              {activeItemsCount > 0 
+                ? Math.round(((weekViewMode === 'matrix' 
+                    ? weeklyProductList.filter(p => p.status === 'SESUAI').length 
+                    : displayedList.filter((i: any) => i.status === 'SESUAI').length) / activeItemsCount) * 100)
+                : 0}% Tingkat kecocokan
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-l-4 border-l-rose-500">
+            <div className="text-xs font-semibold text-rose-600 uppercase font-bold">Ada Selisih (Varian)</div>
+            <div className="text-2xl font-bold text-rose-700 mt-1 flex items-center gap-1.5">
+              <AlertTriangle className="w-5 h-5" />
+              {weekViewMode === 'matrix' 
+                ? weeklyProductList.filter(p => p.status === 'SELISIH').length 
+                : displayedList.filter((i: any) => i.status === 'SELISIH').length}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">Varian data fisik vs sistem</div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-l-4 border-l-blue-500">
+            <div className="text-xs font-semibold text-blue-600 uppercase font-bold">Total QTY Fisik Minggu Ini</div>
+            <div className="text-2xl font-bold text-blue-800 mt-1 font-mono">
+              {formatValue(totalWeeklyQty)}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              {formatToDDMMYYYY(selectedWeekStartDate)} s/d {formatToDDMMYYYY(selectedWeekEndDate)}
+            </div>
+          </div>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-l-4 border-l-emerald-500">
-          <div className="text-xs font-semibold text-emerald-600 uppercase font-bold">Sesuai (Match)</div>
-          <div className="text-2xl font-bold text-emerald-700 mt-1 flex items-center gap-1.5">
-            <CheckCircle2 className="w-5 h-5" />
-            {displayedMetrics.matched}
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <div className="text-xs font-semibold text-slate-500 uppercase">Total SKU / Kombinasi</div>
+            <div className="text-2xl font-bold text-slate-900 mt-1">{displayedMetrics.totalItems}</div>
+            <div className="text-xs text-slate-400 mt-1">Grup lokasi & produk aktif</div>
           </div>
-          <div className="text-xs text-slate-400 mt-1">
-            {displayedMetrics.totalItems > 0 ? Math.round((displayedMetrics.matched / displayedMetrics.totalItems) * 100) : 0}% Tingkat kecocokan
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-l-4 border-l-emerald-500">
+            <div className="text-xs font-semibold text-emerald-600 uppercase font-bold">Sesuai (Match)</div>
+            <div className="text-2xl font-bold text-emerald-700 mt-1 flex items-center gap-1.5">
+              <CheckCircle2 className="w-5 h-5" />
+              {displayedMetrics.matched}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              {displayedMetrics.totalItems > 0 ? Math.round((displayedMetrics.matched / displayedMetrics.totalItems) * 100) : 0}% Tingkat kecocokan
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-l-4 border-l-rose-500">
+            <div className="text-xs font-semibold text-rose-600 uppercase font-bold">Ada Selisih (Varian)</div>
+            <div className="text-2xl font-bold text-rose-700 mt-1 flex items-center gap-1.5">
+              <AlertTriangle className="w-5 h-5" />
+              {displayedMetrics.selisih}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">Butuh pemeriksaan unit/mutasi</div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-l-4 border-l-sky-500">
+            <div className="text-xs font-semibold text-sky-600 uppercase font-bold">Status Data</div>
+            <div className="text-xl font-bold text-sky-700 mt-1 flex items-center gap-1.5">
+              <Info className="w-5 h-5 text-sky-500" />
+              {activeSavedSession ? 'ARSIP TERKUNCI' : 'MTS LIVE FEED'}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              {activeSavedSession ? 'Snapshot statis tersimpan' : 'Sistem sinkronisasi waktu riil'}
+            </div>
           </div>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-l-4 border-l-rose-500">
-          <div className="text-xs font-semibold text-rose-600 uppercase font-bold">Ada Selisih (Varian)</div>
-          <div className="text-2xl font-bold text-rose-700 mt-1 flex items-center gap-1.5">
-            <AlertTriangle className="w-5 h-5" />
-            {displayedMetrics.selisih}
-          </div>
-          <div className="text-xs text-slate-400 mt-1">Butuh pemeriksaan unit/mutasi</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-l-4 border-l-sky-500">
-          <div className="text-xs font-semibold text-sky-600 uppercase font-bold">Status Data</div>
-          <div className="text-xl font-bold text-sky-700 mt-1 flex items-center gap-1.5">
-            <Info className="w-5 h-5 text-sky-500" />
-            {activeSavedSession ? 'ARSIP TERKUNCI' : 'MTS LIVE FEED'}
-          </div>
-          <div className="text-xs text-slate-400 mt-1">
-            {activeSavedSession ? 'Snapshot statis tersimpan' : 'Sistem sinkronisasi waktu riil'}
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Category Tabs Menu */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col gap-3">
@@ -1288,152 +1690,309 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
       </div>
 
       {/* Filter and Control Bar */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row items-stretch md:items-center gap-3">
-        {/* Search */}
-        <div ref={dropdownRef} className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-          <input 
-            type="text" 
-            placeholder="Cari locator, kode/nama produk..." 
-            value={searchQuery} 
-            onChange={e => {
-              const val = e.target.value;
-              setSearchQuery(val);
-              setShowDropdown(true);
-              if (selectedProduct && val !== selectedProduct.namaProduk) {
-                setSelectedProduct(null);
-              }
-            }} 
-            onFocus={() => setShowDropdown(true)}
-            className="w-full pl-9 pr-8 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
-          />
-          {searchQuery && (
-            <button 
-              type="button"
-              onClick={() => {
-                setSearchQuery('');
-                setSelectedProduct(null);
-                setShowDropdown(false);
-              }}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 border-none bg-transparent cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {showDropdown && productSuggestions.length > 0 && (
-            <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-25 divide-y divide-slate-100">
-              {productSuggestions.map((p, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  className="w-full text-left px-3.5 py-2 hover:bg-slate-50 flex flex-col focus:outline-none transition-colors border-none cursor-pointer text-slate-700 bg-transparent"
-                  onClick={() => {
-                    setSelectedProduct(p);
-                    setSearchQuery(p.namaProduk);
-                    setShowDropdown(false);
-                  }}
-                >
-                  <span className="font-semibold text-slate-800 text-xs block truncate max-w-full" title={p.namaProduk}>{p.namaProduk}</span>
-                  <span className="font-mono text-[10px] text-slate-400 mt-0.5 block truncate max-w-full" title={p.kodeProduk}>{p.kodeProduk}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Date Selector depending on Type */}
-        <div className="w-full md:w-52 text-left">
-          {activeSavedSession ? (
-            <div className="w-full px-3.5 py-2 text-sm border border-amber-200 bg-amber-50 rounded-lg font-semibold text-amber-900 flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>{formatToDDMMYYYY(activeSavedSession.date)}</span>
-            </div>
-          ) : reconType === 'daily' ? (
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
-              />
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                <input
-                  type="date"
-                  value={selectedStartDate}
-                  onChange={e => setSelectedStartDate(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
-                />
-              </div>
-              <span className="text-slate-500">-</span>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                <input
-                  type="date"
-                  value={selectedEndDate}
-                  onChange={e => setSelectedEndDate(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Dynamic Area Filter (HQ Only) */}
-        {(area === 'HQ' || spreadsheetId === 'HQ') && (
-          <div className="w-full md:w-48 text-left">
-            {activeSavedSession ? (
-              <div className="w-full px-3 py-2 text-sm border border-amber-200 bg-amber-50/50 rounded-lg font-bold text-amber-900 flex items-center gap-2">
-                <span>Area: <strong className="uppercase">{activeSavedSession.area}</strong></span>
-              </div>
-            ) : (
-              <select
-                value={selectedAreaFilter}
-                onChange={e => setSelectedAreaFilter(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700"
+      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+        {/* Top Row: Search & Date / Period Selector */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+          {/* Search */}
+          <div ref={dropdownRef} className="relative flex-1 min-w-[260px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input 
+              type="text" 
+              placeholder="Cari locator, kode/nama produk..." 
+              value={searchQuery} 
+              onChange={e => {
+                const val = e.target.value;
+                setSearchQuery(val);
+                setShowDropdown(true);
+                if (selectedProduct && val !== selectedProduct.namaProduk) {
+                  setSelectedProduct(null);
+                }
+              }} 
+              onFocus={() => setShowDropdown(true)}
+              className="w-full pl-9 pr-8 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+            />
+            {searchQuery && (
+              <button 
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedProduct(null);
+                  setShowDropdown(false);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 border-none bg-transparent cursor-pointer"
               >
-                <option value="ALL">Semua Area</option>
-                {uniqueAreas.map(a => (
-                  <option key={a} value={a}>{a}</option>
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {showDropdown && productSuggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-25 divide-y divide-slate-100">
+                {productSuggestions.map((p, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="w-full text-left px-3.5 py-2 hover:bg-slate-50 flex flex-col focus:outline-none transition-colors border-none cursor-pointer text-slate-700 bg-transparent"
+                    onClick={() => {
+                      setSelectedProduct(p);
+                      setSearchQuery(p.namaProduk);
+                      setShowDropdown(false);
+                    }}
+                  >
+                    <span className="font-semibold text-slate-800 text-xs block truncate max-w-full" title={p.namaProduk}>{p.namaProduk}</span>
+                    <span className="font-mono text-[10px] text-slate-400 mt-0.5 block truncate max-w-full" title={p.kodeProduk}>{p.kodeProduk}</span>
+                  </button>
                 ))}
-              </select>
+              </div>
             )}
           </div>
-        )}
 
-        {/* Locator Filter */}
-        <div className="w-full md:w-48 text-left">
-          <select
-            value={selectedLocator}
-            onChange={e => setSelectedLocator(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700"
-          >
-            <option value="ALL">Semua Locator</option>
-            {uniqueLocators.map(loc => (
-              <option key={loc.code} value={loc.code}>{loc.name || loc.code}</option>
-            ))}
-          </select>
+          {/* Date Selector depending on Type */}
+          <div className="shrink-0 w-full lg:w-auto">
+            {activeSavedSession ? (
+              <div className="px-3.5 py-2 text-sm border border-amber-200 bg-amber-50 rounded-lg font-semibold text-amber-900 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{formatToDDMMYYYY(activeSavedSession.date)}</span>
+              </div>
+            ) : reconType === 'daily' ? (
+              <div className="relative w-full sm:w-56">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={e => setSelectedDate(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
+                />
+              </div>
+            ) : reconType === 'week' ? (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-1.5">
+                  <div className="relative">
+                    <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                    <input
+                      type="date"
+                      value={selectedWeekStartDate}
+                      onChange={e => setSelectedWeekStartDate(e.target.value)}
+                      className="w-36 pl-8 pr-2 py-1.5 text-xs border border-slate-200 bg-white rounded-md focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
+                      title="Awal Minggu"
+                    />
+                  </div>
+                  <span className="text-slate-400 text-xs font-bold">-</span>
+                  <div className="relative">
+                    <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                    <input
+                      type="date"
+                      value={selectedWeekEndDate}
+                      onChange={e => setSelectedWeekEndDate(e.target.value)}
+                      className="w-36 pl-8 pr-2 py-1.5 text-xs border border-slate-200 bg-white rounded-md focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
+                      title="Akhir Minggu"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setQuickWeek(0)}
+                    className="text-[10px] font-bold px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded transition-colors whitespace-nowrap"
+                  >
+                    Minggu Ini
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuickWeek(1)}
+                    className="text-[10px] font-bold px-2 py-1 bg-white hover:bg-slate-200 text-slate-700 rounded border border-slate-200 transition-colors whitespace-nowrap"
+                  >
+                    Minggu Lalu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuickWeek(2)}
+                    className="text-[10px] font-bold px-2 py-1 bg-white hover:bg-slate-200 text-slate-700 rounded border border-slate-200 transition-colors whitespace-nowrap"
+                  >
+                    -2 Minggu
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={selectedStartDate}
+                    onChange={e => setSelectedStartDate(e.target.value)}
+                    className="w-36 sm:w-40 pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
+                  />
+                </div>
+                <span className="text-slate-500 font-bold">-</span>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={selectedEndDate}
+                    onChange={e => setSelectedEndDate(e.target.value)}
+                    className="w-36 sm:w-40 pl-9 pr-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-slate-800"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Match Status Filter */}
-        <div className="w-full md:w-48 text-left">
-          <select
-            value={selectedStatusFilter}
-            onChange={e => setSelectedStatusFilter(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700"
-          >
-            <option value="ALL">Semua Status</option>
-            <option value="SESUAI">Sesuai (Match)</option>
-            <option value="SELISIH">Ada Selisih (Varian)</option>
-            <option value="BELUM">Belum Diisi</option>
-          </select>
+        {/* Bottom Row: Filter Dropdowns Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
+          {/* Dynamic Area Filter (HQ Only) */}
+          {(area === 'HQ' || spreadsheetId === 'HQ') ? (
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Filter Area</label>
+              {activeSavedSession ? (
+                <div className="w-full px-3 py-2 text-sm border border-amber-200 bg-amber-50/50 rounded-lg font-bold text-amber-900 flex items-center gap-2">
+                  <span>Area: <strong className="uppercase">{activeSavedSession.area}</strong></span>
+                </div>
+              ) : (
+                <select
+                  value={selectedAreaFilter}
+                  onChange={e => setSelectedAreaFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700"
+                >
+                  <option value="ALL">Semua Area</option>
+                  {uniqueAreas.map(a => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          ) : (
+            <div className="hidden lg:block"></div>
+          )}
+
+          {/* Locator Filter */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Filter Locator</label>
+            <select
+              value={selectedLocator}
+              onChange={e => setSelectedLocator(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700"
+            >
+              <option value="ALL">Semua Locator ({uniqueLocators.length})</option>
+              {uniqueLocators.map(loc => (
+                <option key={loc.code} value={loc.code}>{loc.name || loc.code}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Dropdown Filter Kategori Produk / Pergerakan */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Filter Pergerakan</label>
+            <select
+              value={selectedMovementFilter}
+              onChange={e => setSelectedMovementFilter(e.target.value)}
+              className={cn(
+                "w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium transition-colors",
+                selectedMovementFilter !== 'ALL'
+                  ? "border-blue-500 bg-blue-50/50 text-blue-900 font-semibold ring-1 ring-blue-400"
+                  : "border-slate-200 bg-white text-slate-700"
+              )}
+              title="Filter Kategori Pergerakan Produk"
+            >
+              <option value="ALL">Semua Pergerakan ({movementCounts.all})</option>
+              <option value="BERGERAK">Ada Pergerakan ({movementCounts.moving})</option>
+              <option value="TIDAK_BERGERAK">Tidak Ada Pergerakan ({movementCounts.staticCount})</option>
+              <option value="STOK_ADA">Ada Stok Fisik ({movementCounts.withStock})</option>
+              <option value="STOK_KOSONG">Stok Kosong / Nol ({movementCounts.zeroStock})</option>
+            </select>
+          </div>
+
+          {/* Match Status Filter */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Status Kesesuaian</label>
+            <select
+              value={selectedStatusFilter}
+              onChange={e => setSelectedStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700"
+            >
+              <option value="ALL">Semua Status</option>
+              <option value="SESUAI">Sesuai (Match)</option>
+              <option value="SELISIH">Ada Selisih (Varian)</option>
+              <option value="BELUM">Belum Diisi</option>
+            </select>
+          </div>
         </div>
       </div>
+
+      {/* Active Filter Chips */}
+      {(selectedMovementFilter !== 'ALL' || selectedLocator !== 'ALL' || selectedStatusFilter !== 'ALL' || (selectedAreaFilter !== 'ALL' && (area === 'HQ' || spreadsheetId === 'HQ')) || searchQuery) && (
+        <div className="flex flex-wrap items-center gap-2 px-1 text-xs">
+          <span className="text-slate-400 font-medium">Filter Aktif:</span>
+          {selectedMovementFilter !== 'ALL' && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 font-medium">
+              <span>Pergerakan: {selectedMovementFilter === 'BERGERAK' ? 'Ada Pergerakan' : selectedMovementFilter === 'TIDAK_BERGERAK' ? 'Tidak Ada Pergerakan' : selectedMovementFilter === 'STOK_ADA' ? 'Ada Stok' : 'Stok Kosong'}</span>
+              <button 
+                type="button" 
+                onClick={() => setSelectedMovementFilter('ALL')}
+                className="text-blue-600 hover:text-blue-900 font-bold ml-0.5"
+                title="Hapus filter pergerakan"
+              >
+                ×
+              </button>
+            </span>
+          )}
+          {selectedLocator !== 'ALL' && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-800 font-medium">
+              <span>Locator: {selectedLocator}</span>
+              <button 
+                type="button" 
+                onClick={() => setSelectedLocator('ALL')}
+                className="text-slate-600 hover:text-slate-900 font-bold ml-0.5"
+                title="Hapus filter locator"
+              >
+                ×
+              </button>
+            </span>
+          )}
+          {selectedStatusFilter !== 'ALL' && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-800 font-medium">
+              <span>Status: {selectedStatusFilter}</span>
+              <button 
+                type="button" 
+                onClick={() => setSelectedStatusFilter('ALL')}
+                className="text-slate-600 hover:text-slate-900 font-bold ml-0.5"
+                title="Hapus filter status"
+              >
+                ×
+              </button>
+            </span>
+          )}
+          {searchQuery && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-800 font-medium">
+              <span>Pencarian: "{searchQuery}"</span>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedProduct(null);
+                }}
+                className="text-slate-600 hover:text-slate-900 font-bold ml-0.5"
+                title="Hapus pencarian"
+              >
+                ×
+              </button>
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedMovementFilter('ALL');
+              setSelectedLocator('ALL');
+              setSelectedStatusFilter('ALL');
+              setSearchQuery('');
+              setSelectedProduct(null);
+            }}
+            className="text-xs text-blue-600 hover:text-blue-800 underline font-semibold ml-1 cursor-pointer"
+          >
+            Reset Semua Filter
+          </button>
+        </div>
+      )}
 
       {/* Main Table card */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
@@ -1445,7 +2004,30 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
             </div>
           ) : (
             <table className="w-full text-left text-sm whitespace-nowrap divide-y divide-slate-150">
-              {currentReconType === 'daily' ? (
+              {currentReconType === 'week' ? (
+                <thead className="bg-slate-50 text-slate-700 border-b border-slate-200">
+                  <tr>
+                    <th className="w-12 px-4 py-3.5 font-bold text-xs uppercase tracking-wider text-center">No</th>
+                    {(area === 'HQ' || spreadsheetId === 'HQ') && (
+                      <th className="px-4 py-3.5 font-bold text-xs uppercase tracking-wider">Area</th>
+                    )}
+                    <th className="px-4 py-3.5 font-bold text-xs uppercase tracking-wider">Kode Produk</th>
+                    <th className="px-4 py-3.5 font-bold text-xs uppercase tracking-wider">Nama Produk</th>
+                    <th className="px-3 py-3.5 font-bold text-xs uppercase tracking-wider text-center">UOM</th>
+                    {weekLocatorColumns.map(loc => (
+                      <th 
+                        key={loc} 
+                        className="px-3 py-3.5 font-bold text-xs uppercase tracking-wider text-right bg-blue-50/60 text-blue-900 border-x border-slate-200/80 font-mono"
+                      >
+                        {loc}
+                      </th>
+                    ))}
+                    <th className="px-4 py-3.5 font-black text-xs uppercase tracking-wider text-right bg-emerald-50 text-emerald-950">
+                      Total Qty
+                    </th>
+                  </tr>
+                </thead>
+              ) : currentReconType === 'daily' ? (
                 <thead className="bg-slate-50/80 text-slate-600 border-b border-slate-200">
                   <tr>
                     <th className="px-5 py-4 font-semibold text-xs uppercase tracking-wider">Locator</th>
@@ -1479,7 +2061,83 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
               )}
 
               <tbody className="divide-y divide-slate-100 bg-white">
-                {displayedList.length === 0 ? (
+                {currentReconType === 'week' ? (
+                  weeklyProductList.length === 0 ? (
+                    <tr>
+                      <td 
+                        colSpan={((area === 'HQ' || spreadsheetId === 'HQ') ? 5 : 4) + weekLocatorColumns.length} 
+                        className="p-12 text-center text-slate-500 italic"
+                      >
+                        Tidak ada data produk pada periode minggu ini.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedWeeklyList.map((item, idx) => (
+                      <tr key={item.key} className="hover:bg-blue-50/20 transition-colors text-slate-700">
+                        {/* No */}
+                        <td className="px-4 py-3.5 text-center text-xs text-slate-400 font-mono">
+                          {(currentPage - 1) * pageSize + idx + 1}
+                        </td>
+
+                        {/* Area */}
+                        {(area === 'HQ' || spreadsheetId === 'HQ') && (
+                          <td className="px-4 py-3.5">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700">
+                              {item.area}
+                            </span>
+                          </td>
+                        )}
+
+                        {/* Kode Produk */}
+                        <td className="px-4 py-3.5">
+                          <span className="font-mono font-bold text-slate-900 text-xs bg-slate-100 border border-slate-200 px-2.5 py-1 rounded inline-block">
+                            {item.kodeProduk}
+                          </span>
+                        </td>
+
+                        {/* Nama Produk */}
+                        <td className="px-4 py-3.5">
+                          <div className="font-bold text-slate-900 truncate max-w-sm" title={item.namaProduk}>
+                            {item.namaProduk}
+                          </div>
+                          {item.hasMovement ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 mt-0.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              Ada Pergerakan
+                            </span>
+                          ) : null}
+                        </td>
+
+                        {/* UOM */}
+                        <td className="px-3 py-3.5 text-center">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 uppercase">
+                            {item.uom || 'PCS'}
+                          </span>
+                        </td>
+
+                        {/* Dynamic Locator Columns */}
+                        {weekLocatorColumns.map(loc => {
+                          const found = item.locators.find(l => l.locatorCode === loc);
+                          const qty = found ? found.qty : 0;
+                          return (
+                            <td key={loc} className="px-3 py-3.5 text-right font-mono text-xs border-x border-slate-100">
+                              {qty > 0 ? (
+                                <span className="font-bold text-slate-900">{formatValue(qty, item.uom)}</span>
+                              ) : (
+                                <span className="text-slate-300">-</span>
+                              )}
+                            </td>
+                          );
+                        })}
+
+                        {/* Total Qty */}
+                        <td className="px-4 py-3.5 text-right font-mono font-black text-xs text-emerald-950 bg-emerald-50/40">
+                          {formatValue(item.totalQty, item.uom)}
+                        </td>
+                      </tr>
+                    ))
+                  )
+                ) : displayedList.length === 0 ? (
                   <tr>
                     <td 
                       colSpan={currentReconType === 'daily' ? 10 : ((area === 'HQ' || spreadsheetId === 'HQ') ? 11 : 10)} 
@@ -1489,8 +2147,9 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
                     </td>
                   </tr>
                 ) : (
-                  paginatedReconciliation.map(item => (
+                  paginatedReconciliation.map((item, idx) => (
                     <tr key={item.key} className="hover:bg-blue-50/20 transition-colors text-slate-700">
+                      {/* Area */}
                       {currentReconType === 'monthly' && (area === 'HQ' || spreadsheetId === 'HQ') && (
                         <td className="px-5 py-4">
                           <span className="inline-flex items-center px-2 py-1 rounded text-xs font-semibold bg-slate-100 text-slate-705">
@@ -1515,154 +2174,126 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
                         <div className="font-medium text-slate-900 truncate max-w-xs" title={item.namaProduk}>
                           {item.namaProduk}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
+                        <div className="flex items-center gap-1.5 mt-0.5">
                           {item.uom && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 uppercase">
                               {item.uom}
                             </span>
                           )}
+                          {(Math.abs(item.mutasiQty || 0) > 0 || (item.mutasiQtyIn || 0) > 0 || (item.mutasiQtyOut || 0) > 0) ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              Ada Pergerakan
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-50 text-slate-400 border border-slate-200">
+                              Statis
+                            </span>
+                          )}
                         </div>
                       </td>
 
-                      {/* Custom Daily layout columns */}
-                      {currentReconType === 'daily' && (
-                        <>
-                          {/* Stok Rill kemarin */}
-                          <td className="px-5 py-4 text-right font-medium text-slate-700 bg-slate-50/25">
-                            {formatValue(item.stokKemarin, item.uom)}
-                          </td>
+                      {/* Stok Kemarin */}
+                      <td className="px-5 py-4 text-right font-medium text-slate-700 bg-slate-50/25">
+                        {formatValue(item.stokKemarin, item.uom)}
+                      </td>
 
-                          {/* Mutasi Hari Ini IN */}
-                          <td className="px-5 py-4 text-right font-semibold text-emerald-600 bg-emerald-50/5">
-                            {formatValue((item as any).mutasiQtyIn ?? 0, item.uom)}
-                          </td>
+                      {/* Mutasi IN */}
+                      <td className="px-5 py-4 text-right font-semibold text-emerald-600 bg-emerald-50/5">
+                        {formatValue((item as any).mutasiQtyIn ?? 0, item.uom)}
+                      </td>
 
-                          {/* Mutasi Hari Ini OUT */}
-                          <td className="px-5 py-4 text-right font-semibold text-rose-600 bg-rose-50/5">
-                            {formatValue((item as any).mutasiQtyOut ?? 0, item.uom)}
-                          </td>
+                      {/* Mutasi OUT */}
+                      <td className="px-5 py-4 text-right font-semibold text-rose-600 bg-rose-50/5">
+                        {formatValue((item as any).mutasiQtyOut ?? 0, item.uom)}
+                      </td>
 
-                          {/* Stock Rill (Hari ini) */}
-                          <td className="px-5 py-4 text-right font-bold text-slate-900 bg-emerald-50/10">
-                            {formatValue(item.stokRill, item.uom)}
-                          </td>
+                      {/* Stok Rill */}
+                      <td className="px-5 py-4 text-right font-bold text-slate-900 bg-emerald-50/10">
+                        {formatValue(item.stokRill, item.uom)}
+                      </td>
 
-                          {/* Stock Tarikan MTS */}
-                          <td className="px-5 py-4 text-right font-medium text-slate-700 bg-slate-50/50">
-                            {formatValue(item.stockSistem, item.uom)}
-                          </td>
+                      {/* Stock Tarikan MTS */}
+                      <td className="px-5 py-4 text-right font-medium text-slate-700 bg-slate-50/50">
+                        {formatValue(item.stockSistem, item.uom)}
+                      </td>
 
-                          {/* Selisih */}
-                          <td className={
-                            `px-5 py-4 text-right font-bold text-sm ${
-                              item.status === 'BELUM' ? "text-slate-400 font-normal" : ""
-                            } ${
-                              item.status === 'SESUAI' ? "text-emerald-600" : ""
-                            } ${
-                              item.status === 'SELISIH' ? (item.selisih > 0 ? "text-blue-600" : "text-rose-600") : ""
-                            }`
-                          }>
-                            {item.selisih === 0 ? '0' : (item.selisih > 0 ? `+${formatValue(item.selisih, item.uom)}` : formatValue(item.selisih, item.uom))}
-                          </td>
+                      {/* Selisih */}
+                      <td className={
+                        `px-5 py-4 text-right font-bold text-sm ${
+                          item.status === 'BELUM' ? "text-slate-400 font-normal" : ""
+                        } ${
+                          item.status === 'SESUAI' ? "text-emerald-600" : ""
+                        } ${
+                          item.status === 'SELISIH' ? (item.selisih > 0 ? "text-blue-600" : "text-rose-600") : ""
+                        }`
+                      }>
+                        {item.selisih === 0 ? '0' : (item.selisih > 0 ? `+${formatValue(item.selisih, item.uom)}` : formatValue(item.selisih, item.uom))}
+                      </td>
 
-                          {/* Status Badge */}
-                          <td className="px-5 py-4 text-center">
-                            {item.status === 'SESUAI' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                                <Check className="w-3.5 h-3.5" />
-                                Sesuai (Match)
-                              </span>
-                            )}
-                            {item.status === 'SELISIH' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 animate-pulse">
-                                <AlertTriangle className="w-3.5 h-3.5" />
-                                Selisih
-                              </span>
-                            )}
-                            {item.status === 'BELUM' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
-                                <Info className="w-3.5 h-3.5" />
-                                Belum Dihitung
-                              </span>
-                            )}
-                          </td>
-                        </>
-                      )}
-
-                      {/* Custom Monthly layout columns */}
-                      {currentReconType === 'monthly' && (
-                        <>
-                          <td className="px-5 py-4 text-right font-medium text-slate-700 bg-slate-50/25">
-                            {formatValue(item.stokKemarin, item.uom)}
-                          </td>
-                          <td className="px-5 py-4 text-right font-semibold text-emerald-600 bg-emerald-50/5">
-                            {formatValue((item as any).mutasiQtyIn ?? 0, item.uom)}
-                          </td>
-                          <td className="px-5 py-4 text-right font-semibold text-rose-600 bg-rose-50/5">
-                            {formatValue((item as any).mutasiQtyOut ?? 0, item.uom)}
-                          </td>
-                          <td className="px-5 py-4 text-right font-bold text-slate-900 bg-emerald-50/10">
-                            {formatValue(item.stokRill, item.uom)}
-                          </td>
-
-                          <td className="px-5 py-4 text-right font-medium text-slate-700 bg-slate-50/50">
-                            {formatValue(item.stockSistem, item.uom)}
-                          </td>
-
-                          <td className={
-                            `px-5 py-4 text-right font-bold text-sm ${
-                              item.status === 'BELUM' ? "text-slate-400 font-normal" : ""
-                            } ${
-                              item.status === 'SESUAI' ? "text-emerald-600" : ""
-                            } ${
-                              item.status === 'SELISIH' ? (item.selisih > 0 ? "text-blue-600" : "text-rose-600") : ""
-                            }`
-                          }>
-                            {item.selisih === 0 ? '0' : (item.selisih > 0 ? `+${formatValue(item.selisih, item.uom)}` : formatValue(item.selisih, item.uom))}
-                          </td>
-                        </>
-                      )}
-
-                      {/* Status Badge (Only for Monthly view) */}
-                      {currentReconType === 'monthly' && (
-                        <td className="px-5 py-4 text-center">
-                          {item.status === 'SESUAI' && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                              <Check className="w-3.5 h-3.5" />
-                              Sesuai (Match)
-                            </span>
-                          )}
-                          {item.status === 'SELISIH' && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 animate-pulse">
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              Selisih
-                            </span>
-                          )}
-                          {item.status === 'BELUM' && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
-                              <Info className="w-3.5 h-3.5" />
-                              Belum Dihitung
-                            </span>
-                          )}
-                        </td>
-                      )}
+                      {/* Status */}
+                      <td className="px-5 py-4 text-center">
+                        {item.status === 'SESUAI' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                            <Check className="w-3.5 h-3.5" />
+                            Sesuai (Match)
+                          </span>
+                        )}
+                        {item.status === 'SELISIH' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 animate-pulse">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            Selisih
+                          </span>
+                        )}
+                        {item.status === 'BELUM' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                            <Info className="w-3.5 h-3.5" />
+                            Belum Dihitung
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}
 
                 {/* Adaptive Grand Total Row */}
-                {!loading && displayedList.length > 0 && (
-                  <tr className="bg-slate-100/60 border-t-2 border-slate-300 font-bold text-slate-900">
-                    <td 
-                      colSpan={(currentReconType === 'monthly' && (area === 'HQ' || spreadsheetId === 'HQ')) ? 3 : 2} 
-                      className="px-5 py-4 text-left font-extrabold text-slate-800 tracking-wider text-xs uppercase"
-                    >
-                      🚀 Grand Total ({displayedList.length} Baris Terfilter)
-                    </td>
-
-                    {/* Daily Totals render */}
-                    {currentReconType === 'daily' && (
+                {!loading && (
+                  (currentReconType === 'week' ? weeklyProductList.length > 0 : displayedList.length > 0)
+                ) && (
+                  <tr className="bg-slate-100/80 border-t-2 border-slate-300 font-bold text-slate-900">
+                    {currentReconType === 'week' ? (
                       <>
+                        <td 
+                          colSpan={(area === 'HQ' || spreadsheetId === 'HQ') ? 5 : 4} 
+                          className="px-4 py-3.5 text-right font-extrabold text-slate-800 tracking-wider text-xs uppercase"
+                        >
+                          Total Keseluruhan ({weeklyProductList.length} SKU)
+                        </td>
+                        {weekLocatorColumns.map(loc => {
+                          const colTotal = weeklyProductList.reduce((sum, p) => {
+                            const found = p.locators.find(l => l.locatorCode === loc);
+                            return sum + (found ? found.qty : 0);
+                          }, 0);
+                          return (
+                            <td key={loc} className="px-3 py-3.5 text-right font-mono font-black text-xs text-blue-950 bg-blue-100/40 border-x border-slate-200">
+                              {colTotal > 0 ? formatValue(colTotal) : '-'}
+                            </td>
+                          );
+                        })}
+                        <td className="px-4 py-3.5 text-right font-black text-xs text-emerald-950 bg-emerald-100/60 font-mono">
+                          {formatValue(totalWeeklyQty)}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td 
+                          colSpan={(currentReconType === 'monthly' && (area === 'HQ' || spreadsheetId === 'HQ')) ? 3 : 2} 
+                          className="px-5 py-4 text-left font-extrabold text-slate-800 tracking-wider text-xs uppercase"
+                        >
+                          🚀 Grand Total ({displayedList.length} Baris Terfilter)
+                        </td>
+
+                        {/* Daily / Monthly Totals render */}
                         <td className="px-5 py-4 text-right text-slate-600 font-bold text-sm bg-slate-100/10">
                           {formatValue(displayedTotals.stokKemarin)}
                         </td>
@@ -1696,45 +2327,6 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
                         </td>
                       </>
                     )}
-
-                    {/* Monthly Totals render */}
-                    {currentReconType === 'monthly' && (
-                      <>
-                        <td className="px-5 py-4 text-right text-slate-600 font-bold text-sm bg-slate-100/10">
-                          {formatValue(displayedTotals.stokKemarin)}
-                        </td>
-
-                        <td className="px-5 py-4 text-right font-extrabold text-sm text-emerald-700 bg-emerald-50/10">
-                          {formatValue((displayedTotals as any).mutasiQtyIn ?? 0)}
-                        </td>
-
-                        <td className="px-5 py-4 text-right font-extrabold text-sm text-rose-700 bg-rose-50/10">
-                          {formatValue((displayedTotals as any).mutasiQtyOut ?? 0)}
-                        </td>
-
-                        <td className="px-5 py-4 text-right text-slate-900 font-extrabold text-sm bg-emerald-50/10">
-                          {formatValue(displayedTotals.stokRill)}
-                        </td>
-
-                        <td className="px-5 py-4 text-right text-slate-800 font-bold text-sm bg-slate-100/50">
-                          {formatValue(displayedTotals.stockSistem)}
-                        </td>
-
-                        <td className={
-                          `px-5 py-4 text-right text-sm font-extrabold ${
-                            displayedTotals.selisih === 0 ? "text-emerald-700" : "text-rose-700"
-                          }`
-                        }>
-                          {displayedTotals.selisih === 0 ? '0' : formatValue(displayedTotals.selisih)}
-                        </td>
-                      </>
-                    )}
-
-                    {currentReconType === 'monthly' && (
-                      <td className="px-5 py-4 text-center text-slate-400 font-normal text-xs italic">
-                        —
-                      </td>
-                    )}
                   </tr>
                 )}
               </tbody>
@@ -1743,7 +2335,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
         </div>
 
         {/* Pagination controls */}
-        {!loading && displayedList.length > 0 && (
+        {!loading && (activeItemsCount > 0) && (
           <div className="p-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50">
             <div className="flex items-center gap-3 text-sm text-slate-500">
               <select 
@@ -1756,7 +2348,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
                 <option value={150}>150 baris</option>
               </select>
               <span>
-                Menampilkan {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, displayedList.length)} dari {displayedList.length} baris
+                Menampilkan {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, activeItemsCount)} dari {activeItemsCount} baris
               </span>
             </div>
             <div className="flex items-center gap-2">

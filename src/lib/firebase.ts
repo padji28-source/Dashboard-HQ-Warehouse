@@ -10,4 +10,6 @@ export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
 });
 
+export { logStockActivity, getStockActivityLogs, logAudit } from '../shared/services/firebase';
+
 export default db;

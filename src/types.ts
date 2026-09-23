@@ -43,3 +43,22 @@ export interface StockSummary {
   source?: string;
   uom?: string;
 }
+
+export interface StockActivityLog {
+  id: string;
+  timestamp: number;
+  dateStr?: string;
+  username: string;
+  area: string;
+  category: string;
+  actionType: 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT' | 'RECONCILIATION' | 'MASTER_UPDATE';
+  pCode: string;
+  pName: string;
+  locator: string;
+  locatorTo?: string;
+  qty: number;
+  uom?: string;
+  docNo?: string;
+  notes?: string;
+  impactSummary?: string;
+}

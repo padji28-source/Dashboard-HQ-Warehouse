@@ -1,5 +1,5 @@
 import { useState, lazy, Suspense, memo } from 'react';
-import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye, TrendingUp, Loader2, Clock } from 'lucide-react';
+import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye, TrendingUp, Loader2, Clock, ClipboardList } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AREAS } from '../App';
@@ -16,6 +16,7 @@ const Pengepokan = lazy(() => import('./Pengepokan'));
 const CekStock = lazy(() => import('./CekStock'));
 const DoiMp = lazy(() => import('./DoiMp'));
 const UnpostedDokumen = lazy(() => import('../modules/inventory/UnpostedDokumen'));
+const StockActivityLogView = lazy(() => import('../modules/inventory/StockActivityLogView'));
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -32,7 +33,7 @@ interface Props {
 }
 
 const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange, isReadOnly = false, activeUsername = '' }: Props) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'doi_mp' | 'unposted'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'activity_log' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'doi_mp' | 'unposted'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['stock']));
   const handleTabChange = (tab: any) => { setActiveTab(tab); setVisitedTabs(prev => new Set(prev).add(tab)); };
@@ -78,6 +79,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
 
   const mainTabs = [
     { id: 'stock', label: 'Executive Dashboard', icon: LayoutDashboard },
+    { id: 'activity_log', label: 'Log Aktivitas Stok', icon: ClipboardList },
     { id: 'unposted', label: 'Unposted Dokumen', icon: Clock },
     { id: 'cek_stock', label: 'Cek Stock', icon: Package },
     ...(isAuthorizedForDoiMp ? [{ id: 'doi_mp', label: 'DOI MP', icon: TrendingUp }] : []),
@@ -318,6 +320,13 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
               </Suspense>
             )}
           </div>
+          <div className={cn(safeActiveTab !== 'activity_log' && 'hidden')}>
+            {visitedTabs.has('activity_log') && (
+              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+                <StockActivityLogView spreadsheetId={spreadsheetId} currentArea={area} activeUsername={activeUsername} onNavigateToTab={handleTabChange} />
+              </Suspense>
+            )}
+          </div>
           <div className={cn(safeActiveTab !== 'unposted' && 'hidden')}>
             {visitedTabs.has('unposted') && (
               <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
@@ -371,7 +380,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
             {visitedTabs.has('input') && (
               <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
                 {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Accessories" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} activeUsername={activeUsername} area={area} />
             )}
               </Suspense>
             )}
@@ -380,7 +389,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
             {visitedTabs.has('input_rm') && (
               <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
                 {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Raw Material" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} activeUsername={activeUsername} area={area} />
             )}
               </Suspense>
             )}
@@ -389,7 +398,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
             {visitedTabs.has('input_mfg') && (
               <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
                 {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Manufacturing" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} activeUsername={activeUsername} area={area} />
             )}
               </Suspense>
             )}
@@ -398,7 +407,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
             {visitedTabs.has('input_supplies') && (
               <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
                 {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Supplies & GA" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} />
+              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} activeUsername={activeUsername} area={area} />
             )}
               </Suspense>
             )}

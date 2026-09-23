@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef, type FormEvent , memo} from "react";
 import { fetchSheetData, appendSheetRow, fetchCombinedProducts } from '../../lib/sheets';
 import type { Transaction, Product, Locator } from '../../shared/types';
+import { logStockActivity } from '../../shared/services/firebase';
 import { Loader2, Plus, Search, Package, MapPin, Calendar, FileText, ArrowDownRight, ArrowUpRight, CheckCircle2, Trash2, X, Download } from 'lucide-react';
 import { getParsedDateValue, displayTanggalIndonesian, parseToIsoDate } from '../../lib/dateUtils';
 export { getParsedDateValue, displayTanggalIndonesian, parseToIsoDate };
@@ -11,9 +12,11 @@ interface Props {
   title: string;
   description: string;
   isReadOnly?: boolean;
+  activeUsername?: string;
+  area?: string;
 }
 
-function TransactionInput({ spreadsheetId, sheetName, title, description, isReadOnly = false }: Props) {
+function TransactionInput({ spreadsheetId, sheetName, title, description, isReadOnly = false, activeUsername, area }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locators, setLocators] = useState<Locator[]>([]);
@@ -249,6 +252,35 @@ function TransactionInput({ spreadsheetId, sheetName, title, description, isRead
 
       await appendSheetRow(spreadsheetId, `'${sheetName}'!A:J`, rows);
       
+      // Asynchronously log to Stock Activity Log for SKU discrepancy tracking & transparency
+      try {
+        for (const item of itemsList) {
+          const impact = formTipe === 'IN'
+            ? `Penambahan stok fisik +${item.kuantitas} ${item.uom} di locator ${item.locator}`
+            : formTipe === 'OUT'
+            ? `Pengurangan stok fisik -${item.kuantitas} ${item.uom} di locator ${item.locator}`
+            : `Transfer antar locator ${item.locator} -> ${item.locatorTo} (${item.kuantitas} ${item.uom})`;
+
+          logStockActivity({
+            username: activeUsername || 'Petugas',
+            area: area || 'Cabang',
+            category: title || sheetName,
+            actionType: formTipe as 'IN' | 'OUT' | 'TRANSFER',
+            pCode: item.kodeProduk,
+            pName: item.namaBahan,
+            locator: item.locator,
+            locatorTo: formTipe === 'TRANSFER' ? item.locatorTo : undefined,
+            qty: formTipe === 'OUT' ? -Math.abs(item.kuantitas) : item.kuantitas,
+            uom: item.uom,
+            docNo: formNoDocument.trim(),
+            notes: formKeterangan.trim(),
+            impactSummary: impact
+          }).catch(e => console.warn('Gagal log stock activity:', e));
+        }
+      } catch (logErr) {
+        console.warn('Logging activity failed:', logErr);
+      }
+
       // Reset form states on success
       setFormOpen(false);
       setItemsList([]);

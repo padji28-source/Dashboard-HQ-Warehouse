@@ -10,6 +10,14 @@ service cloud.firestore {
       allow read, write: if true;
     }
     
+    match /stock_activity_logs/{id} {
+      allow read, write: if true;
+    }
+
+    match /audit_logs/{id} {
+      allow read, write: if true;
+    }
+    
     // Default fallback deny
     match /{document=**} {
       allow read, write: if true;

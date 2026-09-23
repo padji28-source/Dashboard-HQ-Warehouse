@@ -92,6 +92,59 @@
         }
       },
       "required": ["id", "name", "reconType", "date", "timestamp", "totalSku", "totalSelisih", "accuracyPercent", "areaSummary", "discrepancyList", "allStockItems"]
+    },
+    "StockActivityLog": {
+      "title": "Stock Activity Log",
+      "description": "Real-time activity logs recording user modifications to stock for transparent SKU discrepancy tracking",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique ID of the log entry"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Unix millisecond timestamp of the activity"
+        },
+        "username": {
+          "type": "string",
+          "description": "Name or username of the user who performed the action"
+        },
+        "area": {
+          "type": "string",
+          "description": "The warehouse branch area where the change occurred"
+        },
+        "category": {
+          "type": "string",
+          "description": "Category of the item (e.g. Accessories, Raw Material, Manufacturing, Supplies)"
+        },
+        "actionType": {
+          "type": "string",
+          "enum": ["IN", "OUT", "TRANSFER", "ADJUSTMENT", "RECONCILIATION", "MASTER_UPDATE"],
+          "description": "Type of mutation or activity performed"
+        },
+        "pCode": {
+          "type": "string",
+          "description": "Product code / SKU"
+        },
+        "pName": {
+          "type": "string",
+          "description": "Product name"
+        },
+        "locator": {
+          "type": "string",
+          "description": "Source or primary locator rack"
+        },
+        "qty": {
+          "type": "number",
+          "description": "Quantity changed"
+        },
+        "impactSummary": {
+          "type": "string",
+          "description": "Transparent human-readable explanation of the effect on stock discrepancies"
+        }
+      },
+      "required": ["id", "timestamp", "username", "area", "category", "actionType", "pCode", "pName", "locator", "qty"]
     }
   },
   "firestore": {
@@ -102,6 +155,10 @@
     "saved_accuracy/{accuracyId}": {
       "schema": "SavedAccuracy",
       "description": "Collection storing historical daily/monthly stock accuracy metrics records"
+    },
+    "stock_activity_logs/{logId}": {
+      "schema": "StockActivityLog",
+      "description": "Collection storing stock change activity logs for SKU discrepancy auditing"
     }
   }
 }
