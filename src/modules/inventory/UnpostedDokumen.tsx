@@ -16,9 +16,14 @@ import {
   Calendar, 
   FileCheck,
   Building2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  X,
+  ExternalLink,
+  Truck,
+  Box,
+  PackageCheck
 } from 'lucide-react';
-import { fetchUnpostedDocuments, filterDocsByArea, UnpostedDoc } from '../../lib/unpostedService';
+import { fetchUnpostedDocuments, filterDocsByArea, UnpostedDoc, IMDocDetailLine, fetchIMDocDetails } from '../../lib/unpostedService';
 import { AREAS } from '../../App';
 
 interface Props {
@@ -56,6 +61,11 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+
+  // Detail Modal State (Sheet IM)
+  const [selectedDoc, setSelectedDoc] = useState<UnpostedDoc | null>(null);
+  const [detailLines, setDetailLines] = useState<IMDocDetailLine[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const usernameLower = (activeUsername || '').toLowerCase();
   const isAdminA5 = usernameLower === 'admina5' || usernameLower === 'adminc3';
@@ -168,6 +178,51 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', `Unposted_Dokumen_${filterArea.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Open Document Detail Modal (Fetch from Sheet IM)
+  const handleOpenDocDetail = async (doc: UnpostedDoc) => {
+    setSelectedDoc(doc);
+    setDetailLoading(true);
+    setDetailLines([]);
+    try {
+      const lines = await fetchIMDocDetails(doc.documentNo);
+      setDetailLines(lines);
+    } catch (err) {
+      console.error('Error fetching IM lines for doc:', err);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  // Export Document Detail Line Items to CSV
+  const handleExportDetailCSV = () => {
+    if (!selectedDoc || detailLines.length === 0) return;
+    const headers = ['No', 'Kode SKU', 'Nama Produk', 'Kategori', 'Qty', 'Satuan', 'Volume (M3)', 'Berat (Kg)', 'Locator Asal', 'Locator Tujuan', 'No Route', 'Kendaraan', 'Sopir'];
+    const rows = detailLines.map((l, idx) => [
+      idx + 1,
+      `"${l.productCode}"`,
+      `"${(l.productName || '').replace(/"/g, '""')}"`,
+      `"${l.category}"`,
+      l.qty,
+      `"${l.uom}"`,
+      l.volume,
+      l.weight,
+      `"${l.locatorFrom}"`,
+      `"${l.locatorTo}"`,
+      `"${l.routeNo}"`,
+      `"${l.routeVehicle}"`,
+      `"${l.routeDriver}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Detail_${selectedDoc.documentNo.replace(/[^a-zA-Z0-9]/g, '_')}_IM.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -468,11 +523,16 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
                       </div>
                     </td>
 
-                    {/* Documentno */}
+                    {/* Documentno (Clickable to view Sheet IM details) */}
                     <td className="py-3 px-4">
-                      <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 tracking-tight">
-                        {doc.documentNo}
-                      </span>
+                      <button
+                        onClick={() => handleOpenDocDetail(doc)}
+                        className="font-mono font-bold text-blue-600 hover:text-blue-800 bg-blue-50/80 hover:bg-blue-100/90 active:bg-blue-200 px-2.5 py-1 rounded-lg border border-blue-200 hover:border-blue-300 tracking-tight transition-all flex items-center gap-1.5 group cursor-pointer text-left shadow-2xs"
+                        title="Klik untuk melihat rincian item dokumen dari Sheet IM"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-blue-500 group-hover:scale-110 transition-transform shrink-0" />
+                        <span className="underline decoration-blue-300 underline-offset-2">{doc.documentNo}</span>
+                      </button>
                     </td>
 
                     {/* Document Date */}
@@ -540,6 +600,184 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
           </div>
         )}
       </div>
+
+      {/* Modal Detail Dokumen (Data dari Sheet IM Google Sheets) */}
+      {selectedDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header Modal */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-start justify-between bg-slate-50/70 shrink-0">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <span className="text-xl">{MENU_ICONS[selectedDoc.menu] || '📄'}</span>
+                  <h3 className="font-extrabold text-slate-900 text-base sm:text-lg tracking-tight font-mono">
+                    {selectedDoc.documentNo}
+                  </h3>
+                  {selectedDoc.documentStatus.toLowerCase() === 'draft' ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      Draft
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                      {selectedDoc.documentStatus}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 pt-0.5">
+                  <span>Menu: <strong className="text-slate-700">{selectedDoc.menu}</strong></span>
+                  <span>&bull;</span>
+                  <span>Area: <strong className="text-slate-700">{selectedDoc.area}</strong></span>
+                  <span>&bull;</span>
+                  <span>User: <strong className="text-slate-700">{selectedDoc.createdBy}</strong></span>
+                  <span>&bull;</span>
+                  <span>Tanggal: <strong className="text-slate-700">{selectedDoc.documentDate}</strong></span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedDoc(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+                title="Tutup Modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+              {detailLoading ? (
+                <div className="py-16 flex flex-col items-center justify-center text-slate-400 gap-3">
+                  <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+                  <span className="text-xs font-semibold text-slate-600">Memuat rincian item dokumen dari Sheet IM...</span>
+                </div>
+              ) : detailLines.length === 0 ? (
+                <div className="py-12 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-3">
+                  <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-slate-800 text-sm">Tidak Ada Rincian Barang di Sheet IM</h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                      Dokumen <strong>{selectedDoc.documentNo}</strong> ({selectedDoc.menu}) belum memiliki baris mutasi terdata di sheet <strong>IM</strong>. Dokumen ini saat ini berstatus <strong>{selectedDoc.documentStatus}</strong> di iDempiere.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Route & Locator Info Banner */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
+                    <div>
+                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Asal (From)</span>
+                      <div className="font-bold text-slate-800 mt-0.5">
+                        {detailLines[0]?.branchFrom || selectedDoc.area} &bull; <span className="font-mono text-blue-600">{detailLines[0]?.locatorFrom || '-'}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Tujuan (To)</span>
+                      <div className="font-bold text-slate-800 mt-0.5">
+                        {detailLines[0]?.branchTo || '-'} &bull; <span className="font-mono text-emerald-600">{detailLines[0]?.locatorTo || '-'}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Kendaraan / Rute</span>
+                      <div className="font-bold text-slate-800 mt-0.5">
+                        {detailLines[0]?.routeVehicle && detailLines[0].routeVehicle !== '-' ? (
+                          <span>{detailLines[0].routeVehicle} ({detailLines[0].routeDriver || 'Sopir'})</span>
+                        ) : (
+                          <span className="text-slate-400">Tidak ada rute ekspedisi</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Line Items Table */}
+                  <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+                    <div className="p-3 bg-slate-100/70 border-b border-slate-200 flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <Box className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Daftar Barang ({detailLines.length} Item)</span>
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-500">
+                        Sumber data: Sheet <strong>IM</strong> Google Sheets
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto max-h-80">
+                      <table className="w-full text-left text-xs text-slate-700">
+                        <thead className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 sticky top-0 shadow-2xs">
+                          <tr>
+                            <th className="py-2.5 px-3">No</th>
+                            <th className="py-2.5 px-3">Kode SKU</th>
+                            <th className="py-2.5 px-4">Nama Produk</th>
+                            <th className="py-2.5 px-3">Kategori</th>
+                            <th className="py-2.5 px-3 text-right">Movement Qty</th>
+                            <th className="py-2.5 px-3">Satuan</th>
+                            <th className="py-2.5 px-3 text-right">Volume (M3)</th>
+                            <th className="py-2.5 px-3 text-right">Berat (Kg)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {detailLines.map((line, idx) => (
+                            <tr key={line.id} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                              <td className="py-2.5 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">
+                                <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                  {line.productCode || '-'}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-4 font-semibold text-slate-800">{line.productName}</td>
+                              <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{line.category || '-'}</td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-700 bg-blue-50/40 whitespace-nowrap">
+                                {line.qty.toLocaleString('id-ID')}
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-600 font-medium whitespace-nowrap">{line.uom}</td>
+                              <td className="py-2.5 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
+                                {line.volume > 0 ? line.volume.toLocaleString('id-ID') : '-'}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
+                                {line.weight > 0 ? line.weight.toLocaleString('id-ID') : '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50/60 flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="text-xs text-slate-600 font-medium">
+                {detailLines.length > 0 && (
+                  <span>
+                    Total Qty: <strong className="text-slate-900 font-bold">{detailLines.reduce((acc, l) => acc + l.qty, 0).toLocaleString('id-ID')} Unit</strong> &bull; Total Item: <strong className="text-slate-900 font-bold">{detailLines.length} SKU</strong>
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {detailLines.length > 0 && (
+                  <button
+                    onClick={handleExportDetailCSV}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Ekspor CSV</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedDoc(null)}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });

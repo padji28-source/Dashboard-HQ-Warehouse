@@ -210,6 +210,44 @@ async function startServer() {
     }
   });
 
+  let cachedImDocs: string | null = null;
+  let cacheTimeImDocs = 0;
+
+  // API Route to proxy the IM (Inventory Move) CSV from Google Sheets (sheet IM gid=978352399 & IM_IP gid=39909118)
+  app.get("/api/im-docs", async (req, res) => {
+    try {
+      const now = Date.now();
+      const forceRefresh = !!req.query.t;
+      if (!forceRefresh && cachedImDocs && now - cacheTimeImDocs < 300000) {
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        return res.send(cachedImDocs);
+      }
+
+      console.log("Fetching fresh IM CSV from Google Sheets...");
+      const imUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=978352399&single=true&output=csv&hl=id';
+      const imIpUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=39909118&single=true&output=csv&hl=id';
+
+      const [dataIm, dataImIp] = await Promise.all([
+        fetchCsvWithRetry(imUrl).catch(() => ""),
+        fetchCsvWithRetry(imIpUrl).catch(() => "")
+      ]);
+
+      const combined = (dataIm || "") + "\n" + (dataImIp || "");
+      cachedImDocs = combined;
+      cacheTimeImDocs = now;
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.send(combined);
+    } catch (err: any) {
+      console.warn("Soft error in /api/im-docs proxy:", err.message || err);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      if (cachedImDocs) {
+        return res.send(cachedImDocs);
+      }
+      return res.send("");
+    }
+  });
+
   // AI Endpoints
   app.post("/api/gemini/predict-cycle-count", async (req, res) => {
     try {

@@ -953,21 +953,18 @@ const StockActivityLogView = memo(function StockActivityLogView({
 
                       {/* 9. Keterangan */}
                       <td className="py-3 px-4 max-w-sm">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                            <MapPin className="w-2.5 h-2.5 text-slate-400" />
-                            {log.area || 'Cabang'}
-                          </span>
-                          {log.docNo && log.docNo !== '-' && (
-                            <span className="font-semibold text-slate-800 text-[11px] truncate max-w-[140px]" title={log.docNo}>
-                              • {log.docNo}
-                            </span>
-                          )}
-                        </div>
+                        {log.docNo && log.docNo !== '-' && (
+                          <div className="font-semibold text-slate-800 text-[11px] truncate max-w-[200px]" title={log.docNo}>
+                            {log.docNo}
+                          </div>
+                        )}
                         {log.notes && log.notes !== '-' && (
                           <div className="text-[11px] text-slate-500 truncate mt-0.5" title={log.notes}>
                             {log.notes}
                           </div>
+                        )}
+                        {(!log.docNo || log.docNo === '-') && (!log.notes || log.notes === '-') && (
+                          <span className="text-slate-300 font-mono">-</span>
                         )}
                       </td>
                     </tr>
