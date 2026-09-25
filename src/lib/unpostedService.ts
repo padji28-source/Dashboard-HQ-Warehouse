@@ -22,12 +22,41 @@ const TARIKAN_CSV_PROXY = '/api/unposted-docs';
 const TARIKAN_CSV_DIRECT = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=1541449669&single=true&output=csv&hl=id';
 
 /**
+ * Daftar resmi PIC / Created By yang diizinkan untuk area Jakarta
+ */
+export const JAKARTA_ALLOWED_CREATORS = [
+  'Jeanny Marselyn',
+  'Iwan Gunawan',
+  'Rasto',
+  'Nirwanto',
+  'Wahyuningsih Kasmun',
+  'Muhammad Adji',
+  'Imam Syah',
+  'Heri Suprapto',
+  'Arief Nugroho'
+] as const;
+
+export const JAKARTA_ALLOWED_CREATORS_SET = new Set(
+  JAKARTA_ALLOWED_CREATORS.map(name => name.toLowerCase().trim())
+);
+
+export function isAllowedJakartaCreator(createdBy?: string): boolean {
+  if (!createdBy) return false;
+  return JAKARTA_ALLOWED_CREATORS_SET.has(createdBy.toLowerCase().trim());
+}
+
+/**
  * Deduce area from Documentno if explicit Area field is empty
  */
-export function deduceAreaFromDocNo(docNo: string, explicitArea: string): string {
+export function deduceAreaFromDocNo(docNo: string, explicitArea: string, createdBy?: string): string {
   const cleanArea = explicitArea ? explicitArea.trim() : '';
   if (cleanArea && cleanArea.toUpperCase() !== 'UNKNOWN' && cleanArea !== '-') {
     return cleanArea;
+  }
+
+  // Jika dibuat oleh PIC resmi Jakarta, tetapkan area ke Jakarta
+  if (createdBy && isAllowedJakartaCreator(createdBy)) {
+    return 'Jakarta';
   }
 
   if (!docNo) return 'Lainnya / General';
@@ -133,7 +162,7 @@ export async function fetchUnpostedDocuments(forceFresh = false): Promise<Unpost
     if (!menu || menu.toLowerCase() === 'menu' || documentNo.toLowerCase().includes('documentno')) continue;
     if (createdBy.toLowerCase().includes('terakhir ditarik')) continue;
 
-    const area = deduceAreaFromDocNo(documentNo, rawArea);
+    const area = deduceAreaFromDocNo(documentNo, rawArea, createdBy);
 
     documents.push({
       id: `${documentNo || 'doc'}-${i}`,
@@ -152,18 +181,37 @@ export async function fetchUnpostedDocuments(forceFresh = false): Promise<Unpost
 /**
  * Filter documents according to user role and selected area.
  * Rules:
- * - If selected area is "All Cabang" or "HQ" or user is Super Admin / HQ, show all.
+ * - If selected area is "All Cabang" or "HQ" or user is Super Admin / HQ, show all,
+ *   except for Jakarta documents which must be created by one of the 9 allowed PICs.
+ * - For area "Jakarta", strictly ONLY show documents created by the 9 allowed PICs:
+ *   Jeanny Marselyn, Iwan Gunawan, Rasto, Nirwanto, Wahyuningsih Kasmun,
+ *   Muhammad Adji, Imam Syah, Heri Suprapto, Arief Nugroho.
  * - Otherwise, match row.area against selectedArea.
  */
 export function filterDocsByArea(docs: UnpostedDoc[], selectedArea: string, isSuperAdminOrHq: boolean): UnpostedDoc[] {
-  if (isSuperAdminOrHq || selectedArea === 'All Cabang' || selectedArea === 'HQ' || selectedArea === 'ALL') {
-    return docs;
+  const targetAreaLower = (selectedArea || '').toLowerCase().trim();
+
+  if (isSuperAdminOrHq || targetAreaLower === 'all cabang' || targetAreaLower === 'hq' || targetAreaLower === 'all') {
+    return docs.filter(doc => {
+      // Pastikan dokumen Jakarta di tampilan global hanya menampilkan 9 PIC resmi
+      if (doc.area.toLowerCase() === 'jakarta') {
+        return isAllowedJakartaCreator(doc.createdBy);
+      }
+      return true;
+    });
   }
 
-  const targetAreaLower = selectedArea.toLowerCase();
   return docs.filter(doc => {
-    const docAreaLower = doc.area.toLowerCase();
-    return docAreaLower === targetAreaLower || (docAreaLower.includes(targetAreaLower));
+    const docAreaLower = (doc.area || '').toLowerCase().trim();
+    const isAreaMatch = docAreaLower === targetAreaLower || docAreaLower.includes(targetAreaLower);
+    if (!isAreaMatch) return false;
+
+    // Aturan khusus: Area Jakarta hanya memunculkan 9 Created By resmi
+    if (targetAreaLower === 'jakarta' || docAreaLower === 'jakarta') {
+      return isAllowedJakartaCreator(doc.createdBy);
+    }
+
+    return true;
   });
 }
 

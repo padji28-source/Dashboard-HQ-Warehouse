@@ -360,12 +360,13 @@ function StockOverview({
               if (
                 initErrMsg.includes("already exists") ||
                 initErrMsg.includes("ada") ||
-                initErrMsg.includes("exists")
+                initErrMsg.includes("exists") ||
+                initErrMsg.includes("unknown get action")
               ) {
                 console.log("Sheet already exists, continuing to load data.");
                 return loadData(false);
               }
-              console.error("Auto-init from StockOverview failed:", initErr);
+              console.warn("Auto-init from StockOverview note:", initErr);
             }
           }
           // Fallback to individual catches if init fails or retry is off

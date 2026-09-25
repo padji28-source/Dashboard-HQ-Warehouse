@@ -110,6 +110,9 @@ async function startServer() {
       }
 
       if (!response.ok || data.error) {
+        if (action === 'init' && data?.error && String(data.error).toLowerCase().includes('unknown get action')) {
+          return res.json({ success: true, note: "Spreadsheet already initialized" });
+        }
         return res.status(response.ok ? 400 : response.status).json({ error: data.error || `Apps Script HTTP ${response.status}` });
       }
 

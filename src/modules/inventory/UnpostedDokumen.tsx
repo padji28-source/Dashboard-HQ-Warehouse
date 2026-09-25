@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, useRef, memo } from 'react';
 import { 
   FileText, 
   Search, 
@@ -13,6 +13,9 @@ import {
   ChevronRight, 
   MapPin, 
   User, 
+  Users,
+  Check,
+  ChevronDown,
   Calendar, 
   FileCheck,
   Building2,
@@ -23,7 +26,15 @@ import {
   Box,
   PackageCheck
 } from 'lucide-react';
-import { fetchUnpostedDocuments, filterDocsByArea, UnpostedDoc, IMDocDetailLine, fetchIMDocDetails } from '../../lib/unpostedService';
+import { 
+  fetchUnpostedDocuments, 
+  filterDocsByArea, 
+  UnpostedDoc, 
+  IMDocDetailLine, 
+  fetchIMDocDetails,
+  JAKARTA_ALLOWED_CREATORS,
+  isAllowedJakartaCreator
+} from '../../lib/unpostedService';
 import { AREAS } from '../../App';
 
 interface Props {
@@ -56,6 +67,10 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMenu, setSelectedMenu] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [selectedCreators, setSelectedCreators] = useState<string[]>([]);
+  const [creatorDropdownOpen, setCreatorDropdownOpen] = useState(false);
+  const [creatorSearchQuery, setCreatorSearchQuery] = useState('');
+  const creatorDropdownRef = useRef<HTMLDivElement>(null);
   const [filterArea, setFilterArea] = useState<string>(area);
   
   // Pagination
@@ -74,9 +89,46 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
   const isPPICorMP = usernameLower === 'ppic' || usernameLower === 'mp' || userRole.toUpperCase().includes('PPIC') || userRole.toUpperCase().includes('MP');
   const isSuperAdminOrHq = isSuperAdmin || isHQ || isPPICorMP;
 
+  // Close creator dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (creatorDropdownRef.current && !creatorDropdownRef.current.contains(event.target as Node)) {
+        setCreatorDropdownOpen(false);
+      }
+    }
+    if (creatorDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [creatorDropdownOpen]);
+
   useEffect(() => {
     setFilterArea(area);
+    setSelectedCreators([]);
   }, [area]);
+
+  const toggleCreator = (name: string) => {
+    setSelectedCreators(prev => {
+      if (prev.includes(name)) {
+        return prev.filter(c => c !== name);
+      } else {
+        return [...prev, name];
+      }
+    });
+  };
+
+  const handleSelectAllCreators = (names: string[]) => {
+    setSelectedCreators(prev => {
+      const merged = new Set([...prev, ...names]);
+      return Array.from(merged);
+    });
+  };
+
+  const handleClearCreators = () => {
+    setSelectedCreators([]);
+  };
 
   const loadData = async (forceFresh = false) => {
     try {
@@ -103,6 +155,26 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
   const areaFilteredDocs = useMemo(() => {
     return filterDocsByArea(documents, filterArea, isSuperAdminOrHq && filterArea === 'All Cabang');
   }, [documents, filterArea, isSuperAdminOrHq]);
+
+  // Calculate stats for creators in current area
+  const creatorStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    areaFilteredDocs.forEach(d => {
+      if (d.createdBy) {
+        counts[d.createdBy] = (counts[d.createdBy] || 0) + 1;
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }));
+  }, [areaFilteredDocs]);
+
+  // Filtered creators for search box inside creator dropdown
+  const filteredCreatorStats = useMemo(() => {
+    if (!creatorSearchQuery.trim()) return creatorStats;
+    const q = creatorSearchQuery.toLowerCase().trim();
+    return creatorStats.filter(c => c.name.toLowerCase().includes(q));
+  }, [creatorStats, creatorSearchQuery]);
 
   // Calculate QTY counts for each menu
   const menuStats = useMemo(() => {
@@ -131,6 +203,9 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
       // Status filter
       if (selectedStatus !== 'ALL' && doc.documentStatus !== selectedStatus) return false;
 
+      // Creator filter (Multi-select)
+      if (selectedCreators.length > 0 && !selectedCreators.includes(doc.createdBy)) return false;
+
       // Search query filter
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
@@ -144,12 +219,12 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
 
       return true;
     });
-  }, [areaFilteredDocs, selectedMenu, selectedStatus, searchQuery]);
+  }, [areaFilteredDocs, selectedMenu, selectedStatus, selectedCreators, searchQuery]);
 
   // Reset page on filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedMenu, selectedStatus, filterArea]);
+  }, [searchQuery, selectedMenu, selectedStatus, selectedCreators, filterArea]);
 
   // Pagination calculation
   const totalPages = Math.ceil(filteredDocuments.length / pageSize) || 1;
@@ -436,21 +511,320 @@ const UnpostedDokumen = memo(function UnpostedDokumen({ area, userRole = '', act
               </select>
             </div>
 
+            {/* Multi-Select Filter Created By Dropdown */}
+            <div className="relative" ref={creatorDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setCreatorDropdownOpen(!creatorDropdownOpen)}
+                className={`flex items-center gap-1.5 border rounded-xl px-3 py-1.5 shadow-2xs text-xs font-medium transition-all cursor-pointer ${
+                  selectedCreators.length > 0
+                    ? 'bg-blue-50 border-blue-300 text-blue-700 font-semibold'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <Users className={`w-3.5 h-3.5 shrink-0 ${selectedCreators.length > 0 ? 'text-blue-600' : 'text-slate-400'}`} />
+                <span className="max-w-[160px] truncate text-left">
+                  {selectedCreators.length === 0
+                    ? `Semua PIC (${creatorStats.length})`
+                    : selectedCreators.length === 1
+                    ? selectedCreators[0]
+                    : `${selectedCreators.length} PIC Terpilih`}
+                </span>
+                {selectedCreators.length > 0 && (
+                  <span className="ml-0.5 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                    {selectedCreators.length}
+                  </span>
+                )}
+                <ChevronDown className={`w-3 h-3 transition-transform ${creatorDropdownOpen ? 'rotate-180 text-blue-600' : 'text-slate-400'}`} />
+              </button>
+
+              {/* Popover Panel */}
+              {creatorDropdownOpen && (
+                <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-2.5 flex flex-col gap-2">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                    <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-blue-600" />
+                      Pilih PIC ({selectedCreators.length > 0 ? `${selectedCreators.length}/` : ''}{creatorStats.length})
+                    </span>
+                    {selectedCreators.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearCreators}
+                        className="text-[11px] font-bold text-rose-600 hover:text-rose-700 cursor-pointer"
+                      >
+                        Hapus Pilihan
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Search inside PIC list */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Cari nama PIC..."
+                      value={creatorSearchQuery}
+                      onChange={(e) => setCreatorSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:bg-white focus:border-blue-500"
+                    />
+                    {creatorSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setCreatorSearchQuery('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Quick Select/Deselect buttons */}
+                  <div className="flex items-center justify-between gap-1 text-[11px] px-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAllCreators(filteredCreatorStats.map(c => c.name))}
+                      className="text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                    >
+                      Pilih Semua ({filteredCreatorStats.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearCreators}
+                      className="text-slate-500 hover:text-slate-700 font-medium cursor-pointer"
+                    >
+                      Reset (Semua)
+                    </button>
+                  </div>
+
+                  {/* Scrollable Checkbox List */}
+                  <div className="max-h-56 overflow-y-auto space-y-0.5 pr-0.5 custom-scrollbar">
+                    {filteredCreatorStats.length === 0 ? (
+                      <div className="py-4 text-center text-xs text-slate-400">
+                        Tidak ada PIC ditemukan
+                      </div>
+                    ) : (
+                      filteredCreatorStats.map(({ name, count }) => {
+                        const isChecked = selectedCreators.includes(name);
+                        return (
+                          <label
+                            key={name}
+                            className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors text-xs ${
+                              isChecked
+                                ? 'bg-blue-50 text-blue-900 font-semibold'
+                                : 'hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate pr-2">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleCreator(name)}
+                                className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                              />
+                              <span className="truncate">{name}</span>
+                            </div>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                              isChecked ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {count}
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Footer status */}
+                  <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>
+                      {selectedCreators.length === 0 ? 'Semua PIC aktif' : `${selectedCreators.length} dipilih`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCreatorDropdownOpen(false)}
+                      className="px-2.5 py-1 bg-slate-900 text-white rounded-md text-[10px] font-bold hover:bg-slate-800 cursor-pointer"
+                    >
+                      Selesai
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Clear Filters Button */}
-            {(searchQuery || selectedMenu !== 'ALL' || selectedStatus !== 'ALL') && (
+            {(searchQuery || selectedMenu !== 'ALL' || selectedStatus !== 'ALL' || selectedCreators.length > 0) && (
               <button
                 onClick={() => {
                   setSearchQuery('');
                   setSelectedMenu('ALL');
                   setSelectedStatus('ALL');
+                  setSelectedCreators([]);
                 }}
-                className="text-xs font-bold text-rose-600 hover:text-rose-700 px-2 py-1 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors"
+                className="text-xs font-bold text-rose-600 hover:text-rose-700 px-2 py-1 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer"
               >
                 Reset Filter
               </button>
             )}
           </div>
         </div>
+
+        {/* All Cabang Multi-PIC Selection Banner */}
+        {(filterArea.toLowerCase() === 'all cabang' || filterArea.toLowerCase() === 'hq' || filterArea.toLowerCase() === 'all') && (
+          <div className="p-3.5 bg-gradient-to-r from-indigo-50/90 via-slate-50 to-blue-50/60 border-b border-indigo-100 flex flex-col gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="p-1 bg-indigo-600 text-white rounded-md text-xs">
+                  <Users className="w-3 h-3" />
+                </span>
+                <span className="text-[11px] font-bold text-indigo-950 uppercase tracking-wider">
+                  Filter Multi-PIC All Cabang
+                </span>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                  selectedCreators.length > 0 
+                    ? 'bg-indigo-100 text-indigo-800 border-indigo-200' 
+                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}>
+                  {selectedCreators.length > 0 
+                    ? `${selectedCreators.length} PIC Terpilih (${filteredDocuments.length} Dokumen)` 
+                    : `Semua PIC (${areaFilteredDocs.length} Total Dokumen)`}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-indigo-700 font-medium hidden sm:inline">
+                  Klik nama untuk memilih beberapa PIC sekaligus
+                </span>
+                {selectedCreators.length > 0 && (
+                  <button
+                    onClick={handleClearCreators}
+                    className="text-[11px] font-bold text-rose-600 hover:text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    Reset PIC
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <button
+                onClick={handleClearCreators}
+                className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${
+                  selectedCreators.length === 0
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-white text-slate-700 hover:bg-indigo-50 border border-slate-200 shadow-2xs'
+                }`}
+              >
+                Semua PIC ({creatorStats.length})
+              </button>
+
+              {/* Show top 14 creators in All Cabang, plus any selected creators not in top 14 */}
+              {(() => {
+                const top14 = creatorStats.slice(0, 14);
+                const top14Names = new Set(top14.map(c => c.name));
+                const extraSelected = creatorStats.filter(c => selectedCreators.includes(c.name) && !top14Names.has(c.name));
+                const listToRender = [...top14, ...extraSelected];
+
+                return listToRender.map(({ name, count }) => {
+                  const isSelected = selectedCreators.includes(name);
+                  return (
+                    <button
+                      key={name}
+                      onClick={() => toggleCreator(name)}
+                      className={`px-2.5 py-1 text-xs rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                          : 'bg-white text-slate-800 hover:bg-indigo-50 hover:border-indigo-300 border border-slate-200 shadow-2xs'
+                      }`}
+                    >
+                      {isSelected && <Check className="w-3 h-3 text-white" />}
+                      <span>{name}</span>
+                      <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+                        isSelected ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-700'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Jakarta PIC Quick Selection Banner */}
+        {filterArea.toLowerCase() === 'jakarta' && (
+          <div className="p-3.5 bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-slate-50 border-b border-blue-100 flex flex-col gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="p-1 bg-blue-600 text-white rounded-md text-xs">
+                  <User className="w-3 h-3" />
+                </span>
+                <span className="text-[11px] font-bold text-blue-950 uppercase tracking-wider">
+                  Daftar 9 PIC Resmi Area Jakarta
+                </span>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                  selectedCreators.length > 0 
+                    ? 'bg-blue-200 text-blue-900 border-blue-300 font-bold' 
+                    : 'bg-blue-100 text-blue-800 border-blue-200'
+                }`}>
+                  {selectedCreators.length > 0 
+                    ? `${selectedCreators.length} PIC Terpilih (${filteredDocuments.length} Dokumen)` 
+                    : `${areaFilteredDocs.length} Total Dokumen`}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-blue-700 font-medium hidden sm:inline">
+                  Klik nama untuk memilih satu atau beberapa PIC
+                </span>
+                {selectedCreators.length > 0 && (
+                  <button
+                    onClick={handleClearCreators}
+                    className="text-[11px] font-bold text-rose-600 hover:text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    Reset PIC
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <button
+                onClick={handleClearCreators}
+                className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${
+                  selectedCreators.length === 0
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-white text-slate-700 hover:bg-blue-100/70 border border-slate-200 shadow-2xs'
+                }`}
+              >
+                Semua ({areaFilteredDocs.length})
+              </button>
+              {JAKARTA_ALLOWED_CREATORS.map(name => {
+                const count = areaFilteredDocs.filter(d => d.createdBy.toLowerCase().trim() === name.toLowerCase().trim()).length;
+                const isSelected = selectedCreators.includes(name);
+                return (
+                  <button
+                    key={name}
+                    onClick={() => toggleCreator(name)}
+                    className={`px-2.5 py-1 text-xs rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-600 text-white font-bold shadow-xs'
+                        : 'bg-white text-slate-800 hover:bg-blue-50 hover:border-blue-300 border border-slate-200 shadow-2xs'
+                    }`}
+                  >
+                    {isSelected && <Check className="w-3 h-3 text-white" />}
+                    <span>{name}</span>
+                    <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+                      isSelected ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Data Table */}
         <div className="overflow-x-auto">
