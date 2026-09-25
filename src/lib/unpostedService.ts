@@ -61,11 +61,19 @@ export async function fetchUnpostedDocuments(forceFresh = false): Promise<Unpost
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
     text = await res.text();
+    if (text.startsWith('{') && text.includes('"error"')) {
+      throw new Error('Proxy returned JSON error');
+    }
   } catch (err) {
     console.warn('Fallback to direct Google Sheet link for unposted docs:', err);
-    const fallbackRes = await fetch(TARIKAN_CSV_DIRECT + (forceFresh ? `&t=${Date.now()}` : ''), { cache: 'no-store' });
-    if (!fallbackRes.ok) throw new Error(`Direct fetch error: ${fallbackRes.status}`);
-    text = await fallbackRes.text();
+    try {
+      const fallbackRes = await fetch(TARIKAN_CSV_DIRECT + (forceFresh ? `&t=${Date.now()}` : ''), { cache: 'no-store' });
+      if (!fallbackRes.ok) throw new Error(`Direct fetch error: ${fallbackRes.status}`);
+      text = await fallbackRes.text();
+    } catch (fallbackErr) {
+      console.error('All fetch attempts failed for unposted docs:', fallbackErr);
+      return [];
+    }
   }
 
   const rawLines = text.split('\n');

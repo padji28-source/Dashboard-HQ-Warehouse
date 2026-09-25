@@ -8,6 +8,7 @@ import { Calendar, Package, MapPin, Layers, TrendingUp, TrendingDown, AlertTrian
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { fetchUnpostedDocuments, filterDocsByArea } from '../../lib/unpostedService';
 import CategoryDiscrepancyChart from './CategoryDiscrepancyChart';
+import CategoryMovementChart from './CategoryMovementChart';
 
 interface DashboardCardProps {
   title: string;
@@ -467,6 +468,13 @@ const ExecutiveDashboard = memo(function ExecutiveDashboard({
         </div>
   
       </div>
+
+      {/* Category Goods Movement (In/Out) Trend Visualization (Recharts) */}
+      <CategoryMovementChart
+        area={area}
+        allTransactions={allTransactions}
+        onNavigateToTab={onNavigateToTab}
+      />
 
       {/* Category SKU Discrepancy Trend Visualization (Recharts) */}
       <CategoryDiscrepancyChart

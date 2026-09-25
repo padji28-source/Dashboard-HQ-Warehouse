@@ -1,22 +1,47 @@
 import { memo } from "react";
 import React, { useState, useEffect, useRef, type FormEvent } from 'react';
-import { Bot, Send, MessageSquare, ShieldAlert, History, AlertTriangle, ArrowRight, HelpCircle, CheckCheck, Landmark, Loader2 } from 'lucide-react';
+import { Bot, Send, MessageSquare, ShieldAlert, History, AlertTriangle, ArrowRight, HelpCircle, CheckCheck, Landmark, Loader2, Sparkles, PackageCheck, Layers, FileText, Search } from 'lucide-react';
 import { CONFIG } from '../../config';
 import { cn, formatDate } from '../../shared/utils';
 import type { StockSummary } from '../../shared/types';
-import { db, logWhatsAppActivity, getWhatsAppHistory, logAudit } from '../../shared/services/firebase';
+import { db, logWhatsAppActivity, logAudit } from '../../shared/services/firebase';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { fetchSheetData } from '../../lib/sheets';
 import { AREA_URLS } from '../../App';
+import { processWhatsAppCommand } from '../../lib/whatsappBot';
+import { fetchUnpostedDocuments, UnpostedDoc } from '../../lib/unpostedService';
 
 interface WhatsAppConsoleProps {
   stockSummary?: StockSummary[];
   area: string;
 }
 
+// Render *bold* and _italic_ formatting natively in WhatsApp chat bubbles
+function renderFormattedMessage(text: string) {
+  const lines = text.split('\n');
+  return lines.map((line, lineIdx) => {
+    const parts = line.split(/(\*[^*]+\*|_[^_]+_)/g);
+    return (
+      <div key={lineIdx} className="min-h-[1.25em]">
+        {parts.map((part, partIdx) => {
+          if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+            return <strong key={partIdx} className="font-bold text-slate-950">{part.slice(1, -1)}</strong>;
+          }
+          if (part.startsWith('_') && part.endsWith('_') && part.length > 2) {
+            return <em key={partIdx} className="italic">{part.slice(1, -1)}</em>;
+          }
+          return part;
+        })}
+      </div>
+    );
+  });
+}
+
 function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppConsoleProps) {
   const [stockSummary, setStockSummary] = useState<StockSummary[]>(initialStockSummary || []);
+  const [unpostedDocs, setUnpostedDocs] = useState<UnpostedDoc[]>([]);
   const [loading, setLoading] = useState(!initialStockSummary || initialStockSummary.length === 0);
+  const [isTyping, setIsTyping] = useState(false);
   const [messages, setMessages] = useState<Array<{
     id: string;
     sender: 'user' | 'bot';
@@ -27,7 +52,7 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
     {
       id: 'welcome',
       sender: 'bot',
-      text: `👋 Halo! Saya adalah Asisten Bot PSN Smart Inventory.\n\nKirim pesan ke saya untuk melacak stok, melihat barang kritis, atau peta locator gudang binaan.\n\nContoh perintah: *stok*, *stok rendah*, *help*`,
+      text: `👋 *Halo! Saya adalah Asisten Bot WMS C3 Smart Inventory.*\n\nKirim pesan ke saya untuk melacak stok, melihat barang kritis, katalog produk, locator gudang, atau dokumen unposted.\n\nContoh perintah:\n• *stok*\n• *stok semen*\n• *stok rendah*\n• *produk*\n• *locator*\n• *unposted*\n• *help*`,
       timestamp: Date.now() - 1000 * 60 * 5,
     }
   ]);
@@ -42,7 +67,12 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
     if (chatBottomRef.current) {
       chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages]);
+  }, [messages, isTyping]);
+
+  // Load unposted documents for bot context
+  useEffect(() => {
+    fetchUnpostedDocuments().then(docs => setUnpostedDocs(docs)).catch(() => []);
+  }, []);
 
   // Load live stock data directly from Sheet
   useEffect(() => {
@@ -216,88 +246,32 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
     }
   }, []);
 
-  // Bot response engine simulating standard logic
-  const handleBotResponse = async (userText: string) => {
-    const cleanText = userText.trim().toLowerCase();
-    let reply = '';
+  // Send WhatsApp message and trigger Bot engine
+  const handleSendMessage = async (textToSend?: string) => {
+    const messageText = (textToSend || inputValue).trim();
+    if (!messageText) return;
 
-    if (cleanText === 'help' || cleanText === 'bantuan' || cleanText === 'h') {
-      reply = `Daftar Perintah:\n` +
-              `- stok [nama produk]\n` +
-              `- stok rendah\n` +
-              `- produk\n` +
-              `- locator`;
-    } 
-    else if (cleanText === 'stok rendah' || cleanText === 'stok limit' || cleanText === 'rendah') {
-      const lowStock = stockSummary.filter(item => item.stock > 0 && item.stock <= CONFIG.DEFAULT_MIN_STOCK);
-      reply = `Daftar Produk Stok Minimum:\n\n`;
-      if (lowStock.length > 0) {
-        lowStock.slice(0, 10).forEach((item, idx) => {
-          reply += `${idx + 1}. ${item.namaProduk}\n`;
-        });
-      } else {
-        reply += `1. Semen\n` +
-                 `2. Cat\n` +
-                 `3. Paku`;
-      }
-    } 
-    else if (cleanText.startsWith('stok ')) {
-      const queryProd = cleanText.substring(5).trim().toLowerCase();
-      const matches = stockSummary.filter(item => 
-        item.namaProduk.toLowerCase().includes(queryProd) ||
-        item.kodeProduk.toLowerCase().includes(queryProd)
-      );
+    const msgId = Math.random().toString();
 
-      if (matches.length > 0) {
-        const item = matches[0];
-        reply = `Produk : ${item.namaProduk}\n` +
-                `Stok : ${item.stock}\n` +
-                `Locator : ${item.whGroup}`;
-      } else {
-        if (queryProd === 'semen') {
-          reply = `Produk : Semen\n` +
-                  `Stok : 250\n` +
-                  `Locator : A01`;
-        } else {
-          reply = `Produk : ${queryProd.charAt(0).toUpperCase() + queryProd.slice(1)}\n` +
-                  `Stok : 0\n` +
-                  `Locator : Tidak ada`;
-        }
-      }
-    } 
-    else if (cleanText === 'produk' || cleanText === 'katalog') {
-      reply = `Daftar Produk:\n`;
-      const uniqueProds = Array.from(new Set(stockSummary.map(s => s.namaProduk))).slice(0, 10);
-      if (uniqueProds.length > 0) {
-        uniqueProds.forEach((name, idx) => {
-          reply += `${idx + 1}. ${name}\n`;
-        });
-      } else {
-        reply += `1. Semen\n2. Cat\n3. Paku`;
-      }
-    } 
-    else if (cleanText === 'locator' || cleanText === 'posisi' || cleanText === 'wh') {
-      reply = `Daftar Locator:\n`;
-      const uniqueLocs = Array.from(new Set(stockSummary.map(s => s.whGroup))).slice(0, 10);
-      if (uniqueLocs.length > 0) {
-        uniqueLocs.forEach((loc) => {
-          reply += `- ${loc}\n`;
-        });
-      } else {
-        reply += `- A01\n- B02\n- C03`;
-      }
-    } 
-    else {
-      // Default: show help format
-      reply = `Daftar Perintah:\n` +
-              `- stok [nama produk]\n` +
-              `- stok rendah\n` +
-              `- produk\n` +
-              `- locator`;
-    }
+    // Append user message
+    setMessages(prev => [...prev, {
+      id: msgId,
+      sender: 'user',
+      text: messageText,
+      timestamp: Date.now()
+    }]);
 
-    // Delay bot response slightly to feel human
-    setTimeout(async () => {
+    if (!textToSend) setInputValue('');
+    setIsTyping(true);
+
+    try {
+      const reply = await processWhatsAppCommand(messageText, {
+        stockSummary,
+        unpostedDocs
+      });
+
+      setIsTyping(false);
+
       const botMsgId = Math.random().toString();
       setMessages(prev => [...prev, {
         id: botMsgId,
@@ -309,51 +283,54 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
       // Fire Firestore Logger asynchronously for persistence
       await logWhatsAppActivity(
         waNumber,
-        userText,
+        messageText,
         reply,
         'sent'
-      );
+      ).catch(() => {});
 
       // Audit Log track
-      await logAudit('System (WhatsApp Bot)', 'WHATSAPP_BOT', 'RECEIVE_&_REPLY', `WhatsApp query from ${waNumber}: "${userText}"`);
-
-    }, 800);
+      await logAudit('System (WhatsApp Bot)', 'WHATSAPP_BOT', 'RECEIVE_&_REPLY', `WhatsApp query from ${waNumber}: "${messageText}"`).catch(() => {});
+    } catch (err) {
+      setIsTyping(false);
+      setMessages(prev => [...prev, {
+        id: Math.random().toString(),
+        sender: 'bot',
+        text: '❌ Terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.',
+        timestamp: Date.now()
+      }]);
+    }
   };
 
-  const handleSendMessage = (e: FormEvent) => {
+  const handleFormSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!inputValue.trim()) return;
-
-    const userText = inputValue;
-    const msgId = Math.random().toString();
-
-    // Append user message
-    setMessages(prev => [...prev, {
-      id: msgId,
-      sender: 'user',
-      text: userText,
-      timestamp: Date.now()
-    }]);
-
-    setInputValue('');
-    handleBotResponse(userText);
+    handleSendMessage();
   };
+
+  const QUICK_COMMANDS = [
+    { label: '📦 Semua Data', cmd: 'semua data' },
+    { label: '📊 Stok Ringkasan', cmd: 'stok' },
+    { label: '🚨 Stok Rendah', cmd: 'stok rendah' },
+    { label: '📋 Katalog Produk', cmd: 'produk' },
+    { label: '📍 Locator Gudang', cmd: 'locator' },
+    { label: '📄 Unposted Dokumen', cmd: 'unposted' },
+    { label: '❓ Bantuan', cmd: 'help' },
+  ];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Left Columns: Simulator (2 cols) */}
-      <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm lg:col-span-2 flex flex-col min-h-[550px] max-h-[650px]">
+      <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm lg:col-span-2 flex flex-col min-h-[550px] max-h-[680px]">
         {/* Console Header */}
         <div className="bg-slate-900 text-white p-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center font-black shadow-inner">
+            <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center font-black shadow-inner shrink-0">
               <Bot className="w-6 h-6 text-slate-950" />
             </div>
             <div>
-              <p className="font-extrabold text-sm tracking-tight leading-none">PSN WhatsApp Auto-Bot</p>
+              <p className="font-extrabold text-sm tracking-tight leading-none">WMS C3 WhatsApp Auto-Bot</p>
               <div className="flex items-center gap-1.5 mt-1 leading-none">
                 <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
-                <span className="text-[10px] text-slate-350 font-bold">Online & Webhook Active</span>
+                <span className="text-[10px] text-slate-350 font-bold">Online & AI Smart Engine Active</span>
               </div>
             </div>
           </div>
@@ -362,15 +339,15 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
           <div className="flex bg-slate-800 p-1 rounded-lg">
             <button
               onClick={() => setActiveTab('simulator')}
-              className={cn("px-3 py-1 text-xs font-bold rounded", activeTab === 'simulator' ? "bg-emerald-500 text-slate-950" : "text-slate-300 hover:text-white")}
+              className={cn("px-3 py-1 text-xs font-bold rounded transition-colors", activeTab === 'simulator' ? "bg-emerald-500 text-slate-950" : "text-slate-300 hover:text-white")}
             >
               Simulator
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={cn("px-3 py-1 text-xs font-bold rounded", activeTab === 'history' ? "bg-emerald-500 text-slate-950" : "text-slate-300 hover:text-white")}
+              className={cn("px-3 py-1 text-xs font-bold rounded transition-colors", activeTab === 'history' ? "bg-emerald-500 text-slate-950" : "text-slate-300 hover:text-white")}
             >
-              Log Server
+              Log Server ({historyLogs.length})
             </button>
           </div>
         </div>
@@ -378,17 +355,31 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
         {activeTab === 'simulator' ? (
           <>
             {/* Meta Control Widget (Allows simulating different phone numbers) */}
-            <div className="bg-slate-50 border-b border-slate-150 p-3 flex flex-wrap gap-2 items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 text-slate-500">
-                <Landmark className="w-4 h-4 text-slate-400" />
+            <div className="bg-slate-50 border-b border-slate-150 p-2.5 px-4 flex flex-wrap gap-2 items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 text-slate-600 font-medium">
+                <Landmark className="w-4 h-4 text-emerald-600" />
                 <span>Simulasi Nomor Pengirim WA:</span>
               </div>
               <input
                 type="text"
                 value={waNumber}
                 onChange={e => setWaNumber(e.target.value)}
-                className="bg-white border border-slate-200 rounded px-2 py-0.5 font-bold font-mono text-slate-700 outline-none w-36 focus:border-emerald-500"
+                className="bg-white border border-slate-200 rounded-lg px-2.5 py-1 font-bold font-mono text-slate-800 outline-none w-36 focus:border-emerald-500 shadow-2xs"
               />
+            </div>
+
+            {/* Quick Action Command Chips */}
+            <div className="bg-slate-100/70 border-b border-slate-200 p-2 px-3 flex gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
+              {QUICK_COMMANDS.map((qc) => (
+                <button
+                  key={qc.cmd}
+                  onClick={() => handleSendMessage(qc.cmd)}
+                  disabled={isTyping}
+                  className="px-2.5 py-1 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-800 text-[11px] font-bold rounded-lg transition-all shadow-2xs whitespace-nowrap flex items-center gap-1 shrink-0 disabled:opacity-50"
+                >
+                  {qc.label}
+                </button>
+              ))}
             </div>
 
             {/* Chat Messages Panel */}
@@ -397,15 +388,15 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
                 <div
                   key={msg.id}
                   className={cn(
-                    "max-w-[80%] rounded-2xl p-3 text-xs leading-relaxed shadow-sm",
+                    "max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed shadow-xs transition-all",
                     msg.sender === 'user'
-                      ? "bg-[#d9fdd3] text-slate-900 ml-auto rounded-tr-none"
-                      : "bg-white text-slate-900 rounded-tl-none mr-auto"
+                      ? "bg-[#d9fdd3] text-slate-900 ml-auto rounded-tr-none border border-emerald-100"
+                      : "bg-white text-slate-900 rounded-tl-none mr-auto border border-slate-100"
                   )}
                 >
-                  {/* Message body (whitespace preservation) */}
-                  <div className="whitespace-pre-line font-medium leading-relaxed">
-                    {msg.text}
+                  {/* Message body formatted natively */}
+                  <div className="font-medium text-slate-800 leading-relaxed">
+                    {renderFormattedMessage(msg.text)}
                   </div>
                   
                   {/* Timestamp & Status */}
@@ -415,21 +406,31 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
                   </div>
                 </div>
               ))}
+
+              {isTyping && (
+                <div className="bg-white text-slate-500 rounded-2xl rounded-tl-none p-3 text-xs shadow-xs mr-auto flex items-center gap-2 max-w-[60%]">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                  <span className="italic font-medium text-slate-600">Bot sedang mengetik...</span>
+                </div>
+              )}
+
               <div ref={chatBottomRef} />
             </div>
 
             {/* Input Form Footer */}
-            <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2 items-center shrink-0">
+            <form onSubmit={handleFormSubmit} className="p-3 bg-white border-t border-slate-200 flex gap-2 items-center shrink-0">
               <input
                 type="text"
-                placeholder="Ketik pesan interaktif... (Contoh: stok semen, stok rendah, help)"
+                placeholder="Ketik pesan... (Contoh: stok semen, stok rendah, help)"
                 value={inputValue}
                 onChange={e => setInputValue(e.target.value)}
-                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
+                disabled={isTyping}
+                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium text-slate-800"
               />
               <button
                 type="submit"
-                className="w-10 h-10 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 rounded-full flex items-center justify-center text-slate-950 transition-colors shadow shrink-0"
+                disabled={isTyping || !inputValue.trim()}
+                className="w-10 h-10 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-40 rounded-full flex items-center justify-center text-slate-950 transition-colors shadow shrink-0"
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -444,23 +445,23 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
             </div>
 
             {historyLogs.length === 0 ? (
-              <div className="text-center py-16 text-slate-650 italic">
+              <div className="text-center py-16 text-slate-600 italic">
                 Belum ada aktivitas traffic webhook WhatsApp yang tercatat.<br />Kirim pesan di Tab Simulator untuk memicu log server.
               </div>
             ) : (
               historyLogs.map((log) => (
                 <div key={log.id} className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                  <div className="flex justify-between text-[10px] border-b border-slate-850 pb-1.5 font-bold">
+                  <div className="flex justify-between text-[10px] border-b border-slate-800 pb-1.5 font-bold">
                     <span className="text-blue-400 font-bold font-mono">PENGIRIM: {log.from}</span>
                     <span className="text-slate-500 font-mono">{formatDate(log.timestamp)}</span>
                   </div>
                   <div>
                     <span className="text-slate-500 uppercase tracking-widest font-black text-[9px]">REQUEST IN:</span>
-                    <p className="text-white bg-slate-950 p-1.5 rounded border border-slate-850/50 mt-1">{log.message}</p>
+                    <p className="text-white bg-slate-950 p-1.5 rounded border border-slate-800/50 mt-1">{log.message}</p>
                   </div>
                   <div>
                     <span className="text-emerald-500 uppercase tracking-widest font-black text-[9px]">RESPONSE OUT (BOT REPLY):</span>
-                    <p className="text-emerald-300 bg-slate-950 p-1.5 rounded border border-emerald-900/10 mt-1 whitespace-pre-line leading-relaxed">
+                    <p className="text-emerald-300 bg-slate-950 p-1.5 rounded border border-emerald-900/20 mt-1 whitespace-pre-line leading-relaxed">
                       {log.reply}
                     </p>
                   </div>
@@ -477,11 +478,11 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
         <div className="bg-slate-900 text-white p-6 rounded-3xl border border-slate-800 shadow-sm space-y-4">
           <div className="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold w-fit border border-emerald-500/30">
             <MessageSquare className="w-3.5 h-3.5" />
-            Integrasi Produksi Twilio
+            Integrasi Webhook Real Twilio
           </div>
-          <h4 className="font-extrabold text-base tracking-tight text-white leading-tight">Konfigurasi Webhook Webhook WhatsApp</h4>
-          <p className="text-xs text-slate-350 leading-relaxed">
-            Untuk menyambungkan nomor WhatsApp bisnis Anda di Twilio asli ke asisten sistem ini, silakan hubungkan webhook di Twilio Sandbox ke URL produksi:
+          <h4 className="font-extrabold text-base tracking-tight text-white leading-tight">Konfigurasi Webhook WhatsApp Target</h4>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Untuk menyambungkan nomor WhatsApp bisnis Anda di Twilio asli ke asisten WMS C3, silakan hubungkan webhook di Twilio Console ke URL endpoint produksi:
           </p>
 
           <div className="bg-black/40 rounded-xl p-3 border border-white/5 space-y-1">
@@ -491,12 +492,12 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
             </code>
           </div>
 
-          <p className="text-[11px] text-slate-400 leading-normal">
+          <p className="text-[11px] text-slate-300 leading-normal">
             ⚙️ <strong>Cara Pengaturan:</strong><br />
             1. Buka dashboard Twilio Console Anda.<br />
             2. Ke tab <strong>Messaging &gt; Try It Out &gt; Send a WhatsApp Message</strong>.<br />
             3. Paste URL di atas pada kolom <strong>"WHEN A MESSAGE COMES IN"</strong>.<br />
-            4. Klik <strong>Save</strong>. Setiap chat fisik asli otomatis diposting dan diolah chatbot asisten kami!
+            4. Pilih metode <strong>HTTP POST</strong> dan klik <strong>Save</strong>. Setiap chat fisik otomatis dijawab oleh bot asisten ini.
           </p>
         </div>
 
@@ -510,7 +511,7 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
 
             <h4 className="font-extrabold text-[#0f172a] text-sm leading-tight pt-1">Batas Minimum Pemicu Notifikasi</h4>
             <p className="text-xs text-slate-500 leading-normal">
-              Bot asisten stok whatsapp akan mendeteksi unit yang berada di bawah batas minimum pengaman. Batas minimum pengaman saat ini disetting global:
+              Bot asisten stok WhatsApp akan mendeteksi unit yang berada di bawah batas minimum pengaman global:
             </p>
 
             <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-150 justify-between">
@@ -520,14 +521,14 @@ function WhatsAppConsole({ stockSummary: initialStockSummary, area }: WhatsAppCo
               </div>
               <span className="text-xs text-slate-400 font-bold">&rarr;</span>
               <div className="text-right">
-                <span className="text-[10px] text-rose-450 font-bold block uppercase tracking-wider">KRITIS / ALARM</span>
+                <span className="text-[10px] text-rose-500 font-bold block uppercase tracking-wider">KRITIS / ALARM</span>
                 <span className="text-base font-extrabold text-rose-600">&le; {CONFIG.DEFAULT_MIN_STOCK} Unit</span>
               </div>
             </div>
           </div>
 
           <p className="text-[11px] text-slate-400 italic">
-            💡 <strong>Rekomendasi Action:</strong> Ketika produk baru dimasukkan di menu "Master Produk", sistem melacak alur mutasi dan segera mengirimi Anda peringatan (Alert) jika unit berkurang menyentuh alarm batas ini.
+            💡 <strong>Rekomendasi Action:</strong> Ketik *stok rendah* di WhatsApp untuk melihat daftar lengkap produk yang membutuhkan reorder secepatnya.
           </p>
         </div>
       </div>
