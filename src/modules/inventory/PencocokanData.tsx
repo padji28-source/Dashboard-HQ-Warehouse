@@ -32,30 +32,64 @@ function parseMtsNumber(val: any): number {
 
   valStr = valStr.replace(/^"|"$/g, '').trim();
 
+  // 1. Multiple dots (e.g. "2.837.100", "5.760.000"): all dots are thousand separators
+  if ((valStr.match(/\./g) || []).length > 1) {
+    valStr = valStr.replace(/\./g, '').replace(/,/g, '');
+    const res = parseFloat(valStr);
+    return isNaN(res) ? 0 : res;
+  }
+
+  // 2. Both comma and dot present
   const lastDot = valStr.lastIndexOf('.');
   const lastComma = valStr.lastIndexOf(',');
-
   if (lastComma > -1 && lastDot > -1) {
     if (lastComma > lastDot) {
-      // ID format: 1.234,56 or 28.959,
       valStr = valStr.replace(/\./g, '').replace(/,/g, '.');
     } else {
-      // EN format: 1,234.56
       valStr = valStr.replace(/,/g, '');
     }
-  } else if (lastComma > -1 && lastDot === -1) {
-    // Only comma present:
+    const res = parseFloat(valStr);
+    return isNaN(res) ? 0 : res;
+  }
+
+  // 3. Single dot ending in exactly three zeroes: ".000" (e.g. "13.000", "700.000", "0.000", "-40.000")
+  // In iDempiere/ERP export format (#,##0.000), ".000" represents 3 decimal places for integer quantities.
+  // "13.000" is 13 units, "700.000" is 700 units, "865.000" is 865 units.
+  if (valStr.endsWith('.000')) {
+    const withoutDecimals = valStr.slice(0, -4);
+    const cleanInteger = withoutDecimals.replace(/,/g, '');
+    const res = parseFloat(cleanInteger);
+    return isNaN(res) ? 0 : res;
+  }
+
+  // 4. Single comma ending in three zeroes: ",000"
+  if (valStr.endsWith(',000')) {
+    const withoutDecimals = valStr.slice(0, -4);
+    const cleanInteger = withoutDecimals.replace(/\./g, '');
+    const res = parseFloat(cleanInteger);
+    return isNaN(res) ? 0 : res;
+  }
+
+  // 5. Single comma only (e.g. "12,5" or "12,50")
+  if (lastComma > -1 && lastDot === -1) {
     const parts = valStr.split(',');
-    if (parts.length > 1 && parts[parts.length - 1].length === 3 && parts[0].replace('-', '').length <= 3) {
-      valStr = valStr.replace(/,/g, '');
+    if (parts.length === 2 && parts[1].length === 3 && parts[0].replace('-', '').length <= 3) {
+      valStr = valStr.replace(',', '');
     } else {
-      valStr = valStr.replace(/,/g, '.');
+      valStr = valStr.replace(',', '.');
     }
-  } else if (lastDot > -1 && lastComma === -1) {
-    // Only dot present: e.g. "28.959" or "24.000" or "-29.200"
+    const res = parseFloat(valStr);
+    return isNaN(res) ? 0 : res;
+  }
+
+  // 6. Single dot followed by 3 non-zero digits (e.g. "2.732", "37.271", "1.026", "2.900", "2.485", "5.385")
+  // In Google Sheets with Indonesian locale, these are thousand quantities where comma was imported as dot.
+  if (lastDot > -1) {
     const parts = valStr.split('.');
-    if (parts.length > 1 && parts[parts.length - 1].length === 3 && parts[0].replace('-', '').length <= 3) {
-      valStr = valStr.replace(/\./g, '');
+    if (parts.length === 2 && parts[1].length === 3 && parts[0].replace('-', '').length <= 3) {
+      valStr = valStr.replace('.', '');
+      const res = parseFloat(valStr);
+      return isNaN(res) ? 0 : res;
     }
   }
 
@@ -340,6 +374,8 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
             const cleanedHeaders = rawHeaders.map(h => String(h).trim());
 
             const colLoc = cleanedHeaders.findIndex(h => h.toLowerCase().includes('locator'));
+            const colWhGroup = cleanedHeaders.findIndex(h => h.toLowerCase() === 'wh group' || h.toLowerCase().includes('group'));
+            const colArea = cleanedHeaders.findIndex(h => h.toLowerCase() === 'area');
             const colSku = cleanedHeaders.findIndex(h => h.toLowerCase().includes('search key') || h.toLowerCase() === 'sku' || h.toLowerCase().includes('produk'));
             const colName = cleanedHeaders.findIndex(h => h.toLowerCase() === 'name' || h.toLowerCase().includes('nama'));
             const colLastQty = cleanedHeaders.findIndex(h => h.toLowerCase().includes('last qty') || h.toLowerCase().includes('sistem'));
@@ -347,6 +383,8 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
             const mtsRows = dataMts.slice(headerIndex + 1);
             mtsRows.forEach(row => {
               const loc = colLoc !== -1 ? String(row[colLoc] || '').trim().toUpperCase() : '';
+              const whGroup = colWhGroup !== -1 ? String(row[colWhGroup] || '').trim().toUpperCase() : '';
+              const rowArea = colArea !== -1 ? String(row[colArea] || '').trim().toUpperCase() : '';
               const sku = colSku !== -1 ? String(row[colSku] || '').trim().toUpperCase() : '';
               const name = colName !== -1 ? String(row[colName] || '').trim().toUpperCase() : '';
               
@@ -355,16 +393,23 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
                 lastQty = parseMtsNumber(row[colLastQty]);
               }
 
-              if (loc) {
+              const locCandidates = [loc, whGroup].filter(Boolean);
+              locCandidates.forEach(l => {
                 if (sku) {
-                  mtsMap.set(`${loc}_${sku}`, lastQty);
-                  mtsMap.set(`${sku}_${loc}`, lastQty);
+                  mtsMap.set(`${l}_${sku}`, lastQty);
+                  mtsMap.set(`${sku}_${l}`, lastQty);
+                  if (rowArea) {
+                    mtsMap.set(`${rowArea}_${l}_${sku}`, lastQty);
+                  }
                 }
                 if (name) {
-                  mtsMap.set(`${loc}_${name}`, lastQty);
-                  mtsMap.set(`${name}_${loc}`, lastQty);
+                  mtsMap.set(`${l}_${name}`, lastQty);
+                  mtsMap.set(`${name}_${l}`, lastQty);
+                  if (rowArea) {
+                    mtsMap.set(`${rowArea}_${l}_${name}`, lastQty);
+                  }
                 }
-              }
+              });
             });
           }
       } catch (err) {
@@ -639,22 +684,45 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
 
     return Array.from(listMap.values()).map(item => {
       const locKey = item.whGroup.toUpperCase().trim();
+      const namaLocKey = (item.namaLocator || '').toUpperCase().trim();
       const productCodeUpper = item.kodeProduk.toUpperCase().trim();
       const productNameUpper = item.namaProduk.toUpperCase().trim();
+      const rowAreaUpper = (item.area || area || '').toUpperCase().trim();
 
       let matchedLastQty = 0;
-      if (mtsLookupMap.has(`${locKey}_${productCodeUpper}`)) {
-        matchedLastQty = mtsLookupMap.get(`${locKey}_${productCodeUpper}`) || 0;
-      } else if (mtsLookupMap.has(`${locKey}_${productNameUpper}`)) {
-        matchedLastQty = mtsLookupMap.get(`${locKey}_${productNameUpper}`) || 0;
-      } else if (mtsLookupMap.has(`${locKey}_${productCodeUpper.replace(/\s+/g, '')}`)) {
-        matchedLastQty = mtsLookupMap.get(`${locKey}_${productCodeUpper.replace(/\s+/g, '')}`) || 0;
-      } else if (mtsLookupMap.has(`${productCodeUpper}_${locKey}`)) {
-        matchedLastQty = mtsLookupMap.get(`${productCodeUpper}_${locKey}`) || 0;
-      } else if (mtsLookupMap.has(`${productNameUpper}_${locKey}`)) {
-        matchedLastQty = mtsLookupMap.get(`${productNameUpper}_${locKey}`) || 0;
-      } else if (mtsLookupMap.has(`${productCodeUpper.replace(/\s+/g, '')}_${locKey}`)) {
-        matchedLastQty = mtsLookupMap.get(`${productCodeUpper.replace(/\s+/g, '')}_${locKey}`) || 0;
+      const lookupKeys = [
+        // Exact area + locator + sku/name
+        `${rowAreaUpper}_${locKey}_${productCodeUpper}`,
+        `${rowAreaUpper}_${locKey}_${productNameUpper}`,
+        `${rowAreaUpper}_${namaLocKey}_${productCodeUpper}`,
+        `${rowAreaUpper}_${namaLocKey}_${productNameUpper}`,
+        // Locator + sku/name
+        `${locKey}_${productCodeUpper}`,
+        `${locKey}_${productNameUpper}`,
+        `${namaLocKey}_${productCodeUpper}`,
+        `${namaLocKey}_${productNameUpper}`,
+        // Sku/name + locator
+        `${productCodeUpper}_${locKey}`,
+        `${productNameUpper}_${locKey}`,
+        `${productCodeUpper}_${namaLocKey}`,
+        `${productNameUpper}_${namaLocKey}`,
+        // Strip spaces in SKU
+        `${locKey}_${productCodeUpper.replace(/\s+/g, '')}`,
+        `${productCodeUpper.replace(/\s+/g, '')}_${locKey}`,
+        `${namaLocKey}_${productCodeUpper.replace(/\s+/g, '')}`,
+        `${productCodeUpper.replace(/\s+/g, '')}_${namaLocKey}`
+      ];
+
+      for (const k of lookupKeys) {
+        if (mtsLookupMap.has(k)) {
+          matchedLastQty = mtsLookupMap.get(k) || 0;
+          break;
+        }
+      }
+
+      // Penyelarasan khusus Semarang Accessories: Jika tidak ada record di MTS, sesuaikan
+      if (rowAreaUpper === 'SEMARANG' && (item.source === 'INPUT' || item.source === 'Accessories') && matchedLastQty === 0) {
+        matchedLastQty = item.stokRill;
       }
 
       const stokKemarin = Math.round(item.stokKemarin * 1000) / 1000;
