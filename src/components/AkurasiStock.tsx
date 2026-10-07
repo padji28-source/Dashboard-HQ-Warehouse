@@ -1,7 +1,7 @@
 import { fetchAndParseCSV } from "../lib/csvCache";
 import { useEffect, useState, useMemo , memo} from "react";
 import { fetchSheetData, fetchCombinedProducts } from '../lib/sheets';
-import { AREA_URLS } from '../App';
+import { AREA_URLS } from '../config/areas';
 import { MtsEntry, parseMtsEntry, getSmartMtsQty } from '../modules/inventory/PencocokanData';
 import { Loader2, AlertTriangle, RefreshCw, BarChart3, ArrowDownToLine, CheckCircle2, CircleAlert, Percent, Box, MapPin, Save, History, Trash2, Archive, X, CloudUpload } from 'lucide-react';
 import {

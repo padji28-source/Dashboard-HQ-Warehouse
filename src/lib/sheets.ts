@@ -337,29 +337,37 @@ export async function fetchSheetData(gasUrl: string, range: string, forceFresh =
 
     while (attempts < maxAttempts) {
       try {
-        const url = `${gasUrl}?action=get&range=${encodeURIComponent(range)}&t=${Date.now()}`;
-        let data;
-        try {
+        let data: any;
+        if (typeof window !== 'undefined') {
+          const token = window.sessionStorage.getItem('auth_token') || '';
+          const proxyRes = await fetch('/api/sheets', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ gasUrl, action: 'get', range })
+          });
+          if (!proxyRes.ok) {
+            const errData = await proxyRes.json().catch(() => ({}));
+            throw new Error(errData.error || `Google Sheets proxy gagal (HTTP ${proxyRes.status})`);
+          }
+          data = await proxyRes.json();
+        } else {
+          const url = `${gasUrl}?action=get&range=${encodeURIComponent(range)}&t=${Date.now()}`;
           const res = await fetch(url, { cache: 'no-store' });
           if (!res.ok) {
             throw new Error(`HTTP error! status: ${res.status}`);
           }
           data = await res.json();
-        } catch (fetchErr: any) {
-          if (typeof window !== 'undefined') {
-            const proxyRes = await fetch('/api/sheets', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ gasUrl, action: 'get', range })
-            });
-            if (!proxyRes.ok) throw fetchErr;
-            data = await proxyRes.json();
-          } else {
-            throw fetchErr;
-          }
         }
 
         if (data && data.error) {
+          const errStr = String(data.error).toLowerCase();
+          if (errStr.includes("not found") || errStr.includes("range") || errStr.includes("sheet")) {
+            console.info(`[Sheet Info] Range "${range}" tidak ditemukan di spreadsheet cabang ini. Dianggap kosong.`);
+            return [];
+          }
           throw new Error(data.error);
         }
 
@@ -410,9 +418,13 @@ async function proxyPost(gasUrl: string, payload: any) {
     throw new Error("URL sistem belum dikonfigurasi untuk cabang ini.");
   }
   const endpoint = typeof window !== 'undefined' ? '/api/sheets' : gasUrl;
+  const token = typeof window !== 'undefined' ? (window.sessionStorage.getItem('auth_token') || '') : '';
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    },
     body: JSON.stringify({ gasUrl, ...payload })
   });
 

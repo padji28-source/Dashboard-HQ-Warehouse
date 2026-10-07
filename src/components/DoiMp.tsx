@@ -16,7 +16,7 @@ import {
   ListFilter
 } from "lucide-react";
 import { fetchSheetData, fetchCombinedProducts } from "../lib/sheets";
-import { AREA_URLS } from "../App";
+import { AREA_URLS } from "../config/areas";
 
 interface Props {
   spreadsheetId: string;

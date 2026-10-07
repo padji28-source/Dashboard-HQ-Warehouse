@@ -1,7 +1,7 @@
 import { fetchAndParseCSV } from "../lib/csvCache";
 import { useEffect, useState, useMemo, useRef, useCallback , memo} from "react";
 import { fetchSheetData, fetchCombinedProducts } from "../lib/sheets";
-import { AREA_URLS } from "../App";
+import { AREA_URLS } from "../config/areas";
 import type { StockSummary } from "../types";
 import {
   Loader2,

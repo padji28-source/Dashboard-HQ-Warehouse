@@ -1,8 +1,37 @@
-import { useState, lazy, Suspense, memo } from 'react';
-import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, TrendingUp, Loader2, Clock, ClipboardList, ShieldCheck } from 'lucide-react';
+import { useState, lazy, Suspense, memo, useMemo } from 'react';
+import {
+  LogOut,
+  Package,
+  MapPin,
+  ArrowRightLeft,
+  LayoutDashboard,
+  Menu,
+  X,
+  Box,
+  Beaker,
+  ChevronDown,
+  ChevronRight,
+  Scale,
+  FileSpreadsheet,
+  MessageSquare,
+  ExternalLink,
+  BarChart3,
+  TrendingUp,
+  Loader2,
+  Clock,
+  ClipboardList,
+  ShieldCheck,
+  Search,
+  PanelLeftClose,
+  PanelLeftOpen,
+  CheckCircle2,
+  Layers,
+  Sparkles,
+} from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { AREAS } from '../App';
+import { AREAS } from '../config/areas';
+import type { UserSession } from '../config/permissions';
 
 const MasterProduk = lazy(() => import('./MasterProduk'));
 const MasterLocator = lazy(() => import('./MasterLocator'));
@@ -23,21 +52,75 @@ function cn(...inputs: ClassValue[]) {
 }
 
 interface Props {
-  spreadsheetId: string;
+  spreadsheetId?: string;
+  gasUrl?: string;
   area: string;
   onLogout: () => void;
   userRole?: string;
   onAreaChange?: (newArea: string) => void;
   isReadOnly?: boolean;
   activeUsername?: string;
+  session?: UserSession;
 }
 
-const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userRole = '', onAreaChange, isReadOnly = false, activeUsername = '' }: Props) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'activity_log' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'doi_mp' | 'unposted'>('stock');
+type TabKey =
+  | 'stock'
+  | 'activity_log'
+  | 'pencocokan'
+  | 'produk'
+  | 'locator'
+  | 'input'
+  | 'input_rm'
+  | 'input_mfg'
+  | 'input_supplies'
+  | 'mts'
+  | 'whatsapp'
+  | 'akurasi'
+  | 'pengepokan'
+  | 'cek_stock'
+  | 'doi_mp'
+  | 'unposted';
+
+const Dashboard = memo(function Dashboard({
+  spreadsheetId: propSpreadsheetId,
+  gasUrl,
+  area,
+  onLogout,
+  userRole = '',
+  onAreaChange,
+  isReadOnly = false,
+  activeUsername = '',
+  session,
+}: Props) {
+  const spreadsheetId = gasUrl || propSpreadsheetId || '';
+  const [activeTab, setActiveTab] = useState<TabKey>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState<boolean>(() => {
+    try {
+      return typeof window !== 'undefined' && sessionStorage.getItem('wms_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [searchQuery, setSearchQuery] = useState('');
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['stock']));
-  const handleTabChange = (tab: any) => { setActiveTab(tab); setVisitedTabs(prev => new Set(prev).add(tab)); setSidebarOpen(false); };
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
+
+  const toggleDesktopCollapse = () => {
+    setIsDesktopCollapsed((prev) => {
+      const next = !prev;
+      try {
+        sessionStorage.setItem('wms_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleTabChange = (tab: TabKey) => {
+    setActiveTab(tab);
+    setVisitedTabs((prev) => new Set(prev).add(tab));
+    setSidebarOpen(false);
+  };
 
   const usernameLower = (activeUsername || '').toLowerCase();
   const isAdminA5 = usernameLower === 'admina5' || usernameLower === 'adminc3';
@@ -49,9 +132,9 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
   const isSuperAdminOrHq = (isSuperAdmin || isHQ) && !isPetugasA5 && !isHelper;
   const isMP = usernameLower === 'mp';
 
-  const isAuthorizedForPencocokan = !isPetugasA5 && !isHelper; // Hide for petugas and helper
-  
-  const getSafeActiveTab = () => {
+  const isAuthorizedForPencocokan = !isPetugasA5 && !isHelper;
+
+  const getSafeActiveTab = (): TabKey => {
     if (activeTab === 'pencocokan' && !isAuthorizedForPencocokan) return 'stock';
     if (activeTab === 'akurasi' && (isPetugasA5 || isHelper)) return 'stock';
     if (activeTab === 'pengepokan' && (isPetugasA5 || isHelper)) return 'stock';
@@ -64,72 +147,179 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
   };
   const safeActiveTab = getSafeActiveTab();
 
-  const isAuthorizedForDoiMp = 
-    !isPetugasA5 && !isHelper && (
-      ['mp', 'ppic', 'hq', 'admin'].includes(usernameLower) ||
-      usernameLower.startsWith('admin')
-    );
+  const isAuthorizedForDoiMp =
+    !isPetugasA5 &&
+    !isHelper &&
+    (['mp', 'ppic', 'hq', 'admin'].includes(usernameLower) || usernameLower.startsWith('admin'));
 
-  const isAuthorizedForPengepokan = 
-    !isPetugasA5 && !isHelper && (
-      area === 'All Cabang' || 
-      ['mp', 'ppic', 'hq', 'admin'].includes(usernameLower) ||
-      usernameLower.startsWith('admin')
-    );
+  const isAuthorizedForPengepokan =
+    !isPetugasA5 &&
+    !isHelper &&
+    (area === 'All Cabang' || ['mp', 'ppic', 'hq', 'admin'].includes(usernameLower) || usernameLower.startsWith('admin'));
 
-  const mainTabs = [
-    { id: 'stock', label: 'Executive Dashboard', icon: LayoutDashboard },
-    { id: 'activity_log', label: 'Log Aktivitas Stok', icon: ClipboardList },
-    { id: 'unposted', label: 'Unposted Dokumen', icon: Clock },
-    { id: 'cek_stock', label: 'Cek Stock', icon: Package },
-    ...(isAuthorizedForDoiMp ? [{ id: 'doi_mp', label: 'DOI MP', icon: TrendingUp }] : []),
-    ...(!isReadOnly && isAuthorizedForPencocokan ? [{ id: 'pencocokan', label: 'Pencocokan Data', icon: Scale }] : []),
-    ...(!isReadOnly && area === 'All Cabang' && !isPetugasA5 && !isHelper ? [{ id: 'akurasi', label: 'Akurasi Stock', icon: BarChart3 }] : []),
-    ...(isAuthorizedForPengepokan ? [{ id: 'pengepokan', label: 'Pengepokan', icon: Box }] : []),
-    ...(isSuperAdminOrHq ? [{ id: 'whatsapp', label: 'WhatsApp Bot', icon: MessageSquare }] : []),
-  ] as const;
+  // Group 1: Executive & Operasional
+  const executiveTabs = useMemo(() => [
+    { id: 'stock' as TabKey, label: 'Executive Dashboard', icon: LayoutDashboard, badge: 'LIVE', badgeColor: 'bg-emerald-500/20 text-emerald-400' },
+    { id: 'activity_log' as TabKey, label: 'Log Aktivitas Stok', icon: ClipboardList, badge: null, badgeColor: '' },
+    { id: 'unposted' as TabKey, label: 'Unposted Dokumen', icon: Clock, badge: 'DOCS', badgeColor: 'bg-amber-500/20 text-amber-300' },
+  ], []);
 
-  const pergerakanTabs = [
-    { id: 'input', label: 'Accessories', icon: ArrowRightLeft },
-    { id: 'input_rm', label: 'Raw Material', icon: Beaker },
-    { id: 'input_mfg', label: 'Manufacturing', icon: Box },
-    { id: 'input_supplies', label: 'Supplies & GA', icon: Package },
-  ] as const;
+  // Group 2: Audit & Rekonsiliasi
+  const auditTabs = useMemo(() => [
+    ...(!isReadOnly && isAuthorizedForPencocokan ? [{ id: 'pencocokan' as TabKey, label: 'Pencocokan Data', icon: Scale, badge: 'RECON', badgeColor: 'bg-blue-500/20 text-blue-300' }] : []),
+    ...(!isReadOnly && area === 'All Cabang' && !isPetugasA5 && !isHelper ? [{ id: 'akurasi' as TabKey, label: 'Akurasi Stock', icon: BarChart3, badge: 'AUDIT', badgeColor: 'bg-indigo-500/20 text-indigo-300' }] : []),
+    { id: 'cek_stock' as TabKey, label: 'Cek Stock', icon: Package, badge: null, badgeColor: '' },
+    ...(isAuthorizedForDoiMp ? [{ id: 'doi_mp' as TabKey, label: 'DOI MP', icon: TrendingUp, badge: null, badgeColor: '' }] : []),
+    ...(isAuthorizedForPengepokan ? [{ id: 'pengepokan' as TabKey, label: 'Pengepokan', icon: Box, badge: null, badgeColor: '' }] : []),
+    ...(((area === 'HQ' || area === 'All Cabang') && !isReadOnly && !isPetugasA5 && !isHelper) ? [{ id: 'mts' as TabKey, label: 'Data MTS (ERP)', icon: FileSpreadsheet, badge: 'ERP', badgeColor: 'bg-violet-500/20 text-violet-300' }] : []),
+  ], [area, isAuthorizedForDoiMp, isAuthorizedForPencocokan, isAuthorizedForPengepokan, isHelper, isPetugasA5, isReadOnly]);
 
-  const masterTabs = [
-    ...(((!isReadOnly || isSuperAdmin || isMP) && !isPetugasA5 && !isHelper) ? [
-      { id: 'produk', label: 'Master Produk', icon: Package },
-      { id: 'locator', label: 'Master Locator', icon: MapPin },
-    ] : [])
-  ] as const;
+  // Group 3: Data Pergerakan
+  const pergerakanTabs = useMemo(() => {
+    if (isHelper) return [];
+    return [
+      { id: 'input' as TabKey, label: 'Accessories', icon: ArrowRightLeft, badge: null, badgeColor: '' },
+      { id: 'input_rm' as TabKey, label: 'Raw Material', icon: Beaker, badge: null, badgeColor: '' },
+      { id: 'input_mfg' as TabKey, label: 'Manufacturing', icon: Box, badge: null, badgeColor: '' },
+      { id: 'input_supplies' as TabKey, label: 'Supplies & GA', icon: Package, badge: null, badgeColor: '' },
+    ];
+  }, [isHelper]);
+
+  // Group 4: Master Data
+  const masterTabs = useMemo(() => {
+    if (((!isReadOnly || isSuperAdmin || isMP) && !isPetugasA5 && !isHelper)) {
+      return [
+        { id: 'produk' as TabKey, label: 'Master Produk', icon: Package, badge: null, badgeColor: '' },
+        { id: 'locator' as TabKey, label: 'Master Locator', icon: MapPin, badge: null, badgeColor: '' },
+      ];
+    }
+    return [];
+  }, [isHelper, isMP, isPetugasA5, isReadOnly, isSuperAdmin]);
+
+  // All tabs flattened for lookup & search
+  const allNavTabs = useMemo(() => {
+    return [
+      ...executiveTabs,
+      ...auditTabs,
+      ...pergerakanTabs,
+      ...masterTabs,
+      ...(isSuperAdminOrHq ? [{ id: 'whatsapp' as TabKey, label: 'WhatsApp Console', icon: MessageSquare, badge: 'BOT', badgeColor: 'bg-emerald-500/20 text-emerald-300' }] : [])
+    ];
+  }, [executiveTabs, auditTabs, pergerakanTabs, masterTabs, isSuperAdminOrHq]);
+
+  const activeTabMeta = useMemo(() => {
+    return allNavTabs.find((t) => t.id === safeActiveTab) || {
+      id: 'stock',
+      label: 'Executive Dashboard',
+      icon: LayoutDashboard,
+    };
+  }, [allNavTabs, safeActiveTab]);
+
+  // Search filtered tabs
+  const filteredTabs = useMemo(() => {
+    if (!searchQuery.trim()) return null;
+    const q = searchQuery.toLowerCase().trim();
+    return allNavTabs.filter((t) => t.label.toLowerCase().includes(q));
+  }, [allNavTabs, searchQuery]);
 
   return (
     <div className="app-shell">
-      {/* Top Header for all devices */}
+      {/* Top Header */}
       <header className="app-topbar">
         <div className="topbar-left">
+          {/* Mobile drawer toggle */}
           <button
             onClick={() => setSidebarOpen(true)}
-            className="icon-button"
+            className="icon-button lg:hidden"
             aria-label="Buka navigasi"
           >
             <Menu className="w-5 h-5" />
           </button>
+
+          {/* Desktop sidebar expand/collapse toggle */}
+          <button
+            onClick={toggleDesktopCollapse}
+            className="icon-button hidden lg:inline-flex"
+            aria-label={isDesktopCollapsed ? 'Perlebar sidebar' : 'Ciutkan sidebar'}
+            title={isDesktopCollapsed ? 'Perlebar sidebar' : 'Ciutkan sidebar'}
+          >
+            {isDesktopCollapsed ? <PanelLeftOpen className="w-4 h-4 text-slate-600" /> : <PanelLeftClose className="w-4 h-4 text-slate-600" />}
+          </button>
+
           <div className="brand-lockup">
-            <div className="brand-mark"><Box className="w-5 h-5" /></div>
+            <div className="brand-mark">
+              <Box className="w-5 h-5" />
+            </div>
             <div className="brand-copy">
               <strong>WH Command Center</strong>
               <span>Warehouse Management System</span>
             </div>
+          </div>
+
+          {/* Breadcrumb trail on tablet / desktop */}
+          <div className="hidden md:flex items-center gap-2 pl-4 ml-2 border-l border-slate-200 text-xs">
+            <span className="text-slate-400 font-semibold tracking-wide uppercase text-[10px]">Cabang</span>
+            <span className="text-slate-700 font-bold px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/60">{area}</span>
+            <span className="text-slate-300">/</span>
+            <div className="flex items-center gap-1.5 font-bold text-slate-900">
+              <activeTabMeta.icon className="w-4 h-4 text-blue-600" />
+              <span>{activeTabMeta.label}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Topbar Quick Segmented Tabs for 4 most-used modules (Large screens) */}
+        <div className="hidden xl:flex items-center">
+          <div className="topbar-quick-tabs">
+            <button
+              onClick={() => handleTabChange('stock')}
+              className={cn('quick-tab-btn', safeActiveTab === 'stock' && 'active')}
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Dashboard</span>
+            </button>
+            <button
+              onClick={() => handleTabChange('activity_log')}
+              className={cn('quick-tab-btn', safeActiveTab === 'activity_log' && 'active')}
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              <span>Log Mutasi</span>
+            </button>
+            {isAuthorizedForPencocokan && !isReadOnly && (
+              <button
+                onClick={() => handleTabChange('pencocokan')}
+                className={cn('quick-tab-btn', safeActiveTab === 'pencocokan' && 'active')}
+              >
+                <Scale className="w-3.5 h-3.5" />
+                <span>Pencocokan</span>
+              </button>
+            )}
+            <button
+              onClick={() => handleTabChange('cek_stock')}
+              className={cn('quick-tab-btn', safeActiveTab === 'cek_stock' && 'active')}
+            >
+              <Package className="w-3.5 h-3.5" />
+              <span>Cek Stock</span>
+            </button>
           </div>
         </div>
 
         <div className="topbar-right">
           {(userRole === 'ALL' || userRole === 'HQ' || userRole === 'All Cabang') && onAreaChange ? (
             <label className="area-switcher">
-              <span><MapPin className="w-3.5 h-3.5" /> Area</span>
-              <select value={area} onChange={(e) => onAreaChange(e.target.value)} aria-label="Pilih area">
-                {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+              <span>
+                <MapPin className="w-3.5 h-3.5 text-blue-600" /> Area
+              </span>
+              <select
+                value={area}
+                onChange={(e) => onAreaChange(e.target.value)}
+                aria-label="Pilih area gudang"
+              >
+                {AREAS.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
               </select>
             </label>
           ) : (
@@ -141,295 +331,621 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
 
           <div className="profile-chip">
             <div className="profile-avatar">
-              {isAdminA5 ? 'C3' : isPetugasA5 ? 'PC' : isHelper ? 'HP' : userRole === 'ALL' ? 'SA' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'AC' : area.substring(0, 2)}
+              {isAdminA5
+                ? 'C3'
+                : isPetugasA5
+                ? 'PC'
+                : isHelper
+                ? 'HP'
+                : userRole === 'ALL'
+                ? 'SA'
+                : userRole === 'HQ' || userRole === 'All Cabang'
+                ? 'AC'
+                : area.substring(0, 2)}
             </div>
             <div className="profile-copy">
               <strong>{activeUsername || 'Administrator'}</strong>
-              <span>{isAdminA5 ? 'Admin C3' : isPetugasA5 ? 'Petugas C3' : isHelper ? 'Helper' : userRole === 'ALL' ? 'Super Admin' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'Admin All Cabang' : 'Admin Area'}</span>
+              <span>
+                {isAdminA5
+                  ? 'Admin C3'
+                  : isPetugasA5
+                  ? 'Petugas C3'
+                  : isHelper
+                  ? 'Helper'
+                  : userRole === 'ALL'
+                  ? 'Super Admin'
+                  : userRole === 'HQ' || userRole === 'All Cabang'
+                  ? 'Admin All Cabang'
+                  : 'Admin Area'}
+              </span>
             </div>
-            <ShieldCheck className="profile-status" />
+            <ShieldCheck className="profile-status" title="Sesi Terverifikasi" />
           </div>
         </div>
       </header>
 
       <div className="workspace">
-      {/* Sidebar Overlay */}
-      {sidebarOpen && (
-        <div 
-          className="sidebar-overlay" 
-          onClick={() => setSidebarOpen(false)} 
-        />
-      )}
-
-      {/* Drawer Sidebar */}
-      <div className={cn(
-        "app-sidebar",
-        sidebarOpen ? "sidebar-open" : "sidebar-closed"
-      )}>
-        <div className="sidebar-header">
-          <div className="flex items-center gap-3">
-            <div className="sidebar-brand-mark"><Box className="w-5 h-5" /></div>
-             <div className="sidebar-brand-copy"><strong>WH Command Center</strong><span>{area}</span></div>
-          </div>
-          <button 
+        {/* Mobile Drawer Overlay */}
+        {sidebarOpen && (
+          <div
+            className="sidebar-overlay lg:hidden"
             onClick={() => setSidebarOpen(false)}
-            className="icon-button icon-button-dark"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        
-        <div className="sidebar-nav-scroll">
-          <div className="sidebar-nav">
-            <div className="sidebar-section-title">Menu Utama</div>
-            {mainTabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => { handleTabChange(tab.id as any); }}
-                className={cn(
-                  "nav-item",
-                  safeActiveTab === tab.id 
-                    ? "nav-item-active" 
-                    : "nav-item-idle"
-                )}
-              >
-                <tab.icon className="nav-item-icon w-5 h-5" />
-                {tab.label}
-              </button>
-            ))}
+          />
+        )}
 
-            {((area === 'HQ' || area === 'All Cabang') && !isReadOnly && !isPetugasA5 && !isHelper) ? (
-              <div className="mt-4 pt-4 border-t border-slate-800">
-                <button
-                  onClick={() => { handleTabChange('mts'); }}
-                  className={cn(
-                    "nav-item",
-                    safeActiveTab === 'mts' 
-                      ? "bg-blue-600 text-white shadow-md shadow-blue-900/20" 
-                      : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-                  )}
-                >
-                  <FileSpreadsheet className={cn("w-5 h-5", safeActiveTab === 'mts' ? "text-white" : "text-slate-400")} />
-                  <span>Data MTS</span>
-                </button>
+        {/* Sidebar Component */}
+        <aside
+          className={cn(
+            'app-sidebar',
+            sidebarOpen ? 'sidebar-open' : 'sidebar-closed',
+            isDesktopCollapsed ? 'sidebar-desktop-collapsed' : 'sidebar-desktop-expanded'
+          )}
+        >
+          {/* Sidebar Top Header */}
+          <div className="sidebar-header">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="sidebar-brand-mark">
+                <Box className="w-5 h-5 text-white" />
               </div>
-            ) : (!isHelper && (
-              <div className="mt-4 pt-4 border-t border-slate-800">
-                <button 
-                  onClick={() => setPergerakanOpen(!pergerakanOpen)} 
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-100 transition-all duration-200"
+              <div className="sidebar-brand-copy">
+                <strong>WH Command Center</strong>
+                <span>{area}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="icon-button icon-button-dark lg:hidden"
+              aria-label="Tutup menu navigasi"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Quick Search Filter (Hidden in collapsed mode) */}
+          {!isDesktopCollapsed && (
+            <div className="sidebar-search-box">
+              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <input
+                type="text"
+                placeholder="Cari modul / menu..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="text-slate-400 hover:text-slate-200"
                 >
-                  <div className="flex items-center gap-3">
-                    <ArrowRightLeft className="w-5 h-5" />
-                    <span>Data Pergerakan</span>
-                  </div>
-                  {pergerakanOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  <X className="w-3 h-3" />
                 </button>
-                
-                {pergerakanOpen && (
-                  <div className="mt-1 ml-4 border-l border-slate-700/50 pl-2 space-y-1">
-                    {pergerakanTabs.map(tab => (
+              )}
+            </div>
+          )}
+
+          {/* Navigation Items List */}
+          <div className="sidebar-nav-scroll">
+            <nav className="sidebar-nav">
+              {filteredTabs ? (
+                // Filtered Results View
+                <div className="sidebar-section">
+                  <div className="sidebar-section-title">
+                    <span>Hasil Pencarian</span>
+                    <span className="sidebar-section-badge">{filteredTabs.length}</span>
+                  </div>
+                  {filteredTabs.length === 0 ? (
+                    <div className="px-3 py-6 text-center text-xs text-slate-500">
+                      Tidak ada menu sesuai kata kunci
+                    </div>
+                  ) : (
+                    filteredTabs.map((tab) => (
                       <button
                         key={tab.id}
-                        onClick={() => { handleTabChange(tab.id as any); }}
+                        onClick={() => handleTabChange(tab.id)}
                         className={cn(
-                          "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                          safeActiveTab === tab.id 
-                            ? "bg-blue-600/20 text-blue-400 font-semibold" 
-                            : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                          'nav-item',
+                          safeActiveTab === tab.id ? 'nav-item-active' : 'nav-item-idle'
                         )}
+                        title={tab.label}
                       >
-                        <tab.icon className={cn("w-4 h-4", safeActiveTab === tab.id ? "text-blue-400" : "text-slate-500")} />
-                        {tab.label}
+                        <div className="nav-item-icon-wrap">
+                          <tab.icon className="w-4 h-4" />
+                        </div>
+                        <span className="nav-item-text">{tab.label}</span>
+                        {tab.badge && (
+                          <span className={cn('nav-item-badge', tab.badgeColor)}>
+                            {tab.badge}
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : (
+                // Categorized Standard View
+                <>
+                  {/* Category 1: Ringkasan & Operasi */}
+                  <div className="sidebar-section">
+                    <div className="sidebar-section-title">
+                      <span>Ringkasan & Operasi</span>
+                      <span className="sidebar-section-badge">{executiveTabs.length}</span>
+                    </div>
+                    {executiveTabs.map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => handleTabChange(tab.id)}
+                        className={cn(
+                          'nav-item',
+                          safeActiveTab === tab.id ? 'nav-item-active' : 'nav-item-idle'
+                        )}
+                        title={tab.label}
+                      >
+                        <div className="nav-item-icon-wrap">
+                          <tab.icon className="w-4 h-4" />
+                        </div>
+                        <span className="nav-item-text">{tab.label}</span>
+                        {tab.badge && (
+                          <span className={cn('nav-item-badge', tab.badgeColor)}>
+                            {tab.badge}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
-            ))}
 
-            {masterTabs.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-slate-800">
-                <div className="sidebar-section-title">Master Data</div>
-                {masterTabs.map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => { handleTabChange(tab.id as any); }}
-                    className={cn(
-                      "nav-item nav-item-compact",
-                      safeActiveTab === tab.id 
-                        ? "nav-item-active nav-item-subactive" 
-                        : "nav-item-idle"
+                  {/* Category 2: Audit & Rekonsiliasi */}
+                  {auditTabs.length > 0 && (
+                    <div className="sidebar-section">
+                      <div className="sidebar-section-title">
+                        <span>Audit & Rekonsiliasi</span>
+                        <span className="sidebar-section-badge">{auditTabs.length}</span>
+                      </div>
+                      {auditTabs.map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => handleTabChange(tab.id)}
+                          className={cn(
+                            'nav-item',
+                            safeActiveTab === tab.id ? 'nav-item-active' : 'nav-item-idle'
+                          )}
+                          title={tab.label}
+                        >
+                          <div className="nav-item-icon-wrap">
+                            <tab.icon className="w-4 h-4" />
+                          </div>
+                          <span className="nav-item-text">{tab.label}</span>
+                          {tab.badge && (
+                            <span className={cn('nav-item-badge', tab.badgeColor)}>
+                              {tab.badge}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Category 3: Data Pergerakan & Mutasi */}
+                  {pergerakanTabs.length > 0 && (
+                    <div className="sidebar-section">
+                      <button
+                        type="button"
+                        onClick={() => setPergerakanOpen(!pergerakanOpen)}
+                        className="sidebar-section-title w-full hover:text-slate-300 transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span>Data Pergerakan</span>
+                          {pergerakanOpen ? (
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                          )}
+                        </span>
+                        <span className="sidebar-section-badge">{pergerakanTabs.length}</span>
+                      </button>
+                      {(pergerakanOpen || isDesktopCollapsed) &&
+                        pergerakanTabs.map((tab) => (
+                          <button
+                            key={tab.id}
+                            onClick={() => handleTabChange(tab.id)}
+                            className={cn(
+                              'nav-item',
+                              safeActiveTab === tab.id ? 'nav-item-active' : 'nav-item-idle'
+                            )}
+                            title={tab.label}
+                          >
+                            <div className="nav-item-icon-wrap">
+                              <tab.icon className="w-4 h-4" />
+                            </div>
+                            <span className="nav-item-text">{tab.label}</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+
+                  {/* Category 4: Master Data */}
+                  {masterTabs.length > 0 && (
+                    <div className="sidebar-section">
+                      <div className="sidebar-section-title">
+                        <span>Master Data</span>
+                        <span className="sidebar-section-badge">{masterTabs.length}</span>
+                      </div>
+                      {masterTabs.map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => handleTabChange(tab.id)}
+                          className={cn(
+                            'nav-item',
+                            safeActiveTab === tab.id ? 'nav-item-active' : 'nav-item-idle'
+                          )}
+                          title={tab.label}
+                        >
+                          <div className="nav-item-icon-wrap">
+                            <tab.icon className="w-4 h-4" />
+                          </div>
+                          <span className="nav-item-text">{tab.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Category 5: Integrasi & Dukungan */}
+                  <div className="sidebar-section">
+                    <div className="sidebar-section-title">
+                      <span>Integrasi & Dukungan</span>
+                    </div>
+                    {isSuperAdminOrHq && (
+                      <button
+                        onClick={() => handleTabChange('whatsapp')}
+                        className={cn(
+                          'nav-item',
+                          safeActiveTab === 'whatsapp' ? 'nav-item-active' : 'nav-item-idle'
+                        )}
+                        title="WhatsApp Console"
+                      >
+                        <div className="nav-item-icon-wrap">
+                          <MessageSquare className="w-4 h-4 text-emerald-400" />
+                        </div>
+                        <span className="nav-item-text">WhatsApp Console</span>
+                        <span className="nav-item-badge bg-emerald-500/20 text-emerald-300">
+                          BOT
+                        </span>
+                      </button>
                     )}
-                  >
-                    <tab.icon className={cn("w-4 h-4", safeActiveTab === tab.id ? "text-blue-400" : "text-slate-500")} />
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            )}
 
-            {(userRole === 'ALL' || userRole === 'HQ' || userRole === 'All Cabang' || isAdminA5) && (
-              <div className="mt-4 pt-4 border-t border-slate-800">
-                <div className="sidebar-section-title">Sistem Eksternal</div>
-                <a
-                  href="https://wmsc3.vercel.app/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-150 transition-all duration-200"
-                >
-                  <div className="flex items-center gap-3">
-                    <ExternalLink className="w-5 h-5 text-emerald-400 shrink-0" />
-                    <span className="font-bold text-emerald-400">WMS C3</span>
+                    {(userRole === 'ALL' ||
+                      userRole === 'HQ' ||
+                      userRole === 'All Cabang' ||
+                      isAdminA5) && (
+                      <a
+                        href="https://wmsc3.vercel.app/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="nav-item nav-item-idle"
+                        title="Portal WMS C3 Eksternal"
+                      >
+                        <div className="nav-item-icon-wrap">
+                          <ExternalLink className="w-4 h-4 text-emerald-400" />
+                        </div>
+                        <span className="nav-item-text text-emerald-300 font-bold">Portal WMS C3</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-500 ml-auto" />
+                      </a>
+                    )}
                   </div>
-                  <ChevronRight className="w-4 h-4 text-slate-500" />
-                </a>
-              </div>
-            )}
+                </>
+              )}
+            </nav>
           </div>
-        </div>
-        
-        <div className="sidebar-footer">
-          <button 
-            onClick={() => {
-              setSidebarOpen(false);
-              onLogout();
-            }}
-            className="logout-button"
-          >
-            <LogOut className="w-4 h-4" />
-            Logout System
-          </button>
-        </div>
-      </div>
 
-      {/* Main Content Area */}
-      <main className="app-main">
-        <div className="app-content">
-          <div className={cn(safeActiveTab !== 'stock' && 'hidden')}>
-            {visitedTabs.has('stock') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                <StockOverview spreadsheetId={spreadsheetId} area={area} onNavigateToTab={handleTabChange as any} />
-              </Suspense>
-            )}
+          {/* Sidebar Footer */}
+          <div className="sidebar-footer">
+            <button
+              onClick={() => {
+                setSidebarOpen(false);
+                onLogout();
+              }}
+              className="logout-button"
+              title="Keluar dari sesi WMS"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span className="sidebar-footer-text">Keluar Sesi</span>
+            </button>
           </div>
-          <div className={cn(safeActiveTab !== 'activity_log' && 'hidden')}>
-            {visitedTabs.has('activity_log') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                <StockActivityLogView spreadsheetId={spreadsheetId} currentArea={area} activeUsername={activeUsername} onNavigateToTab={handleTabChange} />
-              </Suspense>
-            )}
+        </aside>
+
+        {/* Main Content Viewport */}
+        <main className="app-main">
+          <div className="app-content">
+            <div className={cn(safeActiveTab !== 'stock' && 'hidden')}>
+              {visitedTabs.has('stock') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  <StockOverview
+                    spreadsheetId={spreadsheetId}
+                    area={area}
+                    onNavigateToTab={handleTabChange as any}
+                  />
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'activity_log' && 'hidden')}>
+              {visitedTabs.has('activity_log') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  <StockActivityLogView
+                    spreadsheetId={spreadsheetId}
+                    currentArea={area}
+                    activeUsername={activeUsername}
+                    onNavigateToTab={handleTabChange}
+                  />
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'unposted' && 'hidden')}>
+              {visitedTabs.has('unposted') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  <UnpostedDokumen
+                    area={area}
+                    userRole={userRole}
+                    activeUsername={activeUsername}
+                  />
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'cek_stock' && 'hidden')}>
+              {visitedTabs.has('cek_stock') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  <CekStock spreadsheetId={spreadsheetId} area={area} />
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'doi_mp' && 'hidden')}>
+              {visitedTabs.has('doi_mp') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  <DoiMp
+                    spreadsheetId={spreadsheetId}
+                    area={area}
+                    activeUsername={activeUsername}
+                    userRole={userRole}
+                  />
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'pencocokan' && 'hidden')}>
+              {visitedTabs.has('pencocokan') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  <PencocokanData spreadsheetId={spreadsheetId} area={area} />
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'akurasi' && 'hidden')}>
+              {visitedTabs.has('akurasi') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  <AkurasiStock />
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'pengepokan' && 'hidden')}>
+              {visitedTabs.has('pengepokan') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  <Pengepokan />
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'mts' && 'hidden')}>
+              {visitedTabs.has('mts') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  <MtsData />
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'input' && 'hidden')}>
+              {visitedTabs.has('input') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  {area === 'HQ' || area === 'All Cabang' ? (
+                    <HQReadOnlyPlaceholder title="Accessories" />
+                  ) : (
+                    <TransactionInput
+                      spreadsheetId={spreadsheetId}
+                      sheetName="INPUT"
+                      title="Accessories"
+                      description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer."
+                      isReadOnly={isReadOnly}
+                      activeUsername={activeUsername}
+                      area={area}
+                    />
+                  )}
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'input_rm' && 'hidden')}>
+              {visitedTabs.has('input_rm') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  {area === 'HQ' || area === 'All Cabang' ? (
+                    <HQReadOnlyPlaceholder title="Raw Material" />
+                  ) : (
+                    <TransactionInput
+                      spreadsheetId={spreadsheetId}
+                      sheetName="INPUT RM"
+                      title="Raw Material"
+                      description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer."
+                      isReadOnly={isReadOnly}
+                      activeUsername={activeUsername}
+                      area={area}
+                    />
+                  )}
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'input_mfg' && 'hidden')}>
+              {visitedTabs.has('input_mfg') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  {area === 'HQ' || area === 'All Cabang' ? (
+                    <HQReadOnlyPlaceholder title="Manufacturing" />
+                  ) : (
+                    <TransactionInput
+                      spreadsheetId={spreadsheetId}
+                      sheetName="INPUT MFG"
+                      title="Manufacturing"
+                      description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer."
+                      isReadOnly={isReadOnly}
+                      activeUsername={activeUsername}
+                      area={area}
+                    />
+                  )}
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'input_supplies' && 'hidden')}>
+              {visitedTabs.has('input_supplies') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  {area === 'HQ' || area === 'All Cabang' ? (
+                    <HQReadOnlyPlaceholder title="Supplies & GA" />
+                  ) : (
+                    <TransactionInput
+                      spreadsheetId={spreadsheetId}
+                      sheetName="INPUT SUPPLIES"
+                      title="Supplies & GA"
+                      description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer."
+                      isReadOnly={isReadOnly}
+                      activeUsername={activeUsername}
+                      area={area}
+                    />
+                  )}
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'produk' && 'hidden')}>
+              {visitedTabs.has('produk') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  <MasterProduk
+                    spreadsheetId={spreadsheetId}
+                    area={area}
+                    isReadOnly={isReadOnly}
+                    activeUsername={activeUsername}
+                    userRole={userRole}
+                  />
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'locator' && 'hidden')}>
+              {visitedTabs.has('locator') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  {area === 'HQ' || area === 'All Cabang' ? (
+                    <HQReadOnlyPlaceholder title="Master Locator" />
+                  ) : (
+                    <MasterLocator
+                      spreadsheetId={spreadsheetId}
+                      isReadOnly={isReadOnly}
+                      activeUsername={activeUsername}
+                      userRole={userRole}
+                    />
+                  )}
+                </Suspense>
+              )}
+            </div>
+            <div className={cn(safeActiveTab !== 'whatsapp' && 'hidden')}>
+              {visitedTabs.has('whatsapp') && (
+                <Suspense
+                  fallback={
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  }
+                >
+                  <WhatsAppConsole area={area} />
+                </Suspense>
+              )}
+            </div>
           </div>
-          <div className={cn(safeActiveTab !== 'unposted' && 'hidden')}>
-            {visitedTabs.has('unposted') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                <UnpostedDokumen area={area} userRole={userRole} activeUsername={activeUsername} />
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'cek_stock' && 'hidden')}>
-            {visitedTabs.has('cek_stock') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                <CekStock spreadsheetId={spreadsheetId} area={area} />
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'doi_mp' && 'hidden')}>
-            {visitedTabs.has('doi_mp') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                <DoiMp spreadsheetId={spreadsheetId} area={area} activeUsername={activeUsername} userRole={userRole} />
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'pencocokan' && 'hidden')}>
-            {visitedTabs.has('pencocokan') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                <PencocokanData spreadsheetId={spreadsheetId} area={area} />
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'akurasi' && 'hidden')}>
-            {visitedTabs.has('akurasi') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                <AkurasiStock />
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'pengepokan' && 'hidden')}>
-            {visitedTabs.has('pengepokan') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                <Pengepokan />
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'mts' && 'hidden')}>
-            {visitedTabs.has('mts') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                <MtsData />
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'input' && 'hidden')}>
-            {visitedTabs.has('input') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Accessories" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT" title="Accessories" description="Catat transaksi barang Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} activeUsername={activeUsername} area={area} />
-            )}
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'input_rm' && 'hidden')}>
-            {visitedTabs.has('input_rm') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Raw Material" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT RM" title="Raw Material" description="Catat transaksi untuk Raw Material Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} activeUsername={activeUsername} area={area} />
-            )}
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'input_mfg' && 'hidden')}>
-            {visitedTabs.has('input_mfg') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Manufacturing" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT MFG" title="Manufacturing" description="Catat transaksi untuk Manufacturing Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} activeUsername={activeUsername} area={area} />
-            )}
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'input_supplies' && 'hidden')}>
-            {visitedTabs.has('input_supplies') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Supplies & GA" /> : (
-              <TransactionInput spreadsheetId={spreadsheetId} sheetName="INPUT SUPPLIES" title="Supplies & GA" description="Catat transaksi untuk Supplies & GA Masuk (IN), Keluar (OUT), dan Transfer." isReadOnly={isReadOnly} activeUsername={activeUsername} area={area} />
-            )}
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'produk' && 'hidden')}>
-            {visitedTabs.has('produk') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                <MasterProduk spreadsheetId={spreadsheetId} area={area} isReadOnly={isReadOnly} activeUsername={activeUsername} userRole={userRole} />
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'locator' && 'hidden')}>
-            {visitedTabs.has('locator') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                {(area === 'HQ' || area === 'All Cabang') ? <HQReadOnlyPlaceholder title="Master Locator" /> : (
-              <MasterLocator spreadsheetId={spreadsheetId} isReadOnly={isReadOnly} activeUsername={activeUsername} userRole={userRole} />
-            )}
-              </Suspense>
-            )}
-          </div>
-          <div className={cn(safeActiveTab !== 'whatsapp' && 'hidden')}>
-            {visitedTabs.has('whatsapp') && (
-              <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
-                <WhatsAppConsole area={area} />
-              </Suspense>
-            )}
-          </div>
-        </div>
-      </main>
+        </main>
       </div>
     </div>
   );

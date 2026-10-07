@@ -21,51 +21,96 @@ const INDO_MONTHS_NAMES = [
 ];
 
 /**
- * Normalizes any date string or Excel serial number to standard ISO format "YYYY-MM-DD".
+ * Validates whether a day/month/year combination forms a real calendar date.
+ */
+function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return false;
+  if (year < 1980 || year > 2120) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+
+  const d = new Date(year, month - 1, day);
+  return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+}
+
+/**
+ * Normalizes any date string, ISO timestamp, or Excel serial number to standard ISO format "YYYY-MM-DD".
  * Returns empty string if invalid or empty.
  */
 export function parseToIsoDate(dtStr: any): string {
   if (dtStr === null || dtStr === undefined) return '';
   let cleaned = String(dtStr).trim();
-  if (!cleaned || cleaned === '#N/A' || cleaned === '-' || cleaned === 'null' || cleaned === 'undefined') return '';
+  if (
+    !cleaned ||
+    cleaned === '#N/A' ||
+    cleaned === '-' ||
+    cleaned === 'null' ||
+    cleaned === 'undefined' ||
+    cleaned.toLowerCase() === 'invalid date'
+  ) {
+    return '';
+  }
 
-  // 1. Excel Serial Date check (e.g. 44000 to 55000)
+  // 1. ISO 8601 full timestamp check (e.g. "2026-09-01T07:00:00.000Z")
+  const isoMatch = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10);
+    const m = parseInt(isoMatch[2], 10);
+    const d = parseInt(isoMatch[3], 10);
+    if (isValidCalendarDate(y, m, d)) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+    return '';
+  }
+
+  // 2. Excel Serial Date check (e.g. 44000 to 60000)
   const num = Number(cleaned);
-  if (!isNaN(num) && num > 10000 && num < 100000) {
+  if (!isNaN(num) && num >= 10000 && num <= 100000) {
     const dateObj = new Date(Math.round((num - 25569) * 86400 * 1000));
     if (!isNaN(dateObj.getTime())) {
       const y = dateObj.getUTCFullYear();
-      const m = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-      const d = String(dateObj.getUTCDate()).padStart(2, '0');
-      return `${y}-${m}-${d}`;
+      const m = dateObj.getUTCMonth() + 1;
+      const d = dateObj.getUTCDate();
+      if (isValidCalendarDate(y, m, d)) {
+        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      }
     }
+    return '';
   }
 
-  // 2. Month name check (e.g., "28 Agustus 2024", "28-Agu-24", "15 Jan 2025")
+  // 3. Month name check (e.g., "28 Agustus 2024", "28-Agu-24", "15 Jan 2025", "10 Okt 2026")
   const wordMatch = cleaned.match(/^(\d{1,2})[\s\-\/\.]([a-zA-Z]+)[\s\-\/\.](\d{2,4})/);
   if (wordMatch) {
-    const day = wordMatch[1].padStart(2, '0');
+    const day = parseInt(wordMatch[1], 10);
     const monthKey = wordMatch[2].toLowerCase();
-    let year = wordMatch[3];
-    if (year.length === 2) year = '20' + year;
-    const monthNum = INDO_MONTHS_MAP[monthKey];
-    if (monthNum) {
-      return `${year}-${monthNum}-${day}`;
+    let yStr = wordMatch[3];
+    if (yStr.length === 2) yStr = '20' + yStr;
+    const year = parseInt(yStr, 10);
+    const mStr = INDO_MONTHS_MAP[monthKey];
+    if (mStr) {
+      const month = parseInt(mStr, 10);
+      if (isValidCalendarDate(year, month, day)) {
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
     }
+    return '';
   }
 
-  // 3. Remove time part if string has spaces and is not month name (e.g. "2024-08-28 14:30:00" or "28/08/2024 14:30:00")
+  // Strip trailing time portion if present (e.g. "2024-08-28 14:30:00" or "28/08/2024 14:30:00")
   if (cleaned.includes(' ') && !cleaned.match(/[a-zA-Z]/)) {
     cleaned = cleaned.split(' ')[0];
   }
 
   // 4. Try exact YYYY-MM-DD or YYYY/MM/DD
-  const yyyymmdd = cleaned.match(/^(\d{4})[\-\/](\d{1,2})[\-\/](\d{1,2})/);
+  const yyyymmdd = cleaned.match(/^(\d{4})[\-\/](\d{1,2})[\-\/](\d{1,2})$/);
   if (yyyymmdd) {
-    const y = yyyymmdd[1];
-    const m = yyyymmdd[2].padStart(2, '0');
-    const d = yyyymmdd[3].padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    const y = parseInt(yyyymmdd[1], 10);
+    const m = parseInt(yyyymmdd[2], 10);
+    const d = parseInt(yyyymmdd[3], 10);
+    if (isValidCalendarDate(y, m, d)) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+    return '';
   }
 
   // 5. Try DD/MM/YYYY or DD-MM-YYYY or MM/DD/YYYY
@@ -73,29 +118,44 @@ export function parseToIsoDate(dtStr: any): string {
   if (parts.length === 3) {
     let p1 = parts[0].trim();
     let p2 = parts[1].trim();
-    let y = parts[2].trim();
-    if (y.includes(' ')) y = y.split(' ')[0];
+    let yStr = parts[2].trim();
+    if (yStr.includes(' ')) yStr = yStr.split(' ')[0];
 
+    // If starts with 4-digit year: YYYY/MM/DD
     if (p1.length === 4) {
-      return `${p1}-${p2.padStart(2, '0')}-${y.padStart(2, '0')}`;
-    }
-    if (y.length === 2) {
-      y = '20' + y;
+      const y = parseInt(p1, 10);
+      const m = parseInt(p2, 10);
+      const d = parseInt(yStr, 10);
+      if (isValidCalendarDate(y, m, d)) {
+        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      }
+      return '';
     }
 
+    if (yStr.length === 2) {
+      yStr = '20' + yStr;
+    }
+    const year = parseInt(yStr, 10);
     const n1 = parseInt(p1, 10);
     const n2 = parseInt(p2, 10);
 
     if (n1 > 12) {
       // Must be DD/MM/YYYY
-      return `${y}-${String(n2).padStart(2, '0')}-${String(n1).padStart(2, '0')}`;
+      if (isValidCalendarDate(year, n2, n1)) {
+        return `${year}-${String(n2).padStart(2, '0')}-${String(n1).padStart(2, '0')}`;
+      }
     } else if (n2 > 12) {
       // Must be MM/DD/YYYY
-      return `${y}-${String(n1).padStart(2, '0')}-${String(n2).padStart(2, '0')}`;
+      if (isValidCalendarDate(year, n1, n2)) {
+        return `${year}-${String(n1).padStart(2, '0')}-${String(n2).padStart(2, '0')}`;
+      }
     } else {
       // Default to Indonesian DD/MM/YYYY
-      return `${y}-${String(n2).padStart(2, '0')}-${String(n1).padStart(2, '0')}`;
+      if (isValidCalendarDate(year, n2, n1)) {
+        return `${year}-${String(n2).padStart(2, '0')}-${String(n1).padStart(2, '0')}`;
+      }
     }
+    return '';
   }
 
   // 6. Standard Javascript Date parsing fallback
@@ -103,12 +163,15 @@ export function parseToIsoDate(dtStr: any): string {
   if (!isNaN(parsed)) {
     const dObj = new Date(parsed);
     const y = dObj.getFullYear();
-    const m = String(dObj.getMonth() + 1).padStart(2, '0');
-    const d = String(dObj.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    const m = dObj.getMonth() + 1;
+    const d = dObj.getDate();
+    if (isValidCalendarDate(y, m, d)) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
   }
 
-  return cleaned;
+  // If not valid, return empty string
+  return '';
 }
 
 /**
@@ -124,8 +187,7 @@ export function getParsedDateValue(dtStr: any): number {
     const d = parseInt(parts[2], 10);
     return new Date(y, m, d).getTime();
   }
-  const t = Date.parse(iso);
-  return isNaN(t) ? 0 : t;
+  return 0;
 }
 
 /**
@@ -133,7 +195,7 @@ export function getParsedDateValue(dtStr: any): number {
  */
 export function displayTanggalIndonesian(dtStr: any): string {
   const iso = parseToIsoDate(dtStr);
-  if (!iso) return dtStr || '-';
+  if (!iso) return dtStr ? String(dtStr) : '-';
   const parts = iso.split('-');
   if (parts.length === 3) {
     const d = parseInt(parts[2], 10);
@@ -151,7 +213,7 @@ export function displayTanggalIndonesian(dtStr: any): string {
  */
 export function formatToDDMMYYYY(dtStr: any): string {
   const iso = parseToIsoDate(dtStr);
-  if (!iso) return dtStr || '-';
+  if (!iso) return dtStr ? String(dtStr) : '-';
   const parts = iso.split('-');
   if (parts.length === 3) {
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
