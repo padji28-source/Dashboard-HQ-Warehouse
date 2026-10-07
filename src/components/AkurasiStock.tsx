@@ -2,6 +2,7 @@ import { fetchAndParseCSV } from "../lib/csvCache";
 import { useEffect, useState, useMemo , memo} from "react";
 import { fetchSheetData, fetchCombinedProducts } from '../lib/sheets';
 import { AREA_URLS } from '../App';
+import { MtsEntry, parseMtsEntry, getSmartMtsQty } from '../modules/inventory/PencocokanData';
 import { Loader2, AlertTriangle, RefreshCw, BarChart3, ArrowDownToLine, CheckCircle2, CircleAlert, Percent, Box, MapPin, Save, History, Trash2, Archive, X, CloudUpload } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -293,7 +294,7 @@ function AkurasiStock() {
 
       // 1. Fetch MTS Sheet Data (System Stock)
       const csvUrl = '/api/stock-summary';
-      const mtsMap = new Map<string, number>();
+      const mtsMap = new Map<string, MtsEntry>();
       const globalPMap = new Map<string, { nama: string; satuan: string }>();
       const reversePMap = new Map<string, string>();
 
@@ -342,25 +343,25 @@ function AkurasiStock() {
               const sku = colSku !== -1 ? String(row[colSku] || '').trim().toUpperCase() : '';
               const name = colName !== -1 ? String(row[colName] || '').trim().toUpperCase() : '';
               
-              let lastQty = 0;
+              let entry: MtsEntry = { raw: '', isEndWith000: false, baseVal: 0, thousandVal: 0, parsedVal: 0 };
               if (colLastQty !== -1 && row[colLastQty] !== undefined) {
-                lastQty = parseMtsNumber(row[colLastQty]);
+                entry = parseMtsEntry(row[colLastQty]);
               }
 
               const locCandidates = [loc, whGroup].filter(Boolean);
               locCandidates.forEach(l => {
                 if (sku) {
-                  mtsMap.set(`${l}_${sku}`, lastQty);
-                  mtsMap.set(`${sku}_${l}`, lastQty);
+                  mtsMap.set(`${l}_${sku}`, entry);
+                  mtsMap.set(`${sku}_${l}`, entry);
                   if (rowArea) {
-                    mtsMap.set(`${rowArea}_${l}_${sku}`, lastQty);
+                    mtsMap.set(`${rowArea}_${l}_${sku}`, entry);
                   }
                 }
                 if (name) {
-                  mtsMap.set(`${l}_${name}`, lastQty);
-                  mtsMap.set(`${name}_${l}`, lastQty);
+                  mtsMap.set(`${l}_${name}`, entry);
+                  mtsMap.set(`${name}_${l}`, entry);
                   if (rowArea) {
-                    mtsMap.set(`${rowArea}_${l}_${name}`, lastQty);
+                    mtsMap.set(`${rowArea}_${l}_${name}`, entry);
                   }
                 }
               });
@@ -522,7 +523,6 @@ function AkurasiStock() {
               const productNameUpper = item.pName.toUpperCase().trim();
               const areaUpper = aName.toUpperCase().trim();
 
-              let systemQty = 0;
               const lookupKeys = [
                 `${areaUpper}_${locKey}_${productCodeUpper}`,
                 `${areaUpper}_${locKey}_${productNameUpper}`,
@@ -534,12 +534,15 @@ function AkurasiStock() {
                 `${productCodeUpper.replace(/\s+/g, '')}_${locKey}`
               ];
 
+              let matchedEntry: MtsEntry | undefined;
               for (const k of lookupKeys) {
                 if (mtsMap.has(k)) {
-                  systemQty = mtsMap.get(k) || 0;
+                  matchedEntry = mtsMap.get(k);
                   break;
                 }
               }
+
+              const systemQty = matchedEntry ? getSmartMtsQty(matchedEntry, item.physicalQty, 0, item.uom, item.pCode) : 0;
 
               const physicalQty = Math.round(item.physicalQty * 1000) / 1000;
               let systemQtyRounded = Math.round(systemQty * 1000) / 1000;

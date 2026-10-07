@@ -1,5 +1,5 @@
 import { useState, lazy, Suspense, memo } from 'react';
-import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, Eye, TrendingUp, Loader2, Clock, ClipboardList } from 'lucide-react';
+import { LogOut, Package, MapPin, ArrowRightLeft, LayoutDashboard, Menu, X, Box, Beaker, ChevronDown, ChevronRight, Scale, FileSpreadsheet, MessageSquare, ExternalLink, BarChart3, TrendingUp, Loader2, Clock, ClipboardList, ShieldCheck } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AREAS } from '../App';
@@ -36,7 +36,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
   const [activeTab, setActiveTab] = useState<'stock' | 'activity_log' | 'pencocokan' | 'produk' | 'locator' | 'input' | 'input_rm' | 'input_mfg' | 'input_supplies' | 'mts' | 'whatsapp' | 'akurasi' | 'pengepokan' | 'cek_stock' | 'doi_mp' | 'unposted'>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['stock']));
-  const handleTabChange = (tab: any) => { setActiveTab(tab); setVisitedTabs(prev => new Set(prev).add(tab)); };
+  const handleTabChange = (tab: any) => { setActiveTab(tab); setVisitedTabs(prev => new Set(prev).add(tab)); setSidebarOpen(false); };
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
 
   const usernameLower = (activeUsername || '').toLowerCase();
@@ -104,103 +104,96 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
   ] as const;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="app-shell">
       {/* Top Header for all devices */}
-      <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30 shadow-sm">
-        <div className="flex items-center gap-4">
-          <button 
+      <header className="app-topbar">
+        <div className="topbar-left">
+          <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="icon-button"
+            aria-label="Buka navigasi"
           >
-            <Menu className="w-6 h-6" />
+            <Menu className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0 shadow-sm">
-               <Box className="w-5 h-5 text-white" />
+          <div className="brand-lockup">
+            <div className="brand-mark"><Box className="w-5 h-5" /></div>
+            <div className="brand-copy">
+              <strong>WH Command Center</strong>
+              <span>Warehouse Management System</span>
             </div>
-            <h1 className="font-bold text-lg text-slate-900 tracking-tight hidden sm:block">Dashboard All Cabang WH</h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="topbar-right">
           {(userRole === 'ALL' || userRole === 'HQ' || userRole === 'All Cabang') && onAreaChange ? (
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 sm:px-3 py-1.5 shadow-sm">
-              <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-              <span className="hidden md:inline text-xs font-bold text-slate-500 uppercase tracking-wide">Pilih Area:</span>
-              <select
-                value={area}
-                onChange={(e) => onAreaChange(e.target.value)}
-                className="bg-transparent text-slate-800 font-bold text-xs sm:text-sm focus:outline-none cursor-pointer pr-1"
-              >
-                {AREAS.map(a => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
+            <label className="area-switcher">
+              <span><MapPin className="w-3.5 h-3.5" /> Area</span>
+              <select value={area} onChange={(e) => onAreaChange(e.target.value)} aria-label="Pilih area">
+                {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
-            </div>
+            </label>
           ) : (
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold text-slate-900 leading-none">
-                {isAdminA5 ? 'Admin C3' : isPetugasA5 ? 'Petugas C3' : isHelper ? 'Helper' : 'Administrator'}
-              </p>
-              <p className="text-xs text-slate-500 mt-1 leading-none">Area {area}</p>
+            <div className="topbar-context">
+              <span className="topbar-kicker">Area aktif</span>
+              <strong>{area}</strong>
             </div>
           )}
 
-          <div className="text-right hidden sm:block">
-            <span className="inline-block px-2 py-0.5 text-[10px] font-bold bg-blue-50 border border-blue-100 text-blue-700 rounded-full uppercase tracking-wider">
-              {isAdminA5 ? 'Admin C3' : isPetugasA5 ? 'Petugas C3' : isHelper ? 'Helper' : userRole === 'ALL' ? 'Super Admin' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'Admin All Cabang' : 'Admin Area'}
-            </span>
-          </div>
-
-          <div className="w-9 h-9 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-700 text-xs sm:text-sm font-bold uppercase shrink-0 shadow-inner">
-            {isAdminA5 ? 'C3' : isPetugasA5 ? 'PC' : isHelper ? 'HP' : userRole === 'ALL' ? 'SA' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'AC' : area.substring(0, 2)}
+          <div className="profile-chip">
+            <div className="profile-avatar">
+              {isAdminA5 ? 'C3' : isPetugasA5 ? 'PC' : isHelper ? 'HP' : userRole === 'ALL' ? 'SA' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'AC' : area.substring(0, 2)}
+            </div>
+            <div className="profile-copy">
+              <strong>{activeUsername || 'Administrator'}</strong>
+              <span>{isAdminA5 ? 'Admin C3' : isPetugasA5 ? 'Petugas C3' : isHelper ? 'Helper' : userRole === 'ALL' ? 'Super Admin' : (userRole === 'HQ' || userRole === 'All Cabang') ? 'Admin All Cabang' : 'Admin Area'}</span>
+            </div>
+            <ShieldCheck className="profile-status" />
           </div>
         </div>
       </header>
 
+      <div className="workspace">
       {/* Sidebar Overlay */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm transition-opacity" 
+          className="sidebar-overlay" 
           onClick={() => setSidebarOpen(false)} 
         />
       )}
 
       {/* Drawer Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 border-r border-slate-800 shadow-2xl flex flex-col transition-transform duration-300 ease-in-out",
-        sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        "app-sidebar",
+        sidebarOpen ? "sidebar-open" : "sidebar-closed"
       )}>
-        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800 shrink-0 bg-slate-950/50">
+        <div className="sidebar-header">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center shrink-0 shadow-sm">
-               <Box className="w-5 h-5 text-white" />
-            </div>
-             <span className="font-bold text-lg text-white tracking-tight">Dashboard All Cabang WH</span>
+            <div className="sidebar-brand-mark"><Box className="w-5 h-5" /></div>
+             <div className="sidebar-brand-copy"><strong>WH Command Center</strong><span>{area}</span></div>
           </div>
           <button 
             onClick={() => setSidebarOpen(false)}
-            className="p-2 -mr-2 text-slate-400 hover:text-white rounded-lg transition-colors focus:outline-none"
+            className="icon-button icon-button-dark"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
         
-        <div className="p-4 flex-1 overflow-y-auto">
-          <div className="space-y-1 mt-2">
-            <div className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Menu Utama</div>
+        <div className="sidebar-nav-scroll">
+          <div className="sidebar-nav">
+            <div className="sidebar-section-title">Menu Utama</div>
             {mainTabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => { handleTabChange(tab.id as any); }}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg transition-all duration-200",
+                  "nav-item",
                   safeActiveTab === tab.id 
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-900/20" 
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                    ? "nav-item-active" 
+                    : "nav-item-idle"
                 )}
               >
-                <tab.icon className={cn("w-5 h-5", safeActiveTab === tab.id ? "text-white" : "text-slate-400")} />
+                <tab.icon className="nav-item-icon w-5 h-5" />
                 {tab.label}
               </button>
             ))}
@@ -210,7 +203,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
                 <button
                   onClick={() => { handleTabChange('mts'); }}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg transition-all duration-200",
+                    "nav-item",
                     safeActiveTab === 'mts' 
                       ? "bg-blue-600 text-white shadow-md shadow-blue-900/20" 
                       : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
@@ -257,16 +250,16 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
 
             {masterTabs.length > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-800">
-                <div className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Master Data</div>
+                <div className="sidebar-section-title">Master Data</div>
                 {masterTabs.map(tab => (
                   <button
                     key={tab.id}
                     onClick={() => { handleTabChange(tab.id as any); }}
                     className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                      "nav-item nav-item-compact",
                       safeActiveTab === tab.id 
-                        ? "bg-blue-600/20 text-blue-400 font-semibold" 
-                        : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                        ? "nav-item-active nav-item-subactive" 
+                        : "nav-item-idle"
                     )}
                   >
                     <tab.icon className={cn("w-4 h-4", safeActiveTab === tab.id ? "text-blue-400" : "text-slate-500")} />
@@ -278,7 +271,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
 
             {(userRole === 'ALL' || userRole === 'HQ' || userRole === 'All Cabang' || isAdminA5) && (
               <div className="mt-4 pt-4 border-t border-slate-800">
-                <div className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Sistem Eksternal</div>
+                <div className="sidebar-section-title">Sistem Eksternal</div>
                 <a
                   href="https://wmsc3.vercel.app/"
                   target="_blank"
@@ -296,13 +289,13 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
           </div>
         </div>
         
-        <div className="p-4 border-t border-slate-800 shrink-0 bg-slate-950/20">
+        <div className="sidebar-footer">
           <button 
             onClick={() => {
               setSidebarOpen(false);
               onLogout();
             }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-slate-300 bg-slate-800/80 rounded-lg hover:bg-rose-600 hover:text-white transition-all duration-200"
+            className="logout-button"
           >
             <LogOut className="w-4 h-4" />
             Logout System
@@ -311,8 +304,8 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
       </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-full min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-        <div className="w-full">
+      <main className="app-main">
+        <div className="app-content">
           <div className={cn(safeActiveTab !== 'stock' && 'hidden')}>
             {visitedTabs.has('stock') && (
               <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
@@ -437,6 +430,7 @@ const Dashboard = memo(function Dashboard({ spreadsheetId, area, onLogout, userR
           </div>
         </div>
       </main>
+      </div>
     </div>
   );
 });
@@ -449,8 +443,8 @@ function HQReadOnlyPlaceholder({ title }: { title: string }) {
       </div>
       <h3 className="text-xl font-bold text-slate-900 mb-3">Menu {title} Dinonaktifkan di Area All Cabang</h3>
       <p className="text-sm text-slate-500 leading-relaxed max-w-md mx-auto mb-6">
-        Gudang pusat **All Cabang / HQ** beroperasi dalam mode **Agregasi Multi-Area (Read-Only)** untuk memantau performa inventaris di seluruh 11 gudang cabang secara real-time. 
-        Anda tidak dapat mengubah data individual dari mode ini. Silakan masuk kembali menggunakan pilihan cabang area tertentu jika Anda berniat untuk melakukan penginputan transaksi baru atau memutasi master data.
+        Gudang pusat All Cabang / HQ beroperasi dalam mode Agregasi Multi-Area (Read-Only) untuk memantau performa inventaris di seluruh 11 gudang cabang secara real-time. 
+        Anda tidak dapat mengubah data individual dari mode ini. Gunakan area cabang tertentu saat membutuhkan penginputan transaksi atau perubahan master data.
       </p>
     </div>
   );

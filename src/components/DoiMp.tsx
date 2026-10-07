@@ -536,7 +536,7 @@ function DoiMp({ spreadsheetId, area, activeUsername, userRole }: Props) {
             </div>
           </div>
           <p className="text-sm text-slate-500 mt-3 leading-relaxed max-w-2xl">
-            Sistem pengawasan berkala **Days of Inventory (DOI)** terpusat untuk memantau status persediaan aman, over, maupun tidak aman yang dihitung berdasarkan <strong>(Stok Riil - Pengepokan Move Qty) / RPH</strong>.
+            Sistem pengawasan berkala Days of Inventory (DOI) terpusat untuk memantau status persediaan aman, over, maupun tidak aman yang dihitung berdasarkan <strong>(Stok Riil - Pengepokan Move Qty) / RPH</strong>.
           </p>
         </div>
 

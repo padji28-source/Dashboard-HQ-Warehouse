@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import Dashboard from './components/Dashboard';
-import { Loader2, ShieldCheck, Lock, User, MapPin, Eye, EyeOff, Info, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { ShieldCheck, Lock, User, Eye, EyeOff, HelpCircle, ChevronDown, ChevronUp, Sparkles, Database, Boxes, Activity, ArrowUpRight } from 'lucide-react';
 import { db } from './lib/firebase';
 import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -72,11 +72,20 @@ export default function App() {
   const [appPassword, setAppPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [selectedArea, setSelectedArea] = useState(() => localStorage.getItem('selectedArea') || AREAS[0]);
-  const [appAuthenticated, setAppAuthenticated] = useState(false);
-  const [loggedInUserRole, setLoggedInUserRole] = useState(() => localStorage.getItem('userRole') || '');
   const [activeUsername, setActiveUsername] = useState(() => localStorage.getItem('activeUsername') || '');
-  const [currentGasUrl, setCurrentGasUrl] = useState('');
-  const [spreadsheetReady, setSpreadsheetReady] = useState(false);
+  const [loggedInUserRole, setLoggedInUserRole] = useState(() => localStorage.getItem('userRole') || '');
+  const [appAuthenticated, setAppAuthenticated] = useState(() => {
+    const storedUser = localStorage.getItem('activeUsername') || '';
+    return Boolean(storedUser && ADMIN_ACCOUNTS.some(acc => acc.username === storedUser));
+  });
+  const [currentGasUrl, setCurrentGasUrl] = useState(() => {
+    const storedArea = localStorage.getItem('selectedArea') || AREAS[0];
+    return storedArea === 'All Cabang' ? 'HQ' : (AREA_URLS[storedArea] || '');
+  });
+  const [spreadsheetReady, setSpreadsheetReady] = useState(() => {
+    const storedArea = localStorage.getItem('selectedArea') || AREAS[0];
+    return storedArea === 'All Cabang' || Boolean(AREA_URLS[storedArea]);
+  });
   const [showHelp, setShowHelp] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
@@ -179,112 +188,135 @@ export default function App() {
   // App Auth Flow (System level)
   if (!appAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden p-6 sm:p-8">
-          <div className="text-center mb-6">
-            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mx-auto mb-3 shadow-inner">
-              <ShieldCheck className="w-7 h-7" />
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 mb-1">Dashboard All Cabang WH</h1>
-            <p className="text-slate-500 text-sm">Warehouse Management System Multi-Area</p>
-          </div>
-          
-          <form onSubmit={handleAppLogin} className="space-y-4">
-            {loginError && (
-              <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg text-rose-800 text-xs font-medium">
-                ⚠️ {loginError}
-              </div>
-            )}
+      <div className="login-page">
+        <div className="login-orb login-orb-left" />
+        <div className="login-orb login-orb-right" />
 
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
-                <User className="w-3.5 h-3.5 text-slate-400" />
-                Username
-              </label>
-              <input 
-                type="text" 
-                placeholder="Contoh: jakarta atau admin"
-                value={appUsername}
-                onChange={e => setAppUsername(e.target.value)}
-                required
-                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 font-medium"
-              />
+        <div className="login-layout">
+          <section className="login-showcase">
+            <div className="login-brand-badge">
+              <span className="login-brand-mark"><Boxes className="w-4 h-4" /></span>
+              Warehouse Intelligence
+            </div>
+            <div className="login-showcase-copy">
+              <span className="eyebrow"><Sparkles className="w-3.5 h-3.5" /> Inventory Command Center</span>
+              <h1>Kelola persediaan lebih cepat, lebih jelas, lebih terukur.</h1>
+              <p>
+                Satu dashboard untuk memantau stok, pergerakan barang, akurasi, dan aktivitas seluruh cabang secara terpusat.
+              </p>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
-                <Lock className="w-3.5 h-3.5 text-slate-400" />
-                Password
-              </label>
-              <div className="relative">
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  placeholder="Ketik password..."
-                  value={appPassword}
-                  onChange={e => setAppPassword(e.target.value)}
-                  required
-                  className="w-full pl-3.5 pr-10 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 font-medium font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 outline-none"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button 
-              type="submit"
-              className="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-lg hover:bg-slate-800 active:bg-slate-950 transition-colors shadow-sm text-sm"
-            >
-              Sign In
-            </button>
-          </form>
-
-          {/* Collapsible Helper Panel for easy testing & guidance */}
-          <div className="mt-6 pt-5 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setShowHelp(!showHelp)}
-              className="flex items-center gap-1.5 mx-auto text-xs text-blue-600 font-semibold hover:text-blue-700 focus:outline-none select-none transition-colors"
-            >
-              <HelpCircle className="w-3.5 h-3.5" />
-              <span>{showHelp ? "Sembunyikan" : "Tampilkan"} Panduan Kredensial Admin</span>
-              {showHelp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-
-            {showHelp && (
-              <div className="mt-4 bg-slate-50 border border-slate-150 rounded-lg p-3 text-xs max-h-48 overflow-y-auto space-y-2">
-                <div className="sticky top-0 bg-slate-50 pb-1 border-b border-slate-200 mb-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Akun Akses Terdaftar
+            <div className="login-feature-grid">
+              <div className="login-feature-card">
+                <div className="login-feature-icon"><Activity className="w-4 h-4" /></div>
+                <div>
+                  <strong>Live Visibility</strong>
+                  <span>Performa stok dan aktivitas lebih mudah dipantau.</span>
                 </div>
-                <div className="space-y-1.5 font-medium text-slate-600">
-                  <div>
-                    <p className="text-slate-800 font-bold">Role Baru (Sesuai Tugas):</p>
-                    <ul className="ml-2 space-y-1 mb-2 list-disc list-inside text-[11px]">
-                      <li><strong>Admin C3</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">adminc3</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">adminc3123</code></li>
-                      <li><strong>Petugas C3</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">petugasc3</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">petugasc3123</code></li>
-                      <li><strong>Helper</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">helper</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">helper123</code></li>
-                    </ul>
-                    <p className="text-slate-800 font-bold">Admin Area Spesifik:</p>
-                    <p className="text-[10px] text-slate-400 ml-2 mb-1">Masing-masing admin dikunci ke areanya & tidak bisa mengakses area lain.</p>
-                    <ul className="ml-2 space-y-1 list-disc list-inside">
-                      {AREAS.filter(ar => ar !== 'All Cabang').map(ar => {
-                        const pass = ar.toLowerCase() === 'makassar' ? 'makassar111' : `${ar.toLowerCase()}123`;
-                        return (
-                          <li key={ar} className="text-[11px]">
-                            <strong>{ar}</strong>: U: <code className="bg-white px-1 text-slate-800 font-bold">{ar.toLowerCase()}</code> / P: <code className="bg-white px-1 text-slate-800 font-bold">{pass}</code>
-                          </li>
-                        );
-                      })}
-                    </ul>
+              </div>
+              <div className="login-feature-card">
+                <div className="login-feature-icon"><Database className="w-4 h-4" /></div>
+                <div>
+                  <strong>Multi-Branch</strong>
+                  <span>Berpindah area dan pusat kendali dari satu tempat.</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="login-footer-note">
+              <span className="status-dot" />
+              Sistem siap digunakan · Multi-area warehouse
+            </div>
+          </section>
+
+          <section className="login-card">
+            <div className="login-card-header">
+              <div className="login-icon-wrap">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="eyebrow eyebrow-dark">Secure access</span>
+                <h2>Masuk ke Dashboard</h2>
+                <p>Gunakan akun operasional yang telah diberikan administrator.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleAppLogin} className="login-form">
+              {loginError && (
+                <div className="login-alert" role="alert">
+                  <span>!</span>
+                  <p>{loginError}</p>
+                </div>
+              )}
+
+              <label className="login-field">
+                <span><User className="w-4 h-4" /> Username</span>
+                <input
+                  type="text"
+                  placeholder="Contoh: admin atau jakarta"
+                  value={appUsername}
+                  onChange={e => setAppUsername(e.target.value)}
+                  autoComplete="username"
+                  required
+                />
+              </label>
+
+              <label className="login-field">
+                <span><Lock className="w-4 h-4" /> Password</span>
+                <div className="password-wrap">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Masukkan password"
+                    value={appPassword}
+                    onChange={e => setAppPassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </label>
+
+              <button type="submit" className="login-submit">
+                <span>Masuk ke sistem</span>
+                <ArrowUpRight className="w-4 h-4" />
+              </button>
+            </form>
+
+            <div className="login-help">
+              <button type="button" onClick={() => setShowHelp(!showHelp)} className="login-help-trigger">
+                <HelpCircle className="w-4 h-4" />
+                <span>{showHelp ? "Sembunyikan panduan akses" : "Lihat panduan akses"}</span>
+                {showHelp ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {showHelp && (
+                <div className="login-help-panel">
+                  <div className="login-help-title">Role yang tersedia</div>
+                  <div className="login-help-list">
+                    <span><strong>Super Admin</strong> · seluruh area & konfigurasi</span>
+                    <span><strong>Admin Area</strong> · operasional cabang tertentu</span>
+                    <span><strong>HQ / PPIC / MP</strong> · monitoring terpusat sesuai hak akses</span>
+                    <span><strong>Petugas / Helper</strong> · operasional sesuai menu yang diizinkan</span>
+                  </div>
+                  <div className="login-help-note">
+                    Kredensial tidak ditampilkan di layar. Hubungi administrator sistem untuk akses atau reset password.
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+
+            <div className="login-card-meta">
+              <span><span className="status-dot" /> Secure session</span>
+              <span>Warehouse Management System</span>
+            </div>
+          </section>
         </div>
       </div>
     );
@@ -293,14 +325,14 @@ export default function App() {
   // Fallback if URL is missing for the selected area
   if (!spreadsheetReady) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden p-6 sm:p-8 text-center">
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Konfigurasi Area Tidak Valid</h2>
+      <div className="empty-state-page">
+        <div className="empty-state-card">
+          <h2 className="text-xl font-bold text-slate-900 mb-2">Konfigurasi area belum tersedia</h2>
           <p className="text-slate-500 mb-6">URL sistem untuk area <strong>{selectedArea}</strong> belum dikonfigurasi.</p>
           <button
              type="button"
              onClick={handleLogout}
-             className="w-full bg-slate-900 text-white font-medium py-2 rounded-lg hover:bg-slate-800 transition-colors"
+             className="secondary-action w-full"
           >
             Kembali
           </button>

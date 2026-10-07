@@ -24,78 +24,106 @@ function formatValue(num: number, uom?: string) {
   });
 }
 
-function parseMtsNumber(val: any): number {
-  if (val === null || val === undefined) return 0;
-  if (typeof val === 'number') return isNaN(val) ? 0 : val;
-  let valStr = String(val).trim();
-  if (!valStr) return 0;
+export interface MtsEntry {
+  raw: string;
+  isEndWith000: boolean;
+  baseVal: number;
+  thousandVal: number;
+  parsedVal: number;
+}
 
-  valStr = valStr.replace(/^"|"$/g, '').trim();
+export function parseMtsEntry(val: any): MtsEntry {
+  if (val === null || val === undefined) {
+    return { raw: '', isEndWith000: false, baseVal: 0, thousandVal: 0, parsedVal: 0 };
+  }
+  if (typeof val === 'number') {
+    const num = isNaN(val) ? 0 : val;
+    return { raw: String(num), isEndWith000: false, baseVal: num, thousandVal: num * 1000, parsedVal: num };
+  }
+  let s = String(val).trim().replace(/^"|"$/g, '').trim();
+  if (!s) {
+    return { raw: '', isEndWith000: false, baseVal: 0, thousandVal: 0, parsedVal: 0 };
+  }
 
   // 1. Multiple dots (e.g. "2.837.100", "5.760.000"): all dots are thousand separators
-  if ((valStr.match(/\./g) || []).length > 1) {
-    valStr = valStr.replace(/\./g, '').replace(/,/g, '');
-    const res = parseFloat(valStr);
-    return isNaN(res) ? 0 : res;
+  if ((s.match(/\./g) || []).length > 1) {
+    const num = parseFloat(s.replace(/\./g, '').replace(/,/g, '')) || 0;
+    return { raw: s, isEndWith000: false, baseVal: num, thousandVal: num, parsedVal: num };
   }
 
   // 2. Both comma and dot present
-  const lastDot = valStr.lastIndexOf('.');
-  const lastComma = valStr.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
   if (lastComma > -1 && lastDot > -1) {
+    let clean = s;
     if (lastComma > lastDot) {
-      valStr = valStr.replace(/\./g, '').replace(/,/g, '.');
+      clean = clean.replace(/\./g, '').replace(/,/g, '.');
     } else {
-      valStr = valStr.replace(/,/g, '');
+      clean = clean.replace(/,/g, '');
     }
-    const res = parseFloat(valStr);
-    return isNaN(res) ? 0 : res;
+    const num = parseFloat(clean) || 0;
+    return { raw: s, isEndWith000: false, baseVal: num, thousandVal: num, parsedVal: num };
   }
 
-  // 3. Single dot ending in exactly three zeroes: ".000" (e.g. "13.000", "700.000", "0.000", "-40.000")
-  // In iDempiere/ERP export format (#,##0.000), ".000" represents 3 decimal places for integer quantities.
-  // "13.000" is 13 units, "700.000" is 700 units, "865.000" is 865 units.
-  if (valStr.endsWith('.000')) {
-    const withoutDecimals = valStr.slice(0, -4);
-    const cleanInteger = withoutDecimals.replace(/,/g, '');
-    const res = parseFloat(cleanInteger);
-    return isNaN(res) ? 0 : res;
+  // 3. Comma decimal (e.g. "437,6", "1.227,12", "39,99")
+  if (s.includes(',')) {
+    const num = parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+    return { raw: s, isEndWith000: false, baseVal: num, thousandVal: num, parsedVal: num };
   }
 
-  // 4. Single comma ending in three zeroes: ",000"
-  if (valStr.endsWith(',000')) {
-    const withoutDecimals = valStr.slice(0, -4);
-    const cleanInteger = withoutDecimals.replace(/\./g, '');
-    const res = parseFloat(cleanInteger);
-    return isNaN(res) ? 0 : res;
+  // 4. Dot ending in exactly three zeroes: ".000" (e.g. "13.000", "71.000", "400.000", "26.000", "1.000", "0.000")
+  if (s.endsWith('.000')) {
+    const base = parseFloat(s.slice(0, -4)) || 0;
+    return {
+      raw: s,
+      isEndWith000: true,
+      baseVal: base,
+      thousandVal: base * 1000,
+      parsedVal: base
+    };
   }
 
-  // 5. Single comma only (e.g. "12,5" or "12,50")
-  if (lastComma > -1 && lastDot === -1) {
-    const parts = valStr.split(',');
+  // 5. Dot followed by 3 non-zero digits (e.g. "2.593", "10.200", "8.462", "4.433", "23.500", "4.800", "1.940", "2.025", "2.839", "37.271", "5.385")
+  if (s.includes('.')) {
+    const parts = s.split('.');
     if (parts.length === 2 && parts[1].length === 3 && parts[0].replace('-', '').length <= 3) {
-      valStr = valStr.replace(',', '');
-    } else {
-      valStr = valStr.replace(',', '.');
-    }
-    const res = parseFloat(valStr);
-    return isNaN(res) ? 0 : res;
-  }
-
-  // 6. Single dot followed by 3 non-zero digits (e.g. "2.732", "37.271", "1.026", "2.900", "2.485", "5.385")
-  // In Google Sheets with Indonesian locale, these are thousand quantities where comma was imported as dot.
-  if (lastDot > -1) {
-    const parts = valStr.split('.');
-    if (parts.length === 2 && parts[1].length === 3 && parts[0].replace('-', '').length <= 3) {
-      valStr = valStr.replace('.', '');
-      const res = parseFloat(valStr);
-      return isNaN(res) ? 0 : res;
+      const num = parseFloat(s.replace('.', '')) || 0;
+      return { raw: s, isEndWith000: false, baseVal: num, thousandVal: num, parsedVal: num };
     }
   }
 
-  valStr = valStr.replace(/[^0-9.-]/g, '');
-  const res = parseFloat(valStr);
-  return isNaN(res) ? 0 : res;
+  // Standard fallback
+  const num = parseFloat(s.replace(/[^0-9.-]/g, '')) || 0;
+  return { raw: s, isEndWith000: false, baseVal: num, thousandVal: num, parsedVal: num };
+}
+
+export function getSmartMtsQty(entry: MtsEntry | number | undefined, stokRill: number, stokKemarin: number, uom?: string, kodeProduk?: string): number {
+  if (!entry) return 0;
+  if (typeof entry === 'number') return entry;
+  if (!entry.isEndWith000) return entry.parsedVal;
+
+  const targetQty = Math.abs(stokRill) > 0 ? stokRill : (Math.abs(stokKemarin) > 0 ? stokKemarin : 0);
+  
+  if (targetQty > 0) {
+    const diffBase = Math.abs(targetQty - entry.baseVal);
+    const diffThousand = Math.abs(targetQty - entry.thousandVal);
+    // If target is in thousands (>= 1000) or closer to thousandVal:
+    if (diffThousand < diffBase || (targetQty >= 1000 && entry.baseVal < 100)) {
+      return entry.thousandVal;
+    }
+    return entry.baseVal;
+  }
+
+  // When targetQty is 0 (unrecorded/no movements yet):
+  if (entry.baseVal >= 100) return entry.baseVal;
+  const isSackOrThousandsUom = (uom || '').toLowerCase().includes('lembar') || (kodeProduk || '').toUpperCase().includes('SAK');
+  if (isSackOrThousandsUom) return entry.thousandVal;
+  return entry.baseVal;
+}
+
+function parseMtsNumber(val: any): number {
+  const entry = parseMtsEntry(val);
+  return entry.parsedVal;
 }
 
 // ==========================================
@@ -231,7 +259,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
   const [allTransactions, setAllTransactions] = useState<any[]>([]);
   const [productsMap, setProductsMap] = useState<Map<string, { nama: string; satuan: string }>>(new Map());
   const [locatorsMap, setLocatorsMap] = useState<Map<string, { nama: string; whType: string; area: string }>>(new Map());
-  const [mtsLookupMap, setMtsLookupMap] = useState<Map<string, number>>(new Map());
+  const [mtsLookupMap, setMtsLookupMap] = useState<Map<string, MtsEntry>>(new Map());
   
   // Daily, Monthly, and Week Reconciliation configuration
   const [reconType, setReconType] = useState<'daily' | 'monthly' | 'week'>('daily');
@@ -356,7 +384,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
       setLoading(true);
       
       const csvUrl = `/api/stock-summary?t=${Date.now()}`;
-      const mtsMap = new Map<string, number>();
+      const mtsMap = new Map<string, MtsEntry>();
       
       try {
         const dataMts = await fetchAndParseCSV<string[]>('/api/stock-summary', false, 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=263347272&single=true&output=csv');
@@ -388,25 +416,25 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
               const sku = colSku !== -1 ? String(row[colSku] || '').trim().toUpperCase() : '';
               const name = colName !== -1 ? String(row[colName] || '').trim().toUpperCase() : '';
               
-              let lastQty = 0;
+              let entry: MtsEntry = { raw: '', isEndWith000: false, baseVal: 0, thousandVal: 0, parsedVal: 0 };
               if (colLastQty !== -1 && row[colLastQty] !== undefined) {
-                lastQty = parseMtsNumber(row[colLastQty]);
+                entry = parseMtsEntry(row[colLastQty]);
               }
 
               const locCandidates = [loc, whGroup].filter(Boolean);
               locCandidates.forEach(l => {
                 if (sku) {
-                  mtsMap.set(`${l}_${sku}`, lastQty);
-                  mtsMap.set(`${sku}_${l}`, lastQty);
+                  mtsMap.set(`${l}_${sku}`, entry);
+                  mtsMap.set(`${sku}_${l}`, entry);
                   if (rowArea) {
-                    mtsMap.set(`${rowArea}_${l}_${sku}`, lastQty);
+                    mtsMap.set(`${rowArea}_${l}_${sku}`, entry);
                   }
                 }
                 if (name) {
-                  mtsMap.set(`${l}_${name}`, lastQty);
-                  mtsMap.set(`${name}_${l}`, lastQty);
+                  mtsMap.set(`${l}_${name}`, entry);
+                  mtsMap.set(`${name}_${l}`, entry);
                   if (rowArea) {
-                    mtsMap.set(`${rowArea}_${l}_${name}`, lastQty);
+                    mtsMap.set(`${rowArea}_${l}_${name}`, entry);
                   }
                 }
               });
@@ -689,7 +717,6 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
       const productNameUpper = item.namaProduk.toUpperCase().trim();
       const rowAreaUpper = (item.area || area || '').toUpperCase().trim();
 
-      let matchedLastQty = 0;
       const lookupKeys = [
         // Exact area + locator + sku/name
         `${rowAreaUpper}_${locKey}_${productCodeUpper}`,
@@ -713,12 +740,15 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
         `${productCodeUpper.replace(/\s+/g, '')}_${namaLocKey}`
       ];
 
+      let matchedEntry: MtsEntry | undefined;
       for (const k of lookupKeys) {
         if (mtsLookupMap.has(k)) {
-          matchedLastQty = mtsLookupMap.get(k) || 0;
+          matchedEntry = mtsLookupMap.get(k);
           break;
         }
       }
+
+      let matchedLastQty = matchedEntry ? getSmartMtsQty(matchedEntry, item.stokRill, item.stokKemarin, item.uom, item.kodeProduk) : 0;
 
       // Penyelarasan khusus Semarang Accessories: Jika tidak ada record di MTS, sesuaikan
       if (rowAreaUpper === 'SEMARANG' && (item.source === 'INPUT' || item.source === 'Accessories') && matchedLastQty === 0) {
