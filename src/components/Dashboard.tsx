@@ -443,8 +443,10 @@ const Dashboard = memo(function Dashboard({
                         key={tab.id}
                         onClick={() => handleTabChange(tab.id)}
                         className={cn(
-                          'nav-item',
-                          safeActiveTab === tab.id ? 'nav-item-active' : 'nav-item-idle'
+                          'nav-item sidebar-nav-item-glass',
+                          safeActiveTab === tab.id
+                            ? 'nav-item-active sidebar-nav-item-glass-active active'
+                            : 'nav-item-idle sidebar-nav-item-glass-idle idle'
                         )}
                         title={tab.label}
                       >
@@ -475,8 +477,10 @@ const Dashboard = memo(function Dashboard({
                         key={tab.id}
                         onClick={() => handleTabChange(tab.id)}
                         className={cn(
-                          'nav-item',
-                          safeActiveTab === tab.id ? 'nav-item-active' : 'nav-item-idle'
+                          'nav-item sidebar-nav-item-glass',
+                          safeActiveTab === tab.id
+                            ? 'nav-item-active sidebar-nav-item-glass-active active'
+                            : 'nav-item-idle sidebar-nav-item-glass-idle idle'
                         )}
                         title={tab.label}
                       >
@@ -505,8 +509,10 @@ const Dashboard = memo(function Dashboard({
                           key={tab.id}
                           onClick={() => handleTabChange(tab.id)}
                           className={cn(
-                            'nav-item',
-                            safeActiveTab === tab.id ? 'nav-item-active' : 'nav-item-idle'
+                            'nav-item sidebar-nav-item-glass',
+                            safeActiveTab === tab.id
+                              ? 'nav-item-active sidebar-nav-item-glass-active active'
+                              : 'nav-item-idle sidebar-nav-item-glass-idle idle'
                           )}
                           title={tab.label}
                         >
@@ -548,8 +554,10 @@ const Dashboard = memo(function Dashboard({
                             key={tab.id}
                             onClick={() => handleTabChange(tab.id)}
                             className={cn(
-                              'nav-item',
-                              safeActiveTab === tab.id ? 'nav-item-active' : 'nav-item-idle'
+                              'nav-item sidebar-nav-item-glass',
+                              safeActiveTab === tab.id
+                                ? 'nav-item-active sidebar-nav-item-glass-active active'
+                                : 'nav-item-idle sidebar-nav-item-glass-idle idle'
                             )}
                             title={tab.label}
                           >
@@ -574,8 +582,10 @@ const Dashboard = memo(function Dashboard({
                           key={tab.id}
                           onClick={() => handleTabChange(tab.id)}
                           className={cn(
-                            'nav-item',
-                            safeActiveTab === tab.id ? 'nav-item-active' : 'nav-item-idle'
+                            'nav-item sidebar-nav-item-glass',
+                            safeActiveTab === tab.id
+                              ? 'nav-item-active sidebar-nav-item-glass-active active'
+                              : 'nav-item-idle sidebar-nav-item-glass-idle idle'
                           )}
                           title={tab.label}
                         >
@@ -597,8 +607,10 @@ const Dashboard = memo(function Dashboard({
                       <button
                         onClick={() => handleTabChange('whatsapp')}
                         className={cn(
-                          'nav-item',
-                          safeActiveTab === 'whatsapp' ? 'nav-item-active' : 'nav-item-idle'
+                          'nav-item sidebar-nav-item-glass',
+                          safeActiveTab === 'whatsapp'
+                            ? 'nav-item-active sidebar-nav-item-glass-active active'
+                            : 'nav-item-idle sidebar-nav-item-glass-idle idle'
                         )}
                         title="WhatsApp Console"
                       >
@@ -620,7 +632,7 @@ const Dashboard = memo(function Dashboard({
                         href="https://wmsc3.vercel.app/"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="nav-item nav-item-idle"
+                        className="nav-item sidebar-nav-item-glass nav-item-idle sidebar-nav-item-glass-idle idle"
                         title="Portal WMS C3 Eksternal"
                       >
                         <div className="nav-item-icon-wrap">

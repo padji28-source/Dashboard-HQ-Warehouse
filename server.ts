@@ -335,7 +335,29 @@ async function startServer() {
   }
   const serverSheetCache = new Map<string, SheetCacheEntry>();
   const serverInFlightSheets = new Map<string, Promise<any>>();
-  const SERVER_SHEET_CACHE_TTL = 30 * 1000; // 30 seconds cache for identical reads
+  const SERVER_SHEET_CACHE_TTL = 45 * 1000; // 45 seconds cache for identical reads
+
+  // Concurrency limiter to prevent Google Apps Script overload and cold-start timeouts
+  class GasConcurrencyLimiter {
+    private running = 0;
+    private queue: (() => void)[] = [];
+    constructor(private limit: number) {}
+
+    async run<T>(fn: () => Promise<T>): Promise<T> {
+      if (this.running >= this.limit) {
+        await new Promise<void>((resolve) => this.queue.push(resolve));
+      }
+      this.running++;
+      try {
+        return await fn();
+      } finally {
+        this.running--;
+        const next = this.queue.shift();
+        if (next) next();
+      }
+    }
+  }
+  const gasLimiter = new GasConcurrencyLimiter(5);
 
   function getFreshUrl(urlStr: string): string {
     try {
@@ -347,7 +369,7 @@ async function startServer() {
     }
   }
 
-  async function fetchGasWithRetry(url: string, options: RequestInit, maxAttempts = 2, timeoutMs = 50000): Promise<globalThis.Response> {
+  async function fetchGasWithRetry(url: string, options: RequestInit, maxAttempts = 2, timeoutMs = 35000): Promise<globalThis.Response> {
     let lastResponse: globalThis.Response | null = null;
     let lastError: any = null;
 
@@ -366,8 +388,8 @@ async function startServer() {
         lastResponse = response;
         // If Google serverless instance returned 404 (stale echo token / redirect glitch), 429, or 500-504, retry with fresh URL
         if ([404, 429, 500, 502, 503, 504].includes(response.status) && attempt < maxAttempts) {
-          console.warn(`[Apps Script Proxy] HTTP ${response.status} on attempt ${attempt}. Retrying with fresh session in 2s...`);
-          await new Promise((r) => setTimeout(r, 2000));
+          console.warn(`[Apps Script Proxy] HTTP ${response.status} on attempt ${attempt}. Retrying with fresh session in 1.5s...`);
+          await new Promise((r) => setTimeout(r, 1500));
           continue;
         }
 
@@ -376,8 +398,8 @@ async function startServer() {
         lastError = err;
         const isTimeout = err?.name === 'TimeoutError' || err?.name === 'AbortError' || String(err?.message || '').toLowerCase().includes('timeout');
         if (attempt < maxAttempts) {
-          console.warn(`[Apps Script Proxy] Attempt ${attempt} failed (${isTimeout ? 'timeout' : err?.message || err}). Retrying in 2s...`);
-          await new Promise((r) => setTimeout(r, 2000));
+          console.warn(`[Apps Script Proxy] Attempt ${attempt} failed (${isTimeout ? 'timeout' : err?.message || err}). Retrying in 1.5s...`);
+          await new Promise((r) => setTimeout(r, 1500));
         }
       }
     }
@@ -480,44 +502,67 @@ async function startServer() {
 
         const getUrl = `${targetUrl}?action=get&range=${encodeURIComponent(cleanRange)}&t=${Date.now()}`;
         const fetchPromise = (async () => {
-          const response = await fetchGasWithRetry(getUrl, {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json, text/plain, */*',
-              'User-Agent': 'Mozilla/5.0 (compatible; WMS-CommandCenter/1.0)'
-            },
-            redirect: 'follow',
-          }, 2, 45000);
+          try {
+            const response = await gasLimiter.run(() =>
+              fetchGasWithRetry(getUrl, {
+                method: 'GET',
+                headers: {
+                  'Accept': 'application/json, text/plain, */*',
+                  'User-Agent': 'Mozilla/5.0 (compatible; WMS-CommandCenter/1.0)'
+                },
+                redirect: 'follow',
+              }, 2, 35000)
+            );
 
-          if (!response.ok) {
-            console.warn(`[Proxy Warning] Sheets GET returned HTTP ${response.status} for range: ${cleanRange}`);
-            if (response.status === 404) {
-              const fallback = { values: [], warning: `Range "${cleanRange}" tidak ditemukan di spreadsheet cabang ini.` };
-              serverSheetCache.set(cacheKey, { timestamp: Date.now(), data: fallback });
+            if (!response.ok) {
+              console.warn(`[Proxy Handled] Sheets GET returned HTTP ${response.status} for range: ${cleanRange}`);
+              const fallback = {
+                values: [],
+                warning: response.status === 404
+                  ? `Range "${cleanRange}" tidak ditemukan di spreadsheet cabang ini.`
+                  : `Google Sheets mengembalikan HTTP ${response.status} untuk range "${cleanRange}".`,
+                isFallback: true
+              };
+              // Cache temporary fallback for 15s to prevent retry storms
+              serverSheetCache.set(cacheKey, { timestamp: Date.now() - (SERVER_SHEET_CACHE_TTL - 15000), data: fallback });
               return fallback;
             }
-            throw new Error(`Google Sheets GET failed: HTTP ${response.status}`);
+
+            const text = await response.text();
+            let parsedData: any;
+            try {
+              parsedData = JSON.parse(text);
+            } catch {
+              console.warn(`[Proxy Handled] Respon non-JSON dari Google Sheets untuk range: ${cleanRange}`);
+              const fallback = { values: [], warning: "Respon non-JSON dari Google Sheets", isFallback: true };
+              return fallback;
+            }
+
+            if (parsedData?.error && (String(parsedData.error).toLowerCase().includes("range") || String(parsedData.error).toLowerCase().includes("not found"))) {
+              parsedData = { values: [], warning: parsedData.error, isFallback: true };
+            }
+
+            // Cache parsed data
+            serverSheetCache.set(cacheKey, {
+              timestamp: Date.now(),
+              data: parsedData,
+            });
+
+            return parsedData;
+          } catch (fetchErr: any) {
+            const isTimeout = fetchErr?.name === 'TimeoutError' || fetchErr?.name === 'AbortError' || String(fetchErr?.message || '').toLowerCase().includes('timeout');
+            console.warn(`[Proxy Handled] GET /api/sheets gracefully caught error for ${cleanRange}:`, fetchErr?.message || fetchErr);
+            const fallback = {
+              values: [],
+              warning: isTimeout
+                ? `Waktu tunggu pembacaan data "${cleanRange}" habis. Menampilkan data kosong sementara.`
+                : `Gagal membaca spreadsheet "${cleanRange}" (${fetchErr?.message || 'Jaringan'}).`,
+              isFallback: true
+            };
+            // Cache fallback for 10s to throttle retries
+            serverSheetCache.set(cacheKey, { timestamp: Date.now() - (SERVER_SHEET_CACHE_TTL - 10000), data: fallback });
+            return fallback;
           }
-
-          const text = await response.text();
-          let parsedData: any;
-          try {
-            parsedData = JSON.parse(text);
-          } catch {
-            throw new Error("Respon JSON tidak valid dari Google Sheets");
-          }
-
-          if (parsedData?.error && (String(parsedData.error).toLowerCase().includes("range") || String(parsedData.error).toLowerCase().includes("not found"))) {
-            parsedData = { values: [], warning: parsedData.error };
-          }
-
-          // Cache parsed data
-          serverSheetCache.set(cacheKey, {
-            timestamp: Date.now(),
-            data: parsedData,
-          });
-
-          return parsedData;
         })();
 
         serverInFlightSheets.set(cacheKey, fetchPromise);
@@ -530,16 +575,18 @@ async function startServer() {
       }
 
       // 6. Execute POST actions (append, update, init)
-      const response = await fetchGasWithRetry(targetUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8",
-          "Accept": "application/json, text/plain, */*",
-          "User-Agent": "Mozilla/5.0 (compatible; WMS-CommandCenter/1.0)"
-        },
-        redirect: 'follow',
-        body: JSON.stringify({ action, range: cleanRange, values })
-      }, 2, 45000);
+      const response = await gasLimiter.run(() =>
+        fetchGasWithRetry(targetUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8",
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "Mozilla/5.0 (compatible; WMS-CommandCenter/1.0)"
+          },
+          redirect: 'follow',
+          body: JSON.stringify({ action, range: cleanRange, values })
+        }, 2, 40000)
+      );
 
       const text = await response.text();
       let data: any;
