@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense, memo, useMemo } from 'react';
+import { useState, lazy, Suspense, memo, useMemo, useEffect } from 'react';
 import {
   LogOut,
   Package,
@@ -11,6 +11,7 @@ import {
   Beaker,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Scale,
   FileSpreadsheet,
   MessageSquare,
@@ -95,6 +96,13 @@ const Dashboard = memo(function Dashboard({
   const spreadsheetId = gasUrl || propSpreadsheetId || '';
   const [activeTab, setActiveTab] = useState<TabKey>('stock');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSidebarHidden, setIsSidebarHidden] = useState<boolean>(() => {
+    try {
+      return typeof window !== 'undefined' && sessionStorage.getItem('wms_sidebar_hidden') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState<boolean>(() => {
     try {
       return typeof window !== 'undefined' && sessionStorage.getItem('wms_sidebar_collapsed') === 'true';
@@ -105,6 +113,27 @@ const Dashboard = memo(function Dashboard({
   const [searchQuery, setSearchQuery] = useState('');
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['stock']));
   const [pergerakanOpen, setPergerakanOpen] = useState(true);
+
+  const toggleSidebarHidden = () => {
+    setIsSidebarHidden((prev) => {
+      const next = !prev;
+      try {
+        sessionStorage.setItem('wms_sidebar_hidden', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleSidebarHidden();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const toggleDesktopCollapse = () => {
     setIsDesktopCollapsed((prev) => {
@@ -224,163 +253,26 @@ const Dashboard = memo(function Dashboard({
 
   return (
     <div className="app-shell">
-      {/* Top Header */}
-      <header className="app-topbar">
-        <div className="topbar-left">
-          {/* Mobile drawer toggle */}
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="icon-button lg:hidden"
-            aria-label="Buka navigasi"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
+      {/* Mobile Drawer Overlay */}
+      {sidebarOpen && (
+        <div
+          className="sidebar-overlay lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-          {/* Desktop sidebar expand/collapse toggle */}
-          <button
-            onClick={toggleDesktopCollapse}
-            className="icon-button hidden lg:inline-flex"
-            aria-label={isDesktopCollapsed ? 'Perlebar sidebar' : 'Ciutkan sidebar'}
-            title={isDesktopCollapsed ? 'Perlebar sidebar' : 'Ciutkan sidebar'}
-          >
-            {isDesktopCollapsed ? <PanelLeftOpen className="w-4 h-4 text-slate-600" /> : <PanelLeftClose className="w-4 h-4 text-slate-600" />}
-          </button>
-
-          <div className="brand-lockup">
-            <div className="brand-mark">
-              <Box className="w-5 h-5" />
-            </div>
-            <div className="brand-copy">
-              <strong>WH Command Center</strong>
-              <span>Warehouse Management System</span>
-            </div>
-          </div>
-
-          {/* Breadcrumb trail on tablet / desktop */}
-          <div className="hidden md:flex items-center gap-2 pl-4 ml-2 border-l border-slate-200 text-xs">
-            <span className="text-slate-400 font-semibold tracking-wide uppercase text-[10px]">Cabang</span>
-            <span className="text-slate-700 font-bold px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/60">{area}</span>
-            <span className="text-slate-300">/</span>
-            <div className="flex items-center gap-1.5 font-bold text-slate-900">
-              <activeTabMeta.icon className="w-4 h-4 text-blue-600" />
-              <span>{activeTabMeta.label}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Topbar Quick Segmented Tabs for 4 most-used modules (Large screens) */}
-        <div className="hidden xl:flex items-center">
-          <div className="topbar-quick-tabs">
-            <button
-              onClick={() => handleTabChange('stock')}
-              className={cn('quick-tab-btn', safeActiveTab === 'stock' && 'active')}
-            >
-              <LayoutDashboard className="w-3.5 h-3.5" />
-              <span>Dashboard</span>
-            </button>
-            <button
-              onClick={() => handleTabChange('activity_log')}
-              className={cn('quick-tab-btn', safeActiveTab === 'activity_log' && 'active')}
-            >
-              <ClipboardList className="w-3.5 h-3.5" />
-              <span>Log Mutasi</span>
-            </button>
-            {isAuthorizedForPencocokan && !isReadOnly && (
-              <button
-                onClick={() => handleTabChange('pencocokan')}
-                className={cn('quick-tab-btn', safeActiveTab === 'pencocokan' && 'active')}
-              >
-                <Scale className="w-3.5 h-3.5" />
-                <span>Pencocokan</span>
-              </button>
-            )}
-            <button
-              onClick={() => handleTabChange('cek_stock')}
-              className={cn('quick-tab-btn', safeActiveTab === 'cek_stock' && 'active')}
-            >
-              <Package className="w-3.5 h-3.5" />
-              <span>Cek Stock</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="topbar-right">
-          {(userRole === 'ALL' || userRole === 'HQ' || userRole === 'All Cabang') && onAreaChange ? (
-            <label className="area-switcher">
-              <span>
-                <MapPin className="w-3.5 h-3.5 text-blue-600" /> Area
-              </span>
-              <select
-                value={area}
-                onChange={(e) => onAreaChange(e.target.value)}
-                aria-label="Pilih area gudang"
-              >
-                {AREAS.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <div className="topbar-context">
-              <span className="topbar-kicker">Area aktif</span>
-              <strong>{area}</strong>
-            </div>
-          )}
-
-          <div className="profile-chip">
-            <div className="profile-avatar">
-              {isAdminA5
-                ? 'C3'
-                : isPetugasA5
-                ? 'PC'
-                : isHelper
-                ? 'HP'
-                : userRole === 'ALL'
-                ? 'SA'
-                : userRole === 'HQ' || userRole === 'All Cabang'
-                ? 'AC'
-                : area.substring(0, 2)}
-            </div>
-            <div className="profile-copy">
-              <strong>{activeUsername || 'Administrator'}</strong>
-              <span>
-                {isAdminA5
-                  ? 'Admin C3'
-                  : isPetugasA5
-                  ? 'Petugas C3'
-                  : isHelper
-                  ? 'Helper'
-                  : userRole === 'ALL'
-                  ? 'Super Admin'
-                  : userRole === 'HQ' || userRole === 'All Cabang'
-                  ? 'Admin All Cabang'
-                  : 'Admin Area'}
-              </span>
-            </div>
-            <ShieldCheck className="profile-status" title="Sesi Terverifikasi" />
-          </div>
-        </div>
-      </header>
-
-      <div className="workspace">
-        {/* Mobile Drawer Overlay */}
-        {sidebarOpen && (
-          <div
-            className="sidebar-overlay lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
+      {/* Sidebar Component */}
+      <aside
+        className={cn(
+          'app-sidebar',
+          sidebarOpen ? 'sidebar-mobile-open' : 'sidebar-mobile-closed',
+          isSidebarHidden
+            ? 'sidebar-desktop-hidden'
+            : isDesktopCollapsed
+            ? 'sidebar-desktop-collapsed'
+            : 'sidebar-desktop-expanded'
         )}
-
-        {/* Sidebar Component */}
-        <aside
-          className={cn(
-            'app-sidebar',
-            sidebarOpen ? 'sidebar-open' : 'sidebar-closed',
-            isDesktopCollapsed ? 'sidebar-desktop-collapsed' : 'sidebar-desktop-expanded'
-          )}
-        >
+      >
           {/* Sidebar Top Header */}
           <div className="sidebar-header">
             <div className="flex items-center gap-3 min-w-0">
@@ -392,6 +284,16 @@ const Dashboard = memo(function Dashboard({
                 <span>{area}</span>
               </div>
             </div>
+            {/* Desktop hide button */}
+            <button
+              onClick={toggleSidebarHidden}
+              className="icon-button icon-button-dark hidden lg:inline-flex"
+              title="Sembunyikan sidebar navigasi"
+              aria-label="Sembunyikan sidebar"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+            {/* Mobile drawer close */}
             <button
               onClick={() => setSidebarOpen(false)}
               className="icon-button icon-button-dark lg:hidden"
@@ -650,6 +552,16 @@ const Dashboard = memo(function Dashboard({
 
           {/* Sidebar Footer */}
           <div className="sidebar-footer">
+            {/* Desktop Hide Button */}
+            <button
+              onClick={toggleSidebarHidden}
+              className="sidebar-hide-btn hidden lg:flex"
+              title="Sembunyikan sidebar navigasi"
+            >
+              <PanelLeftClose className="w-4 h-4 shrink-0" />
+              <span className="sidebar-footer-text">Sembunyikan Menu</span>
+            </button>
+
             <button
               onClick={() => {
                 setSidebarOpen(false);
@@ -664,8 +576,183 @@ const Dashboard = memo(function Dashboard({
           </div>
         </aside>
 
-        {/* Main Content Viewport */}
-        <main className="app-main">
+        {/* Main Right Column: Topbar + Main Content Viewport */}
+        <div className="app-main-column">
+          {/* Top Header / Responsive Navbar */}
+          <header className="app-topbar">
+            <div className="topbar-left">
+              {/* Mobile drawer toggle */}
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="icon-button lg:hidden"
+                aria-label="Buka navigasi"
+                title="Buka Menu"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+
+              {/* Desktop: When Sidebar is Hidden, show 'Buka Menu' button + compact Brand lockup */}
+              {isSidebarHidden ? (
+                <div className="hidden lg:flex items-center gap-2.5 shrink-0">
+                  <button
+                    onClick={toggleSidebarHidden}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+                    title="Tampilkan kembali sidebar navigasi (Ctrl+B)"
+                  >
+                    <PanelLeftOpen className="w-4 h-4" />
+                    <span>Buka Menu</span>
+                  </button>
+                  <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+                    <div className="brand-mark w-7 h-7 rounded-lg">
+                      <Box className="w-4 h-4" />
+                    </div>
+                    <strong className="text-xs font-extrabold text-slate-900 tracking-tight">WH Command Center</strong>
+                  </div>
+                </div>
+              ) : (
+                /* Desktop: When Sidebar is Visible, show sidebar toggle button + optional collapse */
+                <div className="hidden lg:flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={toggleSidebarHidden}
+                    className="icon-button text-slate-600 hover:text-slate-900"
+                    aria-label="Sembunyikan sidebar"
+                    title="Sembunyikan sidebar navigasi (Ctrl+B)"
+                  >
+                    <PanelLeftClose className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={toggleDesktopCollapse}
+                    className="icon-button text-slate-600 hover:text-slate-900 hidden xl:inline-flex"
+                    aria-label={isDesktopCollapsed ? 'Perlebar sidebar' : 'Ciutkan sidebar'}
+                    title={isDesktopCollapsed ? 'Perlebar sidebar' : 'Ciutkan ke mode ikon'}
+                  >
+                    {isDesktopCollapsed ? (
+                      <ChevronRight className="w-4 h-4 text-slate-600" />
+                    ) : (
+                      <ChevronLeft className="w-4 h-4 text-slate-600" />
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Mobile Brand (only when on mobile since sidebar is in off-canvas drawer) */}
+              <div className="flex lg:hidden items-center gap-2 min-w-0">
+                <div className="brand-mark w-7 h-7 rounded-lg shrink-0">
+                  <Box className="w-4 h-4" />
+                </div>
+                <strong className="text-xs sm:text-sm font-extrabold text-slate-900 truncate">WH Command Center</strong>
+              </div>
+
+              {/* Breadcrumb trail on tablet / desktop */}
+              <div className="hidden md:flex items-center gap-2 pl-2.5 ml-1 border-l border-slate-200 text-xs shrink-0 min-w-0">
+                <span className="text-slate-400 font-semibold tracking-wide uppercase text-[10px]">Cabang</span>
+                <span className="text-slate-700 font-bold px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/60 truncate max-w-[120px]">{area}</span>
+                <span className="text-slate-300">/</span>
+                <div className="flex items-center gap-1.5 font-bold text-slate-900 truncate">
+                  <activeTabMeta.icon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span className="truncate">{activeTabMeta.label}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Topbar Quick Segmented Tabs for 4 most-used modules (Large screens >= 1440px) */}
+            <div className="hidden 2xl:flex items-center shrink-0">
+              <div className="topbar-quick-tabs">
+                <button
+                  onClick={() => handleTabChange('stock')}
+                  className={cn('quick-tab-btn', safeActiveTab === 'stock' && 'active')}
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                  <span>Dashboard</span>
+                </button>
+                <button
+                  onClick={() => handleTabChange('activity_log')}
+                  className={cn('quick-tab-btn', safeActiveTab === 'activity_log' && 'active')}
+                >
+                  <ClipboardList className="w-3.5 h-3.5" />
+                  <span>Log Mutasi</span>
+                </button>
+                {isAuthorizedForPencocokan && !isReadOnly && (
+                  <button
+                    onClick={() => handleTabChange('pencocokan')}
+                    className={cn('quick-tab-btn', safeActiveTab === 'pencocokan' && 'active')}
+                  >
+                    <Scale className="w-3.5 h-3.5" />
+                    <span>Pencocokan</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => handleTabChange('cek_stock')}
+                  className={cn('quick-tab-btn', safeActiveTab === 'cek_stock' && 'active')}
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  <span>Cek Stock</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="topbar-right">
+              {(userRole === 'ALL' || userRole === 'HQ' || userRole === 'All Cabang') && onAreaChange ? (
+                <label className="area-switcher">
+                  <span className="hidden sm:inline-flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-blue-600" /> Area
+                  </span>
+                  <select
+                    value={area}
+                    onChange={(e) => onAreaChange(e.target.value)}
+                    aria-label="Pilih area gudang"
+                  >
+                    {AREAS.map((a) => (
+                      <option key={a} value={a}>
+                        {a}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="topbar-context hidden sm:flex">
+                  <span className="topbar-kicker">Area aktif</span>
+                  <strong>{area}</strong>
+                </div>
+              )}
+
+              <div className="profile-chip">
+                <div className="profile-avatar shrink-0">
+                  {isAdminA5
+                    ? 'C3'
+                    : isPetugasA5
+                    ? 'PC'
+                    : isHelper
+                    ? 'HP'
+                    : userRole === 'ALL'
+                    ? 'SA'
+                    : userRole === 'HQ' || userRole === 'All Cabang'
+                    ? 'AC'
+                    : area.substring(0, 2)}
+                </div>
+                <div className="profile-copy hidden md:flex">
+                  <strong>{activeUsername || 'Administrator'}</strong>
+                  <span>
+                    {isAdminA5
+                      ? 'Admin C3'
+                      : isPetugasA5
+                      ? 'Petugas C3'
+                      : isHelper
+                      ? 'Helper'
+                      : userRole === 'ALL'
+                      ? 'Super Admin'
+                      : userRole === 'HQ' || userRole === 'All Cabang'
+                      ? 'Admin All Cabang'
+                      : 'Admin Area'}
+                  </span>
+                </div>
+                <ShieldCheck className="profile-status hidden md:block shrink-0" title="Sesi Terverifikasi" />
+              </div>
+            </div>
+          </header>
+
+          {/* Main Content Viewport */}
+          <main className="app-main">
           <div className="app-content">
             <div className={cn(safeActiveTab !== 'stock' && 'hidden')}>
               {visitedTabs.has('stock') && (
