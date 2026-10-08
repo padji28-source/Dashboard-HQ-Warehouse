@@ -376,17 +376,19 @@ function AkurasiStock() {
 
       const urlEntries = Object.entries(AREA_URLS);
 
-      await Promise.all(
-        urlEntries.map(async ([aName, aUrl]) => {
-          try {
-            const [tn, tr, tm, ts, pr, lr] = await Promise.all([
-              fetchSheetData(aUrl, "'INPUT'!A2:J", isManual).catch(() => []),
-              fetchSheetData(aUrl, "'INPUT RM'!A2:J", isManual).catch(() => []),
-              fetchSheetData(aUrl, "'INPUT MFG'!A2:J", isManual).catch(() => []),
-              fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", isManual).catch(() => []),
-              fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:D", isManual).catch(() => []),
-              fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", isManual).catch(() => [])
-            ]);
+      for (let i = 0; i < urlEntries.length; i += 4) {
+        const batch = urlEntries.slice(i, i + 4);
+        await Promise.all(
+          batch.map(async ([aName, aUrl]) => {
+            try {
+              const [tn, tr, tm, ts, pr, lr] = await Promise.all([
+                fetchSheetData(aUrl, "'INPUT'!A2:J", isManual).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT RM'!A2:J", isManual).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT MFG'!A2:J", isManual).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", isManual).catch(() => []),
+                fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:D", isManual).catch(() => []),
+                fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", isManual).catch(() => [])
+              ]);
 
             const pMap = new Map(globalPMap);
             (pr || []).filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
@@ -572,6 +574,7 @@ function AkurasiStock() {
           }
         })
       );
+      }
 
       setAllStockItems(compiledItems);
 
