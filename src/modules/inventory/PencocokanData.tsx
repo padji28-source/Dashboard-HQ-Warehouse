@@ -503,16 +503,18 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
 
       if (area === 'HQ' || spreadsheetId === 'HQ' || area === 'All Cabang' || area.toLowerCase() === 'all') {
         const urlEntries = Object.entries(AREA_URLS);
-        await Promise.all(urlEntries.map(async ([aName, aUrl]) => {
-          try {
-            const [tn, tr, tm, ts, pr, lr] = await Promise.all([
-              fetchSheetData(aUrl, "'INPUT'!A2:J", true).catch(() => []),
-              fetchSheetData(aUrl, "'INPUT RM'!A2:J", true).catch(() => []),
-              fetchSheetData(aUrl, "'INPUT MFG'!A2:J", true).catch(() => []),
-              fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", true).catch(() => []),
-              fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:D", true).catch(() => []),
-              fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", true).catch(() => [])
-            ]);
+        for (let i = 0; i < urlEntries.length; i += 4) {
+          const batch = urlEntries.slice(i, i + 4);
+          await Promise.all(batch.map(async ([aName, aUrl]) => {
+            try {
+              const [tn, tr, tm, ts, pr, lr] = await Promise.all([
+                fetchSheetData(aUrl, "'INPUT'!A2:J", true).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT RM'!A2:J", true).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT MFG'!A2:J", true).catch(() => []),
+                fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", true).catch(() => []),
+                fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:D", true).catch(() => []),
+                fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", true).catch(() => [])
+              ]);
 
             pr.filter((r: any[]) => r.length > 0 && r[0] && r[0] !== '#N/A' && r[1] !== '#N/A').forEach((r: any[]) => {
               const kode = String(r[0]).trim();
@@ -550,6 +552,7 @@ function PencocokanData({ spreadsheetId, area }: { spreadsheetId: string; area: 
             console.error(`Error loading area ${aName}:`, e);
           }
         }));
+        }
       } else {
         const [tn, tr, tm, ts, pr, lr] = await Promise.all([
           fetchSheetData(spreadsheetId, "'INPUT'!A2:J", true).catch(() => []),
