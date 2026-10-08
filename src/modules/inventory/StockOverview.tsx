@@ -275,17 +275,20 @@ function StockOverview({
         area.toLowerCase() === "all"
       ) {
         const urlEntries = Object.entries(AREA_URLS);
-        await Promise.all(
-          urlEntries.map(async ([aName, aUrl]) => {
-            try {
-              const [tn, tr, tm, ts, pr, lr] = await Promise.all([
-                fetchSheetData(aUrl, "'INPUT'!A2:J", forceFresh).catch(() => []),
-                fetchSheetData(aUrl, "'INPUT RM'!A2:J", forceFresh).catch(() => []),
-                fetchSheetData(aUrl, "'INPUT MFG'!A2:J", forceFresh).catch(() => []),
-                fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", forceFresh).catch(() => []),
-                fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:B", forceFresh).catch(() => []),
-                fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", forceFresh).catch(() => []),
-              ]);
+        // Process branches in batches of 4 to prevent network socket starvation
+        for (let i = 0; i < urlEntries.length; i += 4) {
+          const batch = urlEntries.slice(i, i + 4);
+          await Promise.all(
+            batch.map(async ([aName, aUrl]) => {
+              try {
+                const [tn, tr, tm, ts, pr, lr] = await Promise.all([
+                  fetchSheetData(aUrl, "'INPUT'!A2:J", forceFresh).catch(() => []),
+                  fetchSheetData(aUrl, "'INPUT RM'!A2:J", forceFresh).catch(() => []),
+                  fetchSheetData(aUrl, "'INPUT MFG'!A2:J", forceFresh).catch(() => []),
+                  fetchSheetData(aUrl, "'INPUT SUPPLIES'!A2:J", forceFresh).catch(() => []),
+                  fetchSheetData(aUrl, "'MASTER_PRODUK'!A2:B", forceFresh).catch(() => []),
+                  fetchSheetData(aUrl, "'MASTER_LOCATOR'!A2:E", forceFresh).catch(() => []),
+                ]);
 
               // Merge products map
               pr.filter((r: any[]) => r.length > 0 && r[0]).forEach(
@@ -327,6 +330,7 @@ function StockOverview({
             }
           }),
         );
+        }
       } else {
         let txRowsNormal: any[] = [];
         let txRowsRM: any[] = [];
