@@ -5,7 +5,6 @@ import {
   MapPin,
   ArrowRightLeft,
   LayoutDashboard,
-  Menu,
   X,
   Box,
   Beaker,
@@ -95,7 +94,6 @@ const Dashboard = memo(function Dashboard({
 }: Props) {
   const spreadsheetId = gasUrl || propSpreadsheetId || '';
   const [activeTab, setActiveTab] = useState<TabKey>('stock');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSidebarHidden, setIsSidebarHidden] = useState<boolean>(() => {
     try {
       return typeof window !== 'undefined' && sessionStorage.getItem('wms_sidebar_hidden') === 'true';
@@ -148,7 +146,9 @@ const Dashboard = memo(function Dashboard({
   const handleTabChange = (tab: TabKey) => {
     setActiveTab(tab);
     setVisitedTabs((prev) => new Set(prev).add(tab));
-    setSidebarOpen(false);
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsSidebarHidden(true);
+    }
   };
 
   const usernameLower = (activeUsername || '').toLowerCase();
@@ -253,11 +253,11 @@ const Dashboard = memo(function Dashboard({
 
   return (
     <div className="app-shell">
-      {/* Mobile Drawer Overlay */}
-      {sidebarOpen && (
+      {/* Mobile Drawer Backdrop Overlay */}
+      {!isSidebarHidden && (
         <div
-          className="sidebar-overlay lg:hidden"
-          onClick={() => setSidebarOpen(false)}
+          className="sidebar-overlay md:hidden"
+          onClick={() => setIsSidebarHidden(true)}
         />
       )}
 
@@ -265,41 +265,32 @@ const Dashboard = memo(function Dashboard({
       <aside
         className={cn(
           'app-sidebar',
-          sidebarOpen ? 'sidebar-mobile-open' : 'sidebar-mobile-closed',
           isSidebarHidden
-            ? 'sidebar-desktop-hidden'
+            ? 'sidebar-hidden sidebar-desktop-hidden'
             : isDesktopCollapsed
-            ? 'sidebar-desktop-collapsed'
-            : 'sidebar-desktop-expanded'
+            ? 'sidebar-collapsed sidebar-desktop-collapsed'
+            : 'sidebar-expanded sidebar-desktop-expanded'
         )}
       >
           {/* Sidebar Top Header */}
           <div className="sidebar-header">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="sidebar-brand-mark">
+              <div className="sidebar-brand-mark shrink-0">
                 <Box className="w-5 h-5 text-white" />
               </div>
-              <div className="sidebar-brand-copy">
-                <strong>WH Command Center</strong>
-                <span>{area}</span>
+              <div className="sidebar-brand-copy min-w-0">
+                <strong className="truncate">WH Command Center</strong>
+                <span className="truncate">{area}</span>
               </div>
             </div>
-            {/* Desktop hide button */}
+            {/* Hide button */}
             <button
               onClick={toggleSidebarHidden}
-              className="icon-button icon-button-dark hidden lg:inline-flex"
-              title="Sembunyikan sidebar navigasi"
+              className="icon-button icon-button-dark inline-flex shrink-0"
+              title="Sembunyikan sidebar navigasi (Ctrl+B)"
               aria-label="Sembunyikan sidebar"
             >
               <PanelLeftClose className="w-4 h-4" />
-            </button>
-            {/* Mobile drawer close */}
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="icon-button icon-button-dark lg:hidden"
-              aria-label="Tutup menu navigasi"
-            >
-              <X className="w-5 h-5" />
             </button>
           </div>
 
@@ -563,10 +554,7 @@ const Dashboard = memo(function Dashboard({
             </button>
 
             <button
-              onClick={() => {
-                setSidebarOpen(false);
-                onLogout();
-              }}
+              onClick={onLogout}
               className="logout-button"
               title="Keluar dari sesi WMS"
             >
@@ -580,23 +568,13 @@ const Dashboard = memo(function Dashboard({
         <div className="app-main-column">
           {/* Top Header / Responsive Navbar */}
           <header className="app-topbar">
-            <div className="topbar-left">
-              {/* Mobile drawer toggle */}
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="icon-button lg:hidden"
-                aria-label="Buka navigasi"
-                title="Buka Menu"
-              >
-                <Menu className="w-5 h-5" />
-              </button>
-
-              {/* Desktop: When Sidebar is Hidden, show 'Buka Menu' button + compact Brand lockup */}
+            <div className="topbar-left flex items-center gap-2 sm:gap-3 min-w-0">
+              {/* When Sidebar is Hidden, show 'Buka Menu' button + compact Brand lockup */}
               {isSidebarHidden ? (
-                <div className="hidden lg:flex items-center gap-2.5 shrink-0">
+                <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
                   <button
                     onClick={toggleSidebarHidden}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+                    className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
                     title="Tampilkan kembali sidebar navigasi (Ctrl+B)"
                   >
                     <PanelLeftOpen className="w-4 h-4" />
@@ -610,8 +588,8 @@ const Dashboard = memo(function Dashboard({
                   </div>
                 </div>
               ) : (
-                /* Desktop: When Sidebar is Visible, show sidebar toggle button + optional collapse */
-                <div className="hidden lg:flex items-center gap-1.5 shrink-0">
+                /* When Sidebar is Visible, show sidebar toggle button + optional collapse */
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={toggleSidebarHidden}
                     className="icon-button text-slate-600 hover:text-slate-900"
