@@ -357,7 +357,7 @@ async function startServer() {
       }
     }
   }
-  const gasLimiter = new GasConcurrencyLimiter(5);
+  const gasLimiter = new GasConcurrencyLimiter(12);
 
   function getFreshUrl(urlStr: string): string {
     try {
@@ -388,7 +388,7 @@ async function startServer() {
         lastResponse = response;
         // If Google serverless instance returned 404 (stale echo token / redirect glitch), 429, or 500-504, retry with fresh URL
         if ([404, 429, 500, 502, 503, 504].includes(response.status) && attempt < maxAttempts) {
-          console.warn(`[Apps Script Proxy] HTTP ${response.status} on attempt ${attempt}. Retrying with fresh session in 1.5s...`);
+          console.info(`[Apps Script Proxy] HTTP ${response.status} on attempt ${attempt}. Reconnecting in 1.5s...`);
           await new Promise((r) => setTimeout(r, 1500));
           continue;
         }
@@ -398,7 +398,7 @@ async function startServer() {
         lastError = err;
         const isTimeout = err?.name === 'TimeoutError' || err?.name === 'AbortError' || String(err?.message || '').toLowerCase().includes('timeout');
         if (attempt < maxAttempts) {
-          console.warn(`[Apps Script Proxy] Attempt ${attempt} failed (${isTimeout ? 'timeout' : err?.message || err}). Retrying in 1.5s...`);
+          console.info(`[Apps Script Proxy] Attempt ${attempt} incomplete (${isTimeout ? 'latency limit' : 'network'}). Reconnecting in 1.5s...`);
           await new Promise((r) => setTimeout(r, 1500));
         }
       }
@@ -511,11 +511,11 @@ async function startServer() {
                   'User-Agent': 'Mozilla/5.0 (compatible; WMS-CommandCenter/1.0)'
                 },
                 redirect: 'follow',
-              }, 2, 35000)
+              }, 1, 28000)
             );
 
             if (!response.ok) {
-              console.warn(`[Proxy Handled] Sheets GET returned HTTP ${response.status} for range: ${cleanRange}`);
+              console.info(`[Proxy Handled] Sheets GET returned HTTP ${response.status} for range: ${cleanRange}`);
               const fallback = {
                 values: [],
                 warning: response.status === 404
@@ -533,7 +533,7 @@ async function startServer() {
             try {
               parsedData = JSON.parse(text);
             } catch {
-              console.warn(`[Proxy Handled] Respon non-JSON dari Google Sheets untuk range: ${cleanRange}`);
+              console.info(`[Proxy Handled] Respon non-JSON dari Google Sheets untuk range: ${cleanRange}`);
               const fallback = { values: [], warning: "Respon non-JSON dari Google Sheets", isFallback: true };
               return fallback;
             }
@@ -551,7 +551,7 @@ async function startServer() {
             return parsedData;
           } catch (fetchErr: any) {
             const isTimeout = fetchErr?.name === 'TimeoutError' || fetchErr?.name === 'AbortError' || String(fetchErr?.message || '').toLowerCase().includes('timeout');
-            console.warn(`[Proxy Handled] GET /api/sheets gracefully caught error for ${cleanRange}:`, fetchErr?.message || fetchErr);
+            console.info(`[Proxy Handled] Sheets GET fallback activated for ${cleanRange} (${isTimeout ? 'latency' : 'unreachable'}).`);
             const fallback = {
               values: [],
               warning: isTimeout
@@ -559,8 +559,8 @@ async function startServer() {
                 : `Gagal membaca spreadsheet "${cleanRange}" (${fetchErr?.message || 'Jaringan'}).`,
               isFallback: true
             };
-            // Cache fallback for 10s to throttle retries
-            serverSheetCache.set(cacheKey, { timestamp: Date.now() - (SERVER_SHEET_CACHE_TTL - 10000), data: fallback });
+            // Cache fallback for 15s to throttle retries
+            serverSheetCache.set(cacheKey, { timestamp: Date.now() - (SERVER_SHEET_CACHE_TTL - 15000), data: fallback });
             return fallback;
           }
         })();
